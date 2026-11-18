@@ -8,6 +8,37 @@ import { Button, ConfirmButton, Empty, Modal, Segmented, Toggle } from './ui'
 import { Icon } from './Icon'
 import { PROVIDERS, providerInfo, type AiConfig, type AiProvider } from '../../../shared/ai-core'
 import { toggleAssistant } from './Assistant'
+import { QuickAdd } from './TaskItems'
+
+// ---------- Quick add (global hotkey / tray) ----------
+export function QuickAddDialog(): JSX.Element {
+  const lists = useData((d) => Object.values(d.pages).filter((p) => !p.deletedAt && (p.type === 'tasks' || p.type === 'board')))
+  const last = useData((d) => d.settings.lastPage)
+  const [pageId, setPageId] = useState(() => (lists.find((p) => p.id === last) ?? lists[0])?.id ?? '')
+  const added = useRef(0)
+  const close = (): void => { setOverlay(null); api.quickAddDone(added.current > 0) }
+  return (
+    <Modal onClose={close} width={560} className="quickadd-modal">
+      <div className="modal-body form">
+        {lists.length === 0 ? (
+          <div className="row between"><span className="muted">No to-do list yet.</span><Button small kind="primary" onClick={() => { setOverlay(null); createPage('tasks', null, 'To-do') }}>Create one</Button></div>
+        ) : (
+          <>
+            <QuickAdd key={pageId} pageId={pageId} autoFocus placeholder="Add a task  ·  Enter to save, Esc to close" onAdded={(id) => { added.current++; const t = getData().tasks[id]; toast(`Added “${t?.title ?? 'task'}”`) }} onEscape={close} />
+            {lists.length > 1 && (
+              <div className="row gap-sm">
+                <span className="muted small">Add to</span>
+                <select id="quickadd-list" className="input input-sm" value={pageId} onChange={(e) => setPageId(e.target.value)}>
+                  {lists.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
+                </select>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Modal>
+  )
+}
 
 // ---------- New page ----------
 export function NewPageDialog(): JSX.Element {
@@ -70,6 +101,7 @@ export function CommandPalette(): JSX.Element {
     }
     const cmds: Result[] = [
       { id: 'c-new', icon: '➕', title: 'New page', sub: 'Ctrl N', run: () => setOverlay('newPage', { parentId: null }) },
+      { id: 'c-quickadd', icon: '✅', title: 'Quick add task', sub: 'Ctrl Shift Space', run: () => setOverlay('quickAdd') },
       { id: 'c-settings', icon: '⚙️', title: 'Open settings', sub: 'Ctrl ,', run: () => setOverlay('settings') },
       { id: 'c-trash', icon: '🗑️', title: 'Open trash', run: () => setOverlay('trash') },
       { id: 'c-theme', icon: '🌓', title: 'Toggle dark mode', run: () => { const dark = document.documentElement.dataset.theme === 'dark'; setSettings((s) => { s.theme = dark ? 'light' : 'dark' }) } },
@@ -138,7 +170,7 @@ export function TrashDialog(): JSX.Element {
 // ---------- Shortcuts ----------
 export const SHORTCUTS: [string, string][] = [
   ['Ctrl K', 'Search and commands'], ['Ctrl N', 'New page'], ['Ctrl \\', 'Toggle sidebar'], ['Ctrl ,', 'Settings'],
-  ['Ctrl J', 'Assistant'], ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'], ['Ctrl [ / Ctrl ]', 'Back / forward'], ['Ctrl /', 'Shortcuts'], ['Ctrl Shift L', 'Toggle dark mode'],
+  ['Ctrl J', 'Assistant'], ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'], ['Ctrl [ / Ctrl ]', 'Back / forward'], ['Ctrl /', 'Shortcuts'], ['Ctrl Shift L', 'Toggle dark mode'], ['Ctrl Shift Space', 'Quick add task (anywhere)'], ['Ctrl / Shift click', 'Select several tasks'],
   ['Ctrl + / Ctrl -', 'Zoom text'], ['Ctrl 1…9', 'Open sidebar page 1…9'], ['/', 'Block menu (in a page)'], ['# , ## , ###', 'Headings'], ['- or *', 'Bulleted list'],
   ['[]', 'To-do block'], ['1.', 'Numbered list'], ['>>', 'Toggle block'], ['"', 'Quote'], ['---', 'Divider'], ['Tab / Shift Tab', 'Indent block'],
   ['Alt ↑ / Alt ↓', 'Move block'], ['Ctrl D', 'Duplicate block'], ['Ctrl Enter', 'Check a to-do block'], ['F2', 'Rename page in sidebar']
@@ -201,6 +233,8 @@ export function SettingsDialog(): JSX.Element {
             <Row label="Notifications" sub="Reminders and focus timer"><Toggle checked={s.notifications} onChange={(v) => set((x) => { x.notifications = v })} /></Row>
             <Row label="Sounds"><Toggle checked={s.sounds} onChange={(v) => set((x) => { x.sounds = v })} /></Row>
             {isDesktop && <StartWithWindows />}
+            {isDesktop && <Row label="Close to tray" sub="Closing the window keeps Planner running in the tray"><Toggle checked={s.closeToTray} onChange={(v) => set((x) => { x.closeToTray = v })} /></Row>}
+            {isDesktop && <Row label="Quick add hotkey" sub="Ctrl Shift Space adds a task from anywhere"><Toggle checked={s.quickAddHotkey} onChange={(v) => set((x) => { x.quickAddHotkey = v })} /></Row>}
           </>}
           {tab === 'appearance' && <>
             <h3>Appearance</h3>

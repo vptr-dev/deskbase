@@ -17,6 +17,13 @@ const api = {
   alwaysOnTop: (on: boolean) => ipcRenderer.invoke('app:alwaysOnTop', on),
   loginItem: (on?: boolean) => ipcRenderer.invoke('app:loginItem', on),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  setShell: (p: { closeToTray?: boolean; quickAddHotkey?: boolean }) => ipcRenderer.invoke('app:setShell', p),
+  quickAddDone: (added: boolean) => ipcRenderer.invoke('app:quickAddDone', added),
+  onQuickAdd: (cb: () => void) => {
+    const fn = (): void => cb()
+    ipcRenderer.on('app:quickAdd', fn)
+    return () => ipcRenderer.removeListener('app:quickAdd', fn)
+  },
   ai: {
     getConfig: () => ipcRenderer.invoke('ai:getConfig'),
     setConfig: (patch: unknown) => ipcRenderer.invoke('ai:setConfig', patch),

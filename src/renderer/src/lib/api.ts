@@ -34,6 +34,9 @@ export interface Bridge {
   notify(title: string, body: string): Promise<void>
   alwaysOnTop(on: boolean): Promise<boolean>
   loginItem(on?: boolean): Promise<boolean>
+  setShell(p: { closeToTray?: boolean; quickAddHotkey?: boolean }): Promise<{ closeToTray: boolean; hotkey: boolean }>
+  quickAddDone(added: boolean): Promise<void>
+  onQuickAdd(cb: () => void): () => void
   openExternal(url: string): Promise<void>
   ai: {
     getConfig(): Promise<AiConfig>
@@ -153,6 +156,9 @@ const browserBridge: Bridge = {
   },
   alwaysOnTop: async (on) => on,
   loginItem: async () => false,
+  setShell: async () => ({ closeToTray: false, hotkey: false }),
+  quickAddDone: async () => {},
+  onQuickAdd: () => () => {},
   openExternal: async (url) => { window.open(url, '_blank') },
   ai: webAi,
   notion: {

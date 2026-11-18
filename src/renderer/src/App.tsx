@@ -9,7 +9,7 @@ import { playLevelUp } from './lib/sound'
 import { Sidebar } from './components/Sidebar'
 import { Icon } from './components/Icon'
 import { Button, IconPickerButton, MenuButton, Popover } from './components/ui'
-import { CommandPalette, NewPageDialog, SettingsDialog, ShortcutsDialog, TrashDialog } from './components/Overlays'
+import { CommandPalette, NewPageDialog, QuickAddDialog, SettingsDialog, ShortcutsDialog, TrashDialog } from './components/Overlays'
 import { DocPage, BlockEditor } from './pages/DocPage'
 import { BoardPage, TasksPage } from './pages/TasksPage'
 import { HabitsPage } from './pages/HabitsPage'
@@ -232,6 +232,8 @@ function useAppearance(): void {
     return () => mq.removeEventListener('change', fn)
   }, [])
   useEffect(() => { api.setTheme(s.theme) }, [s.theme])
+  useEffect(() => { api.setShell({ closeToTray: s.closeToTray, quickAddHotkey: s.quickAddHotkey }).catch(() => {}) }, [s.closeToTray, s.quickAddHotkey])
+  useEffect(() => api.onQuickAdd(() => setOverlay('quickAdd')), [])
   useEffect(() => { api.info().then((i) => { if (i.micaSupported && i.material !== s.material) api.setMaterial(s.material) }) }, [])
   const dark = s.theme === 'dark' || (s.theme === 'system' && systemDark)
   useEffect(() => {
@@ -373,6 +375,7 @@ export function App(): JSX.Element {
       {overlay === 'trash' && <TrashDialog />}
       {overlay === 'shortcuts' && <ShortcutsDialog />}
       {overlay === 'movePage' && <MovePageDialog />}
+      {overlay === 'quickAdd' && <QuickAddDialog />}
       <Toasts />
       <Confetti />
     </div>

@@ -18,12 +18,12 @@ export const REPEATS: { v: Repeat; label: string }[] = [
   { v: 'weekly', label: 'Weekly' }, { v: 'monthly', label: 'Monthly' }, { v: 'yearly', label: 'Yearly' }
 ]
 
-export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task' }: { pageId: string; defaults?: Partial<Task>; placeholder?: string }): JSX.Element {
+export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', autoFocus, onAdded, onEscape }: { pageId: string; defaults?: Partial<Task>; placeholder?: string; autoFocus?: boolean; onAdded?: (id: string) => void; onEscape?: () => void }): JSX.Element {
   const [v, setV] = useState('')
   const parsed = useMemo(() => (v.trim() ? parseQuickAdd(v) : null), [v])
   const submit = (): void => {
     if (!parsed?.title) return
-    addTask(pageId, {
+    const id = addTask(pageId, {
       ...defaults,
       title: parsed.title,
       due: parsed.due ?? defaults.due ?? null,
@@ -34,6 +34,7 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task' }: 
       difficulty: parsed.difficulty ?? defaults.difficulty ?? 'easy'
     })
     setV('')
+    onAdded?.(id)
   }
   return (
     <div className="quickadd glass">
@@ -43,8 +44,9 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task' }: 
         className="quickadd-input"
         placeholder={placeholder}
         value={v}
+        autoFocus={autoFocus}
         onChange={(e) => setV(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setV('') }}
+        onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { if (!v && onEscape) onEscape(); else setV('') } }}
       />
       {parsed && (
         <div className="quickadd-chips">
