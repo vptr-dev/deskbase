@@ -98,6 +98,7 @@ export function CommandPalette(): JSX.Element {
     }
     const cmds: Result[] = [
       { id: 'c-new', icon: '➕', title: 'New page', sub: 'Ctrl N', run: () => setOverlay('newPage', { parentId: null }) },
+      { id: 'c-values', icon: '◆', title: 'Values and rules', sub: 'Your own numbers', run: () => setOverlay('values') },
       { id: 'c-quickadd', icon: '✅', title: 'Quick add task', sub: 'Ctrl Shift Space', run: () => setOverlay('quickAdd') },
       { id: 'c-settings', icon: '⚙️', title: 'Open settings', sub: 'Ctrl ,', run: () => setOverlay('settings') },
       { id: 'c-trash', icon: '🗑️', title: 'Open trash', run: () => setOverlay('trash') },

@@ -56,7 +56,16 @@ const P: Record<string, string> = {
   chart: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
   snooze: 'M4 4h6l-6 7h6M14 10h6l-6 8h6',
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
-  scroll: 'M8 4h11v13a3 3 0 0 1-3 3H6a2 2 0 0 1-2-2v-2h12M8 4a2 2 0 0 0-2 2v10M11 8h5M11 12h5'
+  scroll: 'M8 4h11v13a3 3 0 0 1-3 3H6a2 2 0 0 1-2-2v-2h12M8 4a2 2 0 0 0-2 2v10M11 8h5M11 12h5',
+  diamond: 'M12 3l8 9-8 9-8-9z',
+  layout: 'M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z',
+  monitor: 'M3 5h18v11H3zM8 20h8M12 16v4',
+  database: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  board: 'M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z',
+  gallery: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  zap: 'M13 2L4 14h7l-1 8 9-12h-7z',
+  move: 'M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3',
+  resize: 'M14 20h6v-6M20 20l-7-7M10 4H4v6M4 4l7 7'
 }
 
 export function Icon({ name, size = 16, stroke = 1.8, className, fill }: { name: keyof typeof P | string; size?: number; stroke?: number; className?: string; fill?: boolean }): JSX.Element {

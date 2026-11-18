@@ -185,6 +185,7 @@ export function Sidebar(): JSX.Element {
       <nav className="sidebar-nav">
         <button className="nav-item" onClick={() => setOverlay('search')}><Icon name="search" size={15} /> <span>Search</span><kbd>Ctrl K</kbd></button>
         <button className="nav-item" onClick={() => setOverlay('newPage', { parentId: null })}><Icon name="plus" size={15} /> <span>New page</span><kbd>Ctrl N</kbd></button>
+        <button className="nav-item" onClick={() => setOverlay('values')}><Icon name="diamond" size={15} /> <span>Values</span></button>
       </nav>
 
       <div className="sidebar-scroll" role="tree">

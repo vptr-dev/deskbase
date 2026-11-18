@@ -23,6 +23,7 @@ import { ReviewPage } from './pages/ReviewPage'
 import type { Page } from './types'
 import { AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
 import { NotionImportDialog } from './components/NotionImport'
+import { ValuesDialog } from './components/Values'
 import { applyImport } from './lib/importer'
 import { isDesktop } from './lib/api'
 
@@ -374,6 +375,7 @@ export function App(): JSX.Element {
       {overlay === 'shortcuts' && <ShortcutsDialog />}
       {overlay === 'movePage' && <MovePageDialog />}
       {overlay === 'quickAdd' && <QuickAddDialog />}
+      {overlay === 'values' && <ValuesDialog />}
       <Toasts />
       <Confetti />
     </div>
