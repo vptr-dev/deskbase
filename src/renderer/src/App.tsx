@@ -21,6 +21,7 @@ import { FocusMini, FocusPage, focusActions } from './pages/FocusPage'
 import { GamesPage } from './pages/GamesPage'
 import { TrackerPage } from './pages/TrackerPage'
 import { TodayPage } from './pages/TodayPage'
+import { ReviewPage } from './pages/ReviewPage'
 import type { Page } from './types'
 import { AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
 import { NotionImportDialog } from './components/NotionImport'
@@ -96,6 +97,7 @@ function PageBody({ page }: { page: Page }): JSX.Element {
     case 'focus': return <FocusPage />
     case 'games': return <GamesPage pageId={page.id} />
     case 'tracker': return <TrackerPage pageId={page.id} />
+    case 'review': return <ReviewPage pageId={page.id} />
     default: return <DocPage pageId={page.id} />
   }
 }

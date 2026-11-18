@@ -17,7 +17,8 @@ export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: str
   { type: 'rewards', name: 'Rewards', icon: '🎁', desc: 'Spend the gold you earn' },
   { type: 'focus', name: 'Focus', icon: '⏱️', desc: 'Pomodoro timer' },
   { type: 'games', name: 'Game library', icon: '🎮', desc: 'Track the games you play' },
-  { type: 'tracker', name: 'Tracker', icon: '📈', desc: 'Weight, sleep, water, anything' }
+  { type: 'tracker', name: 'Tracker', icon: '📈', desc: 'Weight, sleep, water, anything' },
+  { type: 'review', name: 'Weekly review', icon: '🗓️', desc: 'Your week at a glance' }
 ]
 
 export const typeInfo = (t: PageType): (typeof PAGE_TYPES)[number] =>

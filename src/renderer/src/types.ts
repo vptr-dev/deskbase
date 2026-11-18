@@ -12,6 +12,7 @@ export type PageType =
   | 'focus'
   | 'games'
   | 'tracker'
+  | 'review'
 
 export type BlockType =
   | 'p'
