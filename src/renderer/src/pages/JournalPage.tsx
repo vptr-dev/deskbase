@@ -1,12 +1,54 @@
 import { useMemo, useState } from 'react'
-import { act, award, getData, patch, removeItem, useData } from '../store'
+import { act, award, getData, patch, removeItem, updatePage, useData } from '../store'
 import type { JournalEntry } from '../types'
-import { addDays, longDate, parseDay, today, uid } from '../lib/util'
-import { AutoText, Button, ConfirmButton, Empty } from '../components/ui'
+import { addDays, diffDays, longDate, parseDay, today, uid } from '../lib/util'
+import { AutoText, Button, ConfirmButton, Empty, MenuButton, Ring } from '../components/ui'
 import { Icon } from '../components/Icon'
 
 export const MOODS = ['', '😞', '😕', '😐', '🙂', '😄']
 const ENERGY = ['', 'Drained', 'Low', 'Okay', 'Good', 'Charged']
+
+const PROMPTS = [
+  'How was your day?', 'What made you smile today?', 'What did you learn today?', 'What drained your energy, and what gave it back?',
+  'What are you looking forward to?', 'What would make tomorrow great?', 'What went better than expected?', 'What is on your mind right now?',
+  'Who helped you recently?', 'What did you finish today?', 'What would you tell yourself a year ago?', 'What are you avoiding, and why?',
+  'Describe a small win from today.', 'What did you play, read or watch, and what stuck with you?', 'Where did your time go today?',
+  'What is one thing you want to remember about today?', 'What challenged you today?', 'What are you proud of this week?'
+]
+const promptFor = (date: string, shift: number): string => PROMPTS[(((diffDays(date, '2024-01-01') + shift) % PROMPTS.length) + PROMPTS.length) % PROMPTS.length]
+
+function MoodChart({ entries }: { entries: JournalEntry[] }): JSX.Element | null {
+  const t = today()
+  const by: Record<string, JournalEntry> = {}
+  for (const e of entries) by[e.date] = e
+  const days = Array.from({ length: 30 }, (_, i) => addDays(t, i - 29))
+  if (!days.some((k) => by[k]?.mood)) return null
+  const W = 220, H = 64
+  const pts = days.map((k, i) => ({ k, x: 4 + (i / 29) * (W - 8), m: by[k]?.mood ?? 0, en: by[k]?.energy ?? 0 }))
+  const y = (v: number): number => H - 6 - ((v - 1) / 4) * (H - 12)
+  const line = (key: 'm' | 'en'): string => {
+    let d = ''
+    let pen = false
+    for (const p of pts) {
+      const v = p[key]
+      if (!v) { pen = false; continue }
+      d += `${pen ? 'L' : 'M'}${p.x.toFixed(1)},${y(v).toFixed(1)} `
+      pen = true
+    }
+    return d
+  }
+  return (
+    <div className="mood-chart">
+      <div className="section-label row between"><span>Mood · 30 days</span><span className="legend-inline"><i className="dot-accent" />mood <i className="dot-energy" />energy</span></div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        {[1, 3, 5].map((v) => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeWidth={1} />)}
+        <path d={line('en')} fill="none" stroke="var(--warning)" strokeWidth={1.4} strokeDasharray="3 3" opacity={0.8} />
+        <path d={line('m')} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {pts.filter((p) => p.m).map((p) => <circle key={p.k} cx={p.x} cy={y(p.m)} r={2.4} fill="var(--accent)"><title>{`${p.k}: ${MOODS[p.m]}`}</title></circle>)}
+      </svg>
+    </div>
+  )
+}
 
 export function ensureEntry(pageId: string, date: string): string {
   const existing = Object.values(getData().journal).find((j) => j.pageId === pageId && j.date === date)
@@ -18,8 +60,9 @@ export function ensureEntry(pageId: string, date: string): string {
   return id
 }
 
-function Entry({ entry }: { entry: JournalEntry }): JSX.Element {
+function Entry({ entry, wordGoal }: { entry: JournalEntry; wordGoal: number }): JSX.Element {
   const spell = useData((d) => d.settings.spellcheck)
+  const [shift, setShift] = useState(0)
   const set = (fn: (j: JournalEntry) => void, key?: string): void => patch('journal', entry.id, (j) => { fn(j); j.updatedAt = Date.now() }, key)
   const words = entry.text.trim() ? entry.text.trim().split(/\s+/).length : 0
   const onBlur = (): void => {
@@ -35,9 +78,11 @@ function Entry({ entry }: { entry: JournalEntry }): JSX.Element {
         <div className="journal-day">{parseDay(entry.date).getDate()}</div>
         <div>
           <div className="strong">{longDate(entry.date)}</div>
-          <div className="muted small">{words} words</div>
+          <div className="muted small">{wordGoal ? `${words} / ${wordGoal} words` : `${words} words`}</div>
         </div>
         <div className="spacer" />
+        {wordGoal > 0 && <Ring value={words / wordGoal} size={26} stroke={3} color={words >= wordGoal ? 'var(--success)' : undefined}>{words >= wordGoal ? <span className="tiny">✓</span> : null}</Ring>}
+        {!entry.text.trim() && <button className="icon-btn" title="Another prompt" onClick={() => setShift(shift + 1)}><Icon name="restore" size={14} /></button>}
         <button className={`icon-btn ${entry.pinned ? 'accent' : ''}`} title="Pin" onClick={() => set((j) => { j.pinned = !j.pinned })}><Icon name="pin" size={14} /></button>
         <ConfirmButton label="" onConfirm={() => removeItem('journal', entry.id, 'entry')} />
       </div>
@@ -52,7 +97,7 @@ function Entry({ entry }: { entry: JournalEntry }): JSX.Element {
           <button key={e} title={e} className={`energy ${entry.energy >= i + 1 ? 'active' : ''}`} onClick={() => set((j) => { j.energy = j.energy === i + 1 ? 0 : i + 1 })} />
         ))}
       </div>
-      <AutoText className="journal-text" spellCheck={spell} value={entry.text} placeholder="How was your day?" onChange={(v) => set((j) => { j.text = v }, 'jx:' + entry.id)} onBlur={onBlur} />
+      <AutoText className="journal-text" spellCheck={spell} value={entry.text} placeholder={promptFor(entry.date, shift)} onChange={(v) => set((j) => { j.text = v }, 'jx:' + entry.id)} onBlur={onBlur} />
       <div className="gratitude">
         <div className="section-label">Grateful for</div>
         {[0, 1, 2].map((i) => (
@@ -67,6 +112,7 @@ function Entry({ entry }: { entry: JournalEntry }): JSX.Element {
 
 export function JournalPage({ pageId }: { pageId: string }): JSX.Element {
   const all = useData((d) => d.journal)
+  const wordGoal: number = useData((d) => d.pages[pageId]?.view?.wordGoal ?? 0)
   const [q, setQ] = useState('')
   const [selected, setSelected] = useState<string>(today())
   const entries = useMemo(() => Object.values(all).filter((j) => j.pageId === pageId).sort((a, b) => b.date.localeCompare(a.date)), [all, pageId])
@@ -90,14 +136,15 @@ export function JournalPage({ pageId }: { pageId: string }): JSX.Element {
         {selected !== today() && <Button small kind="ghost" onClick={() => setSelected(today())}>Today</Button>}
         <div className="spacer" />
         <span className="muted small">{entries.length} entries · {streak}-day streak{avgMood ? ` · avg mood ${MOODS[Math.round(avgMood)]}` : ''}</span>
+        <MenuButton icon="edit" title="Word goal" items={[0, 100, 250, 500, 750].map((n) => ({ label: n ? `Word goal: ${n}` : 'No word goal', checked: wordGoal === n, onClick: () => updatePage(pageId, (p) => { p.view = { ...(p.view ?? {}), wordGoal: n } }) }))} />
         <div className="search-mini"><Icon name="search" size={14} /><input id={`jsearch-${pageId}`} placeholder="Search entries" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
 
       <div className="journal-layout">
         <div className="journal-main">
           {q ? (
-            shown.length ? shown.map((e) => <Entry key={e.id} entry={e} />) : <Empty icon="🔍" title="No matching entries" />
-          ) : current ? <Entry entry={current} /> : (
+            shown.length ? shown.map((e) => <Entry key={e.id} entry={e} wordGoal={wordGoal} />) : <Empty icon="🔍" title="No matching entries" />
+          ) : current ? <Entry entry={current} wordGoal={wordGoal} /> : (
             <div className="journal-empty glass">
               <div className="strong">{longDate(selected)}</div>
               <Button kind="primary" icon="edit" onClick={() => ensureEntry(pageId, selected)}>Write entry</Button>
@@ -115,6 +162,7 @@ export function JournalPage({ pageId }: { pageId: string }): JSX.Element {
           )}
         </div>
         <div className="journal-side">
+          <MoodChart entries={entries} />
           <div className="section-label">Recent</div>
           {entries.slice(0, 40).map((e) => (
             <button key={e.id} className={`journal-li ${e.date === selected && !q ? 'active' : ''}`} onClick={() => { setQ(''); setSelected(e.date) }}>

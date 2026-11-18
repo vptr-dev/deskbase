@@ -5,25 +5,28 @@ import { DAYS_SHORT, addDays, dayKey, formatMinutes, parseDay, today, uid } from
 import { BarChart, Button, Ring, Segmented, Stat } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { playChime } from '../lib/sound'
+import { type NoiseKind, setNoise, setNoiseVolume } from '../lib/noise'
 
-type Mode = 'focus' | 'break' | 'long'
-interface FocusState { mode: Mode; running: boolean; endsAt: number; remaining: number; total: number; label: string; taskId: string | null; cycle: number; startedAt: number; pinned: boolean }
+type Mode = 'focus' | 'break' | 'long' | 'stopwatch'
+interface FocusState { mode: Mode; running: boolean; endsAt: number; remaining: number; total: number; label: string; taskId: string | null; cycle: number; startedAt: number; pinned: boolean; noise: NoiseKind; volume: number }
 
 const minutesFor = (m: Mode): number => {
   const s = getData().settings
-  return m === 'focus' ? s.focusMinutes : m === 'break' ? s.breakMinutes : s.longBreakMinutes
+  return m === 'stopwatch' ? 0 : m === 'focus' ? s.focusMinutes : m === 'break' ? s.breakMinutes : s.longBreakMinutes
 }
 
-export const useFocus = create<FocusState>(() => ({ mode: 'focus', running: false, endsAt: 0, remaining: 25 * 60, total: 25 * 60, label: '', taskId: null, cycle: 0, startedAt: 0, pinned: false }))
+export const useFocus = create<FocusState>(() => ({ mode: 'focus', running: false, endsAt: 0, remaining: 25 * 60, total: 25 * 60, label: '', taskId: null, cycle: 0, startedAt: 0, pinned: false, noise: 'off', volume: 0.4 }))
 
 export const focusActions = {
   start(): void {
     const s = useFocus.getState()
-    useFocus.setState({ running: true, endsAt: Date.now() + s.remaining * 1000, startedAt: s.startedAt || Date.now() })
+    // Stopwatch: endsAt holds the virtual start time and `remaining` the elapsed seconds while paused.
+    const endsAt = s.mode === 'stopwatch' ? Date.now() - s.remaining * 1000 : Date.now() + s.remaining * 1000
+    useFocus.setState({ running: true, endsAt, startedAt: s.startedAt || Date.now() })
   },
   pause(): void {
     const s = useFocus.getState()
-    useFocus.setState({ running: false, remaining: Math.max(0, Math.round((s.endsAt - Date.now()) / 1000)) })
+    useFocus.setState({ running: false, remaining: remainingSecs(s) })
   },
   reset(mode?: Mode): void {
     const m = mode ?? useFocus.getState().mode
@@ -32,8 +35,9 @@ export const focusActions = {
   },
   finish(early = false): void {
     const s = useFocus.getState()
-    const elapsed = Math.round((s.total - (s.running ? Math.max(0, (s.endsAt - Date.now()) / 1000) : s.remaining)) / 60)
-    if (s.mode === 'focus' && elapsed >= 1) {
+    const watch = s.mode === 'stopwatch'
+    const elapsed = Math.round((watch ? remainingSecs(s) : s.total - remainingSecs(s)) / 60)
+    if ((s.mode === 'focus' || watch) && elapsed >= 1) {
       act((d) => {
         const id = uid()
         d.focus.unshift({ id, start: s.startedAt || Date.now() - elapsed * 60000, minutes: elapsed, label: s.label, taskId: s.taskId, kind: 'focus' })
@@ -41,6 +45,11 @@ export const focusActions = {
       })
     }
     const st = getData().settings
+    if (watch) {
+      focusActions.reset('stopwatch')
+      if (elapsed >= 1) toast(`Logged ${formatMinutes(elapsed)} of focus`, { icon: '⏱️' })
+      return
+    }
     if (!early) {
       if (st.sounds) playChime()
       if (st.notifications) api.notify(s.mode === 'focus' ? 'Focus session complete' : 'Break is over', s.mode === 'focus' ? 'Time for a break.' : 'Ready to focus again?')
@@ -53,15 +62,20 @@ export const focusActions = {
   },
   tick(): void {
     const s = useFocus.getState()
-    if (s.running && Date.now() >= s.endsAt) focusActions.finish()
+    if (s.running && s.mode !== 'stopwatch' && Date.now() >= s.endsAt) focusActions.finish()
   }
 }
 
+/** Seconds left (timer) or seconds elapsed (stopwatch). */
 export function remainingSecs(s: FocusState): number {
-  return s.running ? Math.max(0, Math.round((s.endsAt - Date.now()) / 1000)) : s.remaining
+  if (!s.running) return s.remaining
+  return s.mode === 'stopwatch' ? Math.max(0, Math.round((Date.now() - s.endsAt) / 1000)) : Math.max(0, Math.round((s.endsAt - Date.now()) / 1000))
 }
 
-export const fmtClock = (secs: number): string => `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
+export const fmtClock = (secs: number): string => {
+  const mm = `${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
+  return secs >= 3600 ? `${Math.floor(secs / 3600)}:${mm}` : `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
+}
 
 export function FocusPage(): JSX.Element {
   const s = useFocus()
@@ -69,6 +83,7 @@ export function FocusPage(): JSX.Element {
   const tasks = useData((d) => Object.values(d.tasks).filter((t) => !t.done))
   const settings = useData((d) => d.settings)
   const secs = remainingSecs(s)
+  const watch = s.mode === 'stopwatch'
   const t = today()
   const todayMin = sessions.filter((f) => f.kind === 'focus' && dayKey(new Date(f.start)) === t).reduce((a, f) => a + f.minutes, 0)
   const weekMin = sessions.filter((f) => f.kind === 'focus' && dayKey(new Date(f.start)) > addDays(t, -7)).reduce((a, f) => a + f.minutes, 0)
@@ -84,11 +99,11 @@ export function FocusPage(): JSX.Element {
   return (
     <div className="focus-page">
       <div className="focus-main glass">
-        <Segmented value={s.mode} onChange={(m) => !s.running && focusActions.reset(m)} options={[{ value: 'focus', label: 'Focus' }, { value: 'break', label: 'Short break' }, { value: 'long', label: 'Long break' }]} />
-        <Ring value={s.total ? 1 - secs / s.total : 0} size={240} stroke={10} color={s.mode === 'focus' ? 'var(--accent)' : '#30d158'}>
+        <Segmented value={s.mode} onChange={(m) => !s.running && focusActions.reset(m)} options={[{ value: 'focus', label: 'Focus' }, { value: 'break', label: 'Short break' }, { value: 'long', label: 'Long break' }, { value: 'stopwatch', label: 'Stopwatch' }]} />
+        <Ring value={watch ? (secs % 3600) / 3600 : s.total ? 1 - secs / s.total : 0} size={240} stroke={10} color={s.mode === 'focus' || watch ? 'var(--accent)' : '#30d158'}>
           <div className="center">
             <div className="clock">{fmtClock(secs)}</div>
-            <div className="muted small">Session {s.cycle + 1}</div>
+            <div className="muted small">{watch ? 'Stopwatch' : `Session ${s.cycle + 1}`}</div>
           </div>
         </Ring>
         <input id="focus-label" className="input focus-label" placeholder="What are you working on?" value={s.label} onChange={(e) => useFocus.setState({ label: e.target.value })} />
@@ -100,16 +115,21 @@ export function FocusPage(): JSX.Element {
           {tasks.slice(0, 200).map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
         </select>
         <div className="row gap-sm">
-          {s.running ? <Button kind="primary" icon="pause" onClick={focusActions.pause}>Pause</Button> : <Button kind="primary" icon="play" onClick={focusActions.start}>{secs < s.total ? 'Resume' : 'Start'}</Button>}
-          <Button icon="skip" onClick={() => focusActions.finish(true)} title="Finish now">Finish</Button>
+          {s.running ? <Button kind="primary" icon="pause" onClick={focusActions.pause}>Pause</Button> : <Button kind="primary" icon="play" onClick={focusActions.start}>{(watch ? secs > 0 : secs < s.total) ? 'Resume' : 'Start'}</Button>}
+          <Button icon="skip" onClick={() => focusActions.finish(true)} title={watch ? 'Stop and log' : 'Finish now'}>{watch ? 'Log' : 'Finish'}</Button>
           <Button kind="ghost" icon="restore" onClick={() => focusActions.reset()} title="Reset" />
           <Button kind="ghost" icon="pin" title="Keep window on top" onClick={async () => { const on = !s.pinned; await api.alwaysOnTop(on); useFocus.setState({ pinned: on }) }} className={s.pinned ? 'active' : ''} />
         </div>
-        <div className="focus-settings">
+        <div className="row gap-sm wrap ambient">
+          <span className="muted small">Ambient</span>
+          <Segmented small value={s.noise} onChange={(n) => { useFocus.setState({ noise: n }); setNoise(n, s.volume) }} options={[{ value: 'off', label: 'Off' }, { value: 'white', label: 'White' }, { value: 'pink', label: 'Pink' }, { value: 'brown', label: 'Brown' }]} />
+          {s.noise !== 'off' && <input id="noise-vol" type="range" min={0} max={1} step={0.05} value={s.volume} aria-label="Volume" onChange={(e) => { const v = Number(e.target.value); useFocus.setState({ volume: v }); setNoiseVolume(v) }} />}
+        </div>
+        {!watch && <div className="focus-settings">
           <label>Focus <input id="fm" type="number" className="input input-sm w-60" value={settings.focusMinutes} onChange={(e) => setMin('focusMinutes', Number(e.target.value))} /> min</label>
           <label>Break <input id="bm" type="number" className="input input-sm w-60" value={settings.breakMinutes} onChange={(e) => setMin('breakMinutes', Number(e.target.value))} /> min</label>
           <label>Long <input id="lm" type="number" className="input input-sm w-60" value={settings.longBreakMinutes} onChange={(e) => setMin('longBreakMinutes', Number(e.target.value))} /> min</label>
-        </div>
+        </div>}
       </div>
       <div className="focus-side">
         <div className="stat-row">

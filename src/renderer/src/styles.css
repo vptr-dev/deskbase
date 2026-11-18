@@ -762,3 +762,12 @@ input[type='checkbox'] { accent-color: var(--accent); }
 .habit-name[draggable='true'] { cursor: grab; }
 .freeze-row { padding: 6px 10px; border-radius: var(--radius-sm); background: color-mix(in srgb, #40c8e0 12%, transparent); }
 .today-grid .span2 { grid-row: span 5; }
+.ambient input[type='range'] { width: 110px; accent-color: var(--accent); }
+.mood-chart { margin-bottom: 8px; }
+.mood-chart svg { display: block; }
+.legend-inline { font-weight: 500; display: inline-flex; align-items: center; gap: 4px; }
+.legend-inline i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 6px; }
+.dot-accent { background: var(--accent); }
+.dot-energy { background: var(--warning); }
+.metric-stats { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.metric-stats b { font-weight: 600; }
