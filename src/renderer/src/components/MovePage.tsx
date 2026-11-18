@@ -23,7 +23,7 @@ export function MovePageDialog(): JSX.Element | null {
     if (!id) return []
     const blocked = new Set([id, ...descendants(data, id)])
     const list = Object.values(data.pages)
-      .filter((p) => !p.deletedAt && !blocked.has(p.id) && p.id !== data.pages[id]?.parentId)
+      .filter((p) => !p.deletedAt && !p.rowOf && !blocked.has(p.id) && p.id !== data.pages[id]?.parentId)
       .filter((p) => !q || (p.title || 'Untitled').toLowerCase().includes(q.toLowerCase()))
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 40)

@@ -289,6 +289,7 @@ export function movePage(id: string, parentId: string | null, index: number): vo
     if (id === parentId) return
     if (parentId && descendants(d, id).includes(parentId)) return
     const p = d.pages[id]
+    p.rowOf = null
     const fromList = p.parentId ? d.pages[p.parentId].children : d.rootOrder
     const fromIdx = fromList.indexOf(id)
     if (fromIdx >= 0) fromList.splice(fromIdx, 1)

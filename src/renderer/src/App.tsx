@@ -20,6 +20,7 @@ import { FocusMini, FocusPage, focusActions } from './pages/FocusPage'
 import { TrackerPage } from './pages/TrackerPage'
 import { TodayPage } from './pages/TodayPage'
 import { ReviewPage } from './pages/ReviewPage'
+import { DatabasePage, RowProps } from './pages/DatabasePage'
 import type { Page } from './types'
 import { AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
 import { NotionImportDialog } from './components/NotionImport'
@@ -64,7 +65,7 @@ function Breadcrumbs({ page }: { page: Page }): JSX.Element {
   const pages = useData((d) => d.pages)
   const trail: Page[] = []
   let p: Page | undefined = page
-  while (p) { trail.unshift(p); p = p.parentId ? pages[p.parentId] : undefined }
+  while (p) { trail.unshift(p); p = p.parentId ? pages[p.parentId] : p.rowOf ? pages[p.rowOf] : undefined }
   return (
     <div className="crumbs no-drag">
       {trail.map((c, i) => (
@@ -94,6 +95,7 @@ function PageBody({ page }: { page: Page }): JSX.Element {
     case 'focus': return <FocusPage />
     case 'tracker': return <TrackerPage pageId={page.id} />
     case 'review': return <ReviewPage pageId={page.id} />
+    case 'database': return <DatabasePage pageId={page.id} />
     default: return <DocPage pageId={page.id} />
   }
 }
@@ -169,6 +171,7 @@ function PageView({ id }: { id: string }): JSX.Element | null {
           }}
         />
       </div>
+      {page.rowOf && <RowProps rowId={page.id} />}
       <SubpageList page={page} />
       {showNotes && <div className="page-notes glass"><BlockEditor pageId={id} locked={page.locked} /></div>}
       <PageBody page={page} />

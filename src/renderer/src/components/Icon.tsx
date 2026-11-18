@@ -58,6 +58,7 @@ const P: Record<string, string> = {
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   scroll: 'M8 4h11v13a3 3 0 0 1-3 3H6a2 2 0 0 1-2-2v-2h12M8 4a2 2 0 0 0-2 2v10M11 8h5M11 12h5',
   diamond: 'M12 3l8 9-8 9-8-9z',
+  gauge: 'M4 18a8 8 0 1 1 16 0M12 18l4-6',
   layout: 'M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z',
   monitor: 'M3 5h18v11H3zM8 20h8M12 16v4',
   database: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',

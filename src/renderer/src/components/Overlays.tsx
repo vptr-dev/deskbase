@@ -83,7 +83,7 @@ export function CommandPalette(): JSX.Element {
     const pageMatch = (ql ? pages.filter((p) => (p.title || 'untitled').toLowerCase().includes(ql) || p.blocks.some((b) => b.text.toLowerCase().includes(ql))) : data.recent.map((id) => data.pages[id]).filter((p) => p && !p.deletedAt))
     for (const p of pageMatch.slice(0, 10)) {
       const hit = ql && !(p.title || '').toLowerCase().includes(ql) ? p.blocks.find((b) => b.text.toLowerCase().includes(ql))?.text : undefined
-      out.push({ id: 'p' + p.id, icon: p.icon || typeInfo(p.type).icon, title: p.title || 'Untitled', sub: hit ? hit.slice(0, 80) : typeInfo(p.type).name, run: () => openPage(p.id) })
+      out.push({ id: 'p' + p.id, icon: p.icon || typeInfo(p.type).icon, title: p.title || 'Untitled', sub: hit ? hit.slice(0, 80) : p.rowOf ? `in ${data.pages[p.rowOf]?.title || 'Untitled'}` : typeInfo(p.type).name, run: () => openPage(p.id) })
     }
     if (ql) {
       for (const t of Object.values(data.tasks).filter((t) => t.title.toLowerCase().includes(ql) || t.notes.toLowerCase().includes(ql)).slice(0, 8)) {
@@ -222,7 +222,7 @@ export function SettingsDialog(): JSX.Element {
             <Row label="Workspace name" sub="Shown in the sidebar and greetings"><input id="set-name" className="input input-sm" value={profile.name} onChange={(e) => act((d) => { d.profile.name = e.target.value }, { key: 'pname' })} /></Row>
             <Row label="Open on start"><select id="set-start" className="input input-sm" value={s.startPage} onChange={(e) => set((x) => { x.startPage = e.target.value })}>
               <option value="last">Last opened page</option>
-              {Object.values(pages).filter((p) => !p.deletedAt).map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
+              {Object.values(pages).filter((p) => !p.deletedAt && !p.rowOf).map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
             </select></Row>
             <Row label="Week starts on"><Segmented small value={s.weekStart} onChange={(v) => set((x) => { x.weekStart = v })} options={[{ value: 1, label: 'Monday' }, { value: 0, label: 'Sunday' }]} /></Row>
             <Row label="Time format"><Segmented small value={s.use24h ? 1 : 0} onChange={(v) => set((x) => { x.use24h = v === 1 })} options={[{ value: 0, label: '12-hour' }, { value: 1, label: '24-hour' }]} /></Row>

@@ -149,7 +149,7 @@ export function Sidebar(): JSX.Element {
   const [filter, setFilter] = useState<string | null>(null)
   const fq = (filter ?? '').trim().toLowerCase()
   const data = useData((d) => d)
-  const matches = fq ? Object.values(pages).filter((p) => !p.deletedAt && (p.title || 'Untitled').toLowerCase().includes(fq)).sort((a, b) => (a.title || '').localeCompare(b.title || '')) : []
+  const matches = fq ? Object.values(pages).filter((p) => !p.deletedAt && !p.rowOf && (p.title || 'Untitled').toLowerCase().includes(fq)).sort((a, b) => (a.title || '').localeCompare(b.title || '')) : []
 
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault()
