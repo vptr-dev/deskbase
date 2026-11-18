@@ -7,13 +7,15 @@
  * A backup of the file is written automatically before any migration runs.
  */
 
-export const CURRENT_SCHEMA = 1
+export const CURRENT_SCHEMA = 2
 
 type Raw = Record<string, any>
 
 const migrations: Record<number, (d: Raw) => Raw> = {
   // 0 -> 1: files written before versioning existed (or empty objects).
-  0: (d) => ({ ...d, schema: 1 })
+  0: (d) => ({ ...d, schema: 1 }),
+  // 1 -> 2: assistant chat history (0.2.0).
+  1: (d) => ({ ...d, assistant: d.assistant ?? { messages: [] } })
 }
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {

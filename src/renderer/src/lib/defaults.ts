@@ -2,7 +2,7 @@ import type { AppData, Page, PageType, Settings } from '../types'
 import { DEFAULT_STATS } from './game'
 import { uid } from './util'
 
-export const SCHEMA = 1
+export const SCHEMA = 2
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: '📄', desc: 'Notes and documents' },
@@ -128,7 +128,8 @@ export function freshData(): AppData {
     },
     settings: { ...DEFAULT_SETTINGS, lastPage: pages[0].id },
     recent: [],
-    tags: {}
+    tags: {},
+    assistant: { messages: [] }
   }
 }
 
@@ -151,7 +152,8 @@ export function normalize(raw: any): AppData {
     focus: raw.focus ?? [],
     xpLog: raw.xpLog ?? [],
     recent: raw.recent ?? [],
-    tags: raw.tags ?? {}
+    tags: raw.tags ?? {},
+    assistant: { messages: Array.isArray(raw.assistant?.messages) ? raw.assistant.messages : [] }
   }
   for (const k of ['tasks', 'habits', 'journal', 'goals', 'rewards', 'games', 'metrics'] as const) {
     ;(d as any)[k] = raw[k] ?? {}

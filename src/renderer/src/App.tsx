@@ -20,6 +20,13 @@ import { GamesPage } from './pages/GamesPage'
 import { TrackerPage } from './pages/TrackerPage'
 import { TodayPage } from './pages/TodayPage'
 import type { Page } from './types'
+import { AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
+import { NotionImportDialog } from './components/NotionImport'
+import { applyImport } from './lib/importer'
+import { isDesktop } from './lib/api'
+
+// Browser preview only: lets an import result be applied from the dev console for testing.
+if (!isDesktop) (window as any).__plannerApplyImport = applyImport
 
 // ---------- navigation history ----------
 const back: string[] = []
@@ -223,6 +230,7 @@ function useShortcuts(): void {
       else if (mod && k === 'n') { e.preventDefault(); setOverlay('newPage', { parentId: null }) }
       else if (mod && k === ',') { e.preventDefault(); setOverlay('settings') }
       else if (mod && k === '/') { e.preventDefault(); setOverlay('shortcuts') }
+      else if (mod && k === 'j') { e.preventDefault(); toggleAssistant() }
       else if (mod && k === '\\') { e.preventDefault(); setSettings((s) => { s.sidebarCollapsed = !s.sidebarCollapsed }) }
       else if (mod && e.shiftKey && k === 'l') { e.preventDefault(); const dark = document.documentElement.dataset.theme === 'dark'; setSettings((s) => { s.theme = dark ? 'light' : 'dark' }) }
       else if (mod && k === '[') { e.preventDefault(); goBack() }
@@ -275,6 +283,7 @@ export function App(): JSX.Element {
   const page = useData((d) => (current ? d.pages[current] : undefined))
   const canUndo = useApp((s) => s.canUndo)
   const canRedo = useApp((s) => s.canRedo)
+  const assistantOpen = useAssistant((s) => s.open)
   useEffect(() => { boot() }, [])
   useAppearance()
   useShortcuts()
@@ -282,7 +291,7 @@ export function App(): JSX.Element {
   if (!ready) return <div className="boot" />
 
   return (
-    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${assistantOpen ? 'assistant-open' : ''}`}>
       <Sidebar />
       <main className="main">
         <header className="topbar drag">
@@ -295,6 +304,7 @@ export function App(): JSX.Element {
           <SaveIndicator />
           <button className="icon-btn no-drag" title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={undo}><Icon name="undo" size={15} /></button>
           <button className="icon-btn no-drag" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo} onClick={redo}><Icon name="redo" size={15} /></button>
+          <button className={`icon-btn no-drag ${assistantOpen ? 'accent' : ''}`} title="Assistant (Ctrl+J)" onClick={toggleAssistant}><Icon name="sparkle" size={15} /></button>
           {page && (
             <span className="no-drag">
               <MenuButton items={[
@@ -312,7 +322,7 @@ export function App(): JSX.Element {
               ]} />
             </span>
           )}
-          <div className="caption-space" />
+          {!assistantOpen && <div className="caption-space" />}
         </header>
         <div className="scroll">
           {page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
@@ -323,7 +333,9 @@ export function App(): JSX.Element {
           )}
         </div>
       </main>
+      <AssistantPanel />
       {overlay === 'search' && <CommandPalette />}
+      {overlay === 'notionImport' && <NotionImportDialog />}
       {overlay === 'newPage' && <NewPageDialog />}
       {overlay === 'settings' && <SettingsDialog />}
       {overlay === 'trash' && <TrashDialog />}

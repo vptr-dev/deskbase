@@ -26,6 +26,7 @@ export type BlockType =
   | 'code'
   | 'toggle'
   | 'divider'
+  | 'table'
 
 export interface Block {
   id: string
@@ -36,6 +37,7 @@ export interface Block {
   body?: string
   color?: string
   indent?: number
+  rows?: string[][]
 }
 
 export interface Page {
@@ -254,6 +256,8 @@ export interface Settings {
   dailyXpGoal: number
 }
 
+export interface AssistantMessage { id: string; role: 'user' | 'assistant'; content: string; at: number; applied?: number[] }
+
 export interface AppData {
   schema: number
   pages: Record<string, Page>
@@ -271,4 +275,5 @@ export interface AppData {
   settings: Settings
   recent: string[]
   tags: Record<string, string>
+  assistant: { messages: AssistantMessage[] }
 }

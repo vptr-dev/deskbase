@@ -17,7 +17,8 @@ const SLASH: { type: BlockType; label: string; icon: string; hint: string }[] = 
   { type: 'quote', label: 'Quote', icon: 'note', hint: '"' },
   { type: 'callout', label: 'Callout', icon: 'bolt', hint: '!' },
   { type: 'code', label: 'Code', icon: 'keyboard', hint: '```' },
-  { type: 'divider', label: 'Divider', icon: 'minus', hint: '---' }
+  { type: 'divider', label: 'Divider', icon: 'minus', hint: '---' },
+  { type: 'table', label: 'Table', icon: 'table', hint: '' }
 ]
 
 const SHORTCUTS: [RegExp, BlockType][] = [
@@ -61,6 +62,7 @@ export function BlockEditor({ pageId, locked }: { pageId: string; locked?: boole
     setBlock(id, (b) => {
       b.type = type
       if (type === 'divider') b.text = ''
+      if (type === 'table' && !b.rows?.length) b.rows = [[b.text, ''], ['', '']]
     })
     if (type === 'divider') insertAfter(id)
     else focusBlock(id)
@@ -159,10 +161,23 @@ export function BlockEditor({ pageId, locked }: { pageId: string; locked?: boole
     else if (slash) setSlash(null)
   }
 
+  // Blocks nested under a closed toggle are hidden.
+  const hidden = new Set<string>()
+  let hideBelow: number | null = null
+  for (const b of blocks) {
+    const ind = b.indent ?? 0
+    if (hideBelow !== null) {
+      if (ind > hideBelow) { hidden.add(b.id); continue }
+      hideBelow = null
+    }
+    if (b.type === 'toggle' && !b.open) hideBelow = ind
+  }
+
   let num = 0
   return (
     <div className={`blocks ${locked ? 'locked' : ''}`}>
       {blocks.map((b, idx) => {
+        if (hidden.has(b.id)) return null
         num = b.type === 'number' ? num + 1 : 0
         const common = {
           value: b.text,
@@ -198,7 +213,7 @@ export function BlockEditor({ pageId, locked }: { pageId: string; locked?: boole
                 <Icon name="grip" size={14} stroke={2.6} />
               </div>
             )}
-            {b.type === 'divider' ? <hr /> : (
+            {b.type === 'divider' ? <hr /> : b.type === 'table' ? <TableBlock block={b} locked={locked} onEdit={(fn) => setBlock(b.id, (x) => { x.rows = x.rows?.length ? x.rows : [['']]; fn(x.rows) }, 'tbl:' + b.id)} /> : (
               <div className="block-body">
                 {b.type === 'todo' && <Checkbox checked={!!b.checked} onChange={(v) => setBlock(b.id, (x) => { x.checked = v })} size={17} />}
                 {b.type === 'bullet' && <span className="bullet">•</span>}
@@ -253,6 +268,38 @@ export function BlockEditor({ pageId, locked }: { pageId: string; locked?: boole
             ))}
           </div>
         </Popover>
+      )}
+    </div>
+  )
+}
+
+function TableBlock({ block, locked, onEdit }: { block: Block; locked?: boolean; onEdit: (fn: (rows: string[][]) => void) => void }): JSX.Element {
+  const rows = block.rows?.length ? block.rows : [['']]
+  const width = Math.max(1, ...rows.map((r) => r.length))
+  const pad = (r: string[]): string[] => [...r, ...Array(width - r.length).fill('')]
+  const fix = (rs: string[][]): void => { rs.forEach((r, i) => { if (r.length < width) rs[i] = pad(r) }) }
+  return (
+    <div className="tbl-wrap">
+      <table className="tbl">
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={ri} className={ri === 0 ? 'tbl-head' : ''}>
+              {pad(r).map((c, ci) => (
+                <td key={ci}>
+                  <AutoText className="tbl-cell" value={c} onChange={(v) => onEdit((rs) => { fix(rs); rs[ri][ci] = v })} />
+                </td>
+              ))}
+              {!locked && <td className="tbl-x"><button title="Delete row" onClick={() => onEdit((rs) => { if (rs.length > 1) rs.splice(ri, 1) })}><Icon name="x" size={11} /></button></td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!locked && (
+        <div className="tbl-tools">
+          <button onClick={() => onEdit((rs) => { fix(rs); rs.push(Array(width).fill('')) })}><Icon name="plus" size={12} /> Row</button>
+          <button onClick={() => onEdit((rs) => { fix(rs); rs.forEach((r) => r.push('')) })}><Icon name="plus" size={12} /> Column</button>
+          {width > 1 && <button onClick={() => onEdit((rs) => { fix(rs); rs.forEach((r) => r.pop()) })}><Icon name="minus" size={12} /> Column</button>}
+        </div>
       )}
     </div>
   )

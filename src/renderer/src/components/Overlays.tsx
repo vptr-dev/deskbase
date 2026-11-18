@@ -6,6 +6,8 @@ import { exportAll, tasksToCsv } from '../lib/exporters'
 import { timeAgo, today } from '../lib/util'
 import { Button, ConfirmButton, Empty, Modal, Segmented, Toggle } from './ui'
 import { Icon } from './Icon'
+import { PROVIDERS, providerInfo, type AiConfig, type AiProvider } from '../../../shared/ai-core'
+import { toggleAssistant } from './Assistant'
 
 // ---------- New page ----------
 export function NewPageDialog(): JSX.Element {
@@ -73,6 +75,8 @@ export function CommandPalette(): JSX.Element {
       { id: 'c-theme', icon: '🌓', title: 'Toggle dark mode', run: () => { const dark = document.documentElement.dataset.theme === 'dark'; setSettings((s) => { s.theme = dark ? 'light' : 'dark' }) } },
       { id: 'c-sidebar', icon: '📑', title: 'Toggle sidebar', sub: 'Ctrl \\', run: () => setSettings((s) => { s.sidebarCollapsed = !s.sidebarCollapsed }) },
       { id: 'c-export', icon: '💾', title: 'Export all data', run: () => exportAll() },
+      { id: 'c-ai', icon: '✨', title: 'Ask the assistant', sub: 'Ctrl J', run: () => toggleAssistant() },
+      { id: 'c-notion', icon: '📥', title: 'Import from Notion', run: () => setTimeout(() => setOverlay('notionImport'), 0) },
       { id: 'c-undo', icon: '↩️', title: 'Undo', sub: 'Ctrl Z', run: undo },
       { id: 'c-redo', icon: '↪️', title: 'Redo', sub: 'Ctrl Shift Z', run: redo },
       { id: 'c-keys', icon: '⌨️', title: 'Keyboard shortcuts', sub: 'Ctrl /', run: () => setOverlay('shortcuts') },
@@ -134,7 +138,7 @@ export function TrashDialog(): JSX.Element {
 // ---------- Shortcuts ----------
 export const SHORTCUTS: [string, string][] = [
   ['Ctrl K', 'Search and commands'], ['Ctrl N', 'New page'], ['Ctrl \\', 'Toggle sidebar'], ['Ctrl ,', 'Settings'],
-  ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'], ['Ctrl [ / Ctrl ]', 'Back / forward'], ['Ctrl /', 'Shortcuts'], ['Ctrl Shift L', 'Toggle dark mode'],
+  ['Ctrl J', 'Assistant'], ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'], ['Ctrl [ / Ctrl ]', 'Back / forward'], ['Ctrl /', 'Shortcuts'], ['Ctrl Shift L', 'Toggle dark mode'],
   ['Ctrl + / Ctrl -', 'Zoom text'], ['Ctrl 1…9', 'Open sidebar page 1…9'], ['/', 'Block menu (in a page)'], ['# , ## , ###', 'Headings'], ['- or *', 'Bulleted list'],
   ['[]', 'To-do block'], ['1.', 'Numbered list'], ['>>', 'Toggle block'], ['"', 'Quote'], ['---', 'Divider'], ['Tab / Shift Tab', 'Indent block'],
   ['Alt ↑ / Alt ↓', 'Move block'], ['Ctrl D', 'Duplicate block'], ['Ctrl Enter', 'Check a to-do block'], ['F2', 'Rename page in sidebar']
@@ -159,7 +163,8 @@ export function SettingsDialog(): JSX.Element {
   const s = useData((d) => d.settings)
   const profile = useData((d) => d.profile)
   const pages = useData((d) => d.pages)
-  const [tab, setTab] = useState<'general' | 'appearance' | 'game' | 'data' | 'about'>('general')
+  const initialTab = useApp((st) => st.overlayArg)
+  const [tab, setTab] = useState<'general' | 'appearance' | 'game' | 'assistant' | 'data' | 'about'>(['general', 'appearance', 'game', 'assistant', 'data', 'about'].includes(initialTab) ? initialTab : 'general')
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [backups, setBackups] = useState<{ name: string; date: string; size: number }[]>([])
   const [upd, setUpd] = useState<UpdateStatus>({ state: 'idle' })
@@ -171,8 +176,8 @@ export function SettingsDialog(): JSX.Element {
     <Modal onClose={() => setOverlay(null)} width={720} className="settings">
       <div className="settings-layout">
         <nav className="settings-nav">
-          {(['general', 'appearance', 'game', 'data', 'about'] as const).map((t) => (
-            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', game: 'Game', data: 'Data & backups', about: 'About & updates' }[t]}</button>
+          {(['general', 'appearance', 'game', 'assistant', 'data', 'about'] as const).map((t) => (
+            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', game: 'Game', assistant: 'Assistant', data: 'Data & backups', about: 'About & updates' }[t]}</button>
           ))}
         </nav>
         <div className="settings-body">
@@ -215,9 +220,11 @@ export function SettingsDialog(): JSX.Element {
               })} />
             </Row>
           </>}
+          {tab === 'assistant' && <AssistantSettings />}
           {tab === 'data' && <>
             <h3>Data & backups</h3>
             <p className="muted small">Everything is stored on this computer{info?.dataPath ? <> in <code>{info.dataPath}</code></> : null}. Updates never touch your data, and a backup is made every day.</p>
+            <Row label="Import from Notion" sub="From the Notion app on this computer, or an export"><Button small icon="upload" onClick={() => setOverlay('notionImport')}>Import</Button></Row>
             <Row label="Export everything" sub="A single JSON file you can import later"><Button small icon="download" onClick={() => exportAll()}>Export</Button></Row>
             <Row label="Export tasks as CSV"><Button small icon="download" onClick={() => api.exportFile(tasksToCsv(), `planner-tasks-${today()}.csv`)}>CSV</Button></Row>
             <Row label="Import" sub="Replaces current data. A backup is made first."><Button small icon="upload" onClick={async () => {
@@ -258,6 +265,71 @@ export function SettingsDialog(): JSX.Element {
         </div>
       </div>
     </Modal>
+  )
+}
+
+function AssistantSettings(): JSX.Element {
+  const [cfg, setCfg] = useState<AiConfig | null>(null)
+  const [models, setModels] = useState<string[]>([])
+  const [key, setKey] = useState('')
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { api.ai.getConfig().then((c) => { setCfg(c); refresh() }) }, [])
+  const refresh = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      const m = await api.ai.models()
+      setModels(m)
+      setStatus({ ok: true, text: m.length ? `Connected · ${m.length} model${m.length === 1 ? '' : 's'} available` : 'Connected, but no models are installed' })
+    } catch (e: any) {
+      setModels([])
+      setStatus({ ok: false, text: e?.message ?? 'Could not connect' })
+    } finally { setBusy(false) }
+  }
+  const save = async (patch: Partial<AiConfig> & { key?: string | null }): Promise<void> => {
+    const c = await api.ai.setConfig(patch)
+    setCfg(c)
+  }
+  if (!cfg) return <div className="muted">Loading…</div>
+  const info = providerInfo(cfg.provider)
+  return (
+    <>
+      <h3>Assistant</h3>
+      <p className="muted small">Chat with an AI that can see the open page and your tasks, and add tasks, pages, habits and goals for you. Press Ctrl J to open it. Local models keep everything on this computer.</p>
+      <Row label="Provider">
+        <select id="ai-provider" className="input input-sm" value={cfg.provider} onChange={async (e) => {
+          const p = e.target.value as AiProvider
+          await save({ provider: p, baseUrl: providerInfo(p).baseUrl, model: providerInfo(p).defaultModel })
+          setStatus(null); setModels([]); setTimeout(refresh, 0)
+        }}>
+          {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </Row>
+      {cfg.provider !== 'anthropic' && cfg.provider !== 'openai' && (
+        <Row label="Server address"><input id="ai-url" className="input input-sm w-220" value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} onBlur={() => save({ baseUrl: cfg.baseUrl }).then(refresh)} /></Row>
+      )}
+      {(info.needsKey || cfg.provider === 'custom') && (
+        <Row label="API key" sub={cfg.hasKey ? 'Saved and encrypted on this computer' : 'Stored encrypted on this computer, never in exports'}>
+          <input id="ai-key" type="password" className="input input-sm w-220" placeholder={cfg.hasKey ? '••••••••••••' : 'Paste key'} value={key} onChange={(e) => setKey(e.target.value)} />
+          <Button small disabled={!key.trim()} onClick={async () => { await save({ key: key.trim() }); setKey(''); refresh() }}>Save</Button>
+          {cfg.hasKey && <Button small kind="ghost" onClick={() => save({ key: null })}>Remove</Button>}
+        </Row>
+      )}
+      <Row label="Model">
+        <input id="ai-model" className="input input-sm w-220" list="ai-models" value={cfg.model} placeholder="Model name" onChange={(e) => setCfg({ ...cfg, model: e.target.value })} onBlur={() => save({ model: cfg.model })} />
+        <datalist id="ai-models">{models.map((m) => <option key={m} value={m} />)}</datalist>
+        <Button small kind="ghost" icon="restore" title="Refresh" disabled={busy} onClick={refresh} />
+      </Row>
+      {models.length > 0 && (
+        <div className="row wrap gap-xs mt-sm">
+          {models.slice(0, 12).map((m) => <button key={m} className={`chip-btn ${cfg.model === m ? 'active' : ''}`} onClick={() => save({ model: m })}>{m}</button>)}
+        </div>
+      )}
+      {status && <p className={`small ${status.ok ? 'muted' : 'danger'}`}>{status.ok ? '● ' : ''}{status.text}</p>}
+      {info.local && !status?.ok && (
+        <p className="muted small">Install <b>Ollama</b> from ollama.com, run <code>ollama pull llama3.2</code>, and it will appear here.</p>
+      )}
+    </>
   )
 }
 

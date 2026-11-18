@@ -49,7 +49,9 @@ const P: Record<string, string> = {
   keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
   trophy: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4',
   expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
-  note: 'M5 3h10l4 4v14H5zM14 3v5h5M8 13h8M8 17h5'
+  note: 'M5 3h10l4 4v14H5zM14 3v5h5M8 13h8M8 17h5',
+  sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z',
+  table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14'
 }
 
 export function Icon({ name, size = 16, stroke = 1.8, className, fill }: { name: keyof typeof P | string; size?: number; stroke?: number; className?: string; fill?: boolean }): JSX.Element {

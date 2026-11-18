@@ -4,6 +4,8 @@ import os from 'os'
 import path from 'path'
 import { createBackup, dataDir, listBackups, loadData, parseImport, readBackup, saveData } from './storage'
 import { checkForUpdates, getStatus, initUpdater, installUpdate } from './updater'
+import { registerAi } from './ai'
+import { importNotionExport, importNotionPages, listNotionPages, notionDbPath } from './notion'
 
 type Material = 'mica' | 'acrylic' | 'none'
 
@@ -193,6 +195,15 @@ function registerIpc(): void {
   ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
 
+  ipcMain.handle('notion:available', () => Boolean(notionDbPath()))
+  ipcMain.handle('notion:list', () => listNotionPages())
+  ipcMain.handle('notion:import', (_e, ids: string[]) => importNotionPages(ids))
+  ipcMain.handle('notion:importExport', async () => {
+    const r = await dialog.showOpenDialog(mainWindow!, { title: 'Choose a Notion export', properties: ['openFile'], filters: [{ name: 'Notion export', extensions: ['zip', 'md', 'csv'] }] })
+    if (r.canceled || !r.filePaths[0]) return null
+    return importNotionExport(r.filePaths[0])
+  })
+
   ipcMain.handle('updater:status', () => getStatus())
   ipcMain.handle('updater:check', () => checkForUpdates())
   ipcMain.handle('updater:install', () => installUpdate())
@@ -211,6 +222,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     if (isWin) app.setAppUserModelId('com.vptrdev.planner')
     registerIpc()
+    registerAi()
     createWindow()
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
   })
