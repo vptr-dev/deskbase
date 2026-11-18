@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+A new direction: Planner is now a blank, fully custom workspace.
+
+- Removed the game layer: XP, levels, gold, quests, the item shop, rewards, the character page and the game library. Nothing is deleted: old game data is kept inside your data file, and the old Character and Games pages are in the trash.
+- New installs start with an empty workspace.
+- New look: floating glass panels, gradient backgrounds (sky, peach, lilac, mint, aurora, midnight, or your desktop with Mica) and glass text.
+- Values: track any number you care about (money saved, pages read, reps, points). Change it by hand, or add rules so it moves on its own when you finish a task, check a habit, focus, write in your journal, log a tracker, complete a goal or change a database row. Values can reset daily, weekly or monthly and have goals.
+- Databases: tables with text, number, select, multi-select, status, date, checkbox, URL and progress properties. Table, board, gallery, list and calendar views, each with its own filters, sort and visible properties. Every row opens as a full page.
+- Dashboards: build your own page from widgets (values, charts, progress rings, stats, tasks, habits, database views, calendar, clock, notes, countdowns, focus timer, quick add, goals and page links). Drag to move, drag the corner to resize, pick 8 to 24 columns.
+- Desktop widget: pin a dashboard to a second monitor. It covers that screen and stays on the desktop behind your windows (or always on top), see-through or with blurred glass, and clicks on empty space go through to the desktop. Set it up in Settings → Desktop widget.
+- With "Start with Windows" on and the desktop widget or "Close to tray" turned on, Planner starts quietly in the tray.
+
 ## 0.4.0 — 2026-11-18
 
 - Select several tasks with Ctrl or Shift click, then complete, reschedule, change priority, move or delete them together.
