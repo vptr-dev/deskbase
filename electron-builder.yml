@@ -1,0 +1,30 @@
+appId: com.vptrdev.planner
+productName: Planner
+copyright: Copyright © 2026 vptr-dev
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  artifactName: Planner-Setup-${version}.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Planner
+publish:
+  provider: github
+  owner: vptr-dev
+  repo: planner
+  releaseType: release

@@ -1,0 +1,218 @@
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, screen, shell } from 'electron'
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
+import { createBackup, dataDir, listBackups, loadData, parseImport, readBackup, saveData } from './storage'
+import { checkForUpdates, getStatus, initUpdater, installUpdate } from './updater'
+
+type Material = 'mica' | 'acrylic' | 'none'
+
+const isWin = process.platform === 'win32'
+const winBuild = isWin ? Number(os.release().split('.')[2] ?? 0) : 0
+const micaSupported = isWin && winBuild >= 22621
+
+let mainWindow: BrowserWindow | null = null
+
+// Development runs keep their own data so they never touch a real install.
+if (!app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'Planner-dev'))
+
+// ---------- window state ----------
+interface WinState { x?: number; y?: number; width: number; height: number; maximized: boolean }
+const stateFile = (): string => path.join(app.getPath('userData'), 'window-state.json')
+
+function readWinState(): WinState {
+  try {
+    const s = JSON.parse(fs.readFileSync(stateFile(), 'utf8')) as WinState
+    const visible = screen.getAllDisplays().some((d) => {
+      const b = d.workArea
+      return s.x !== undefined && s.y !== undefined && s.x >= b.x - 50 && s.y >= b.y - 50 && s.x < b.x + b.width && s.y < b.y + b.height
+    })
+    return visible ? s : { width: s.width, height: s.height, maximized: s.maximized }
+  } catch {
+    return { width: 1280, height: 820, maximized: false }
+  }
+}
+
+function saveWinState(w: BrowserWindow): void {
+  try {
+    const b = w.getNormalBounds()
+    fs.writeFileSync(stateFile(), JSON.stringify({ ...b, maximized: w.isMaximized() }))
+  } catch { /* ignore */ }
+}
+
+// ---------- preferences needed before the renderer loads ----------
+const prefsFile = (): string => path.join(app.getPath('userData'), 'shell-prefs.json')
+function readPrefs(): { material: Material; theme: 'system' | 'light' | 'dark' } {
+  try {
+    return { material: 'mica', theme: 'system', ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) }
+  } catch {
+    return { material: 'mica', theme: 'system' }
+  }
+}
+function writePrefs(p: Partial<ReturnType<typeof readPrefs>>): void {
+  try { fs.writeFileSync(prefsFile(), JSON.stringify({ ...readPrefs(), ...p })) } catch { /* ignore */ }
+}
+
+function overlayColors(): { color: string; symbolColor: string; height: number } {
+  return {
+    color: '#00000000',
+    symbolColor: nativeTheme.shouldUseDarkColors ? '#e8e8ec' : '#1d1d22',
+    height: 40
+  }
+}
+
+function createWindow(): void {
+  const prefs = readPrefs()
+  nativeTheme.themeSource = prefs.theme
+  const st = readWinState()
+  const material: Material = micaSupported ? prefs.material : 'none'
+
+  mainWindow = new BrowserWindow({
+    x: st.x,
+    y: st.y,
+    width: st.width,
+    height: st.height,
+    minWidth: 720,
+    minHeight: 480,
+    show: false,
+    title: 'Planner',
+    ...(app.isPackaged ? {} : { icon: path.join(__dirname, '../../build/icon.png') }),
+    autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: isWin ? overlayColors() : undefined,
+    trafficLightPosition: { x: 14, y: 13 },
+    backgroundColor: material === 'none' ? (nativeTheme.shouldUseDarkColors ? '#1c1c20' : '#f3f3f5') : '#00000000',
+    ...(isWin && material !== 'none' ? { backgroundMaterial: material } : {}),
+    ...(process.platform === 'darwin' ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const } : {}),
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      spellcheck: true
+    }
+  })
+
+  if (st.maximized) mainWindow.maximize()
+  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('close', () => mainWindow && saveWinState(mainWindow))
+
+  // Links open in the default browser, never inside the app.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith('http://localhost') && !url.startsWith('file://')) {
+      e.preventDefault()
+      if (/^https?:\/\//i.test(url)) shell.openExternal(url)
+    }
+  })
+
+  nativeTheme.on('updated', () => {
+    if (isWin && mainWindow) mainWindow.setTitleBarOverlay(overlayColors())
+  })
+
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  }
+
+  initUpdater(mainWindow)
+  if (app.isPackaged) setTimeout(() => checkForUpdates(), 4000)
+}
+
+// ---------- IPC ----------
+function registerIpc(): void {
+  ipcMain.handle('app:info', () => ({
+    version: app.getVersion(),
+    platform: process.platform,
+    micaSupported,
+    material: micaSupported ? readPrefs().material : 'none',
+    dataPath: dataDir(),
+    packaged: app.isPackaged
+  }))
+
+  ipcMain.handle('data:load', () => loadData())
+  ipcMain.handle('data:save', (_e, data) => { saveData(data); return true })
+  ipcMain.on('data:saveSync', (e, data) => {
+    try { saveData(data); e.returnValue = true } catch { e.returnValue = false }
+  })
+
+  ipcMain.handle('data:export', async (_e, text: string, defaultName: string) => {
+    const r = await dialog.showSaveDialog(mainWindow!, {
+      defaultPath: path.join(app.getPath('documents'), defaultName),
+      filters: [{ name: defaultName.split('.').pop()!.toUpperCase(), extensions: [defaultName.split('.').pop()!] }]
+    })
+    if (r.canceled || !r.filePath) return null
+    fs.writeFileSync(r.filePath, text, 'utf8')
+    return r.filePath
+  })
+
+  ipcMain.handle('data:import', async () => {
+    const r = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], filters: [{ name: 'Planner backup', extensions: ['json'] }] })
+    if (r.canceled || !r.filePaths[0]) return null
+    createBackup('before-import')
+    return parseImport(fs.readFileSync(r.filePaths[0], 'utf8'))
+  })
+
+  ipcMain.handle('backups:list', () => listBackups())
+  ipcMain.handle('backups:create', () => createBackup('manual'))
+  ipcMain.handle('backups:read', (_e, name: string) => {
+    createBackup('before-restore')
+    return readBackup(name)
+  })
+  ipcMain.handle('app:openDataFolder', () => shell.openPath(dataDir()))
+
+  ipcMain.handle('app:setTheme', (_e, theme: 'system' | 'light' | 'dark') => {
+    nativeTheme.themeSource = theme
+    writePrefs({ theme })
+    if (isWin && mainWindow) mainWindow.setTitleBarOverlay(overlayColors())
+    return nativeTheme.shouldUseDarkColors
+  })
+
+  ipcMain.handle('app:setMaterial', (_e, material: Material) => {
+    writePrefs({ material })
+    if (micaSupported && mainWindow) {
+      mainWindow.setBackgroundMaterial(material)
+      if (material === 'none') mainWindow.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#1c1c20' : '#f3f3f5')
+      else mainWindow.setBackgroundColor('#00000000')
+    }
+    return true
+  })
+
+  ipcMain.handle('app:notify', (_e, title: string, body: string) => {
+    if (Notification.isSupported()) {
+      const n = new Notification({ title, body, silent: false })
+      n.on('click', () => { mainWindow?.show(); mainWindow?.focus() })
+      n.show()
+    }
+  })
+
+  ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
+  ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
+
+  ipcMain.handle('updater:status', () => getStatus())
+  ipcMain.handle('updater:check', () => checkForUpdates())
+  ipcMain.handle('updater:install', () => installUpdate())
+}
+
+// ---------- lifecycle ----------
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
+  app.whenReady().then(() => {
+    if (isWin) app.setAppUserModelId('com.vptrdev.planner')
+    registerIpc()
+    createWindow()
+    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
+  })
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+}
