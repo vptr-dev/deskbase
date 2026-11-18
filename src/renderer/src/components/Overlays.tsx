@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPage, getData, openPage, purgePage, replaceData, restorePage, setOverlay, setSettings, toast, useApp, useData, act, undo, redo } from '../store'
-import { ACCENTS, PAGE_TYPES, typeInfo } from '../lib/defaults'
+import { ACCENTS, BACKDROPS, PAGE_TYPES, typeInfo } from '../lib/defaults'
 import { api, isDesktop, type AppInfo, type UpdateStatus } from '../lib/api'
 import { exportAll, tasksToCsv } from '../lib/exporters'
 import { timeAgo, today } from '../lib/util'
@@ -241,7 +241,14 @@ export function SettingsDialog(): JSX.Element {
                 <input id="accent-custom" type="color" value={s.accent} onChange={(e) => { const v = e.target.value; set((x) => { x.accent = v }) }} />
               </label>
             </div></Row>
-            <Row label="Window material" sub={info && !info.micaSupported ? 'Mica needs Windows 11' : 'Mica tints the window with your wallpaper'}>
+            <Row label="Background" sub="Behind the glass panels. Desktop lets your wallpaper show through.">
+              <div className="backdrop-picker">
+                {BACKDROPS.map((b) => (
+                  <button key={b.id} title={b.name} className={`backdrop-swatch ${s.backdrop === b.id ? 'active' : ''}`} data-swatch={b.id} onClick={() => set((x) => { x.backdrop = b.id })}><span>{b.name}</span></button>
+                ))}
+              </div>
+            </Row>
+            <Row label="Window material" sub={info && !info.micaSupported ? 'Mica needs Windows 11' : 'Used with the Desktop background'}>
               <Segmented small value={s.material} onChange={(v) => { set((x) => { x.material = v }); api.setMaterial(v) }} options={[{ value: 'mica', label: 'Mica' }, { value: 'acrylic', label: 'Acrylic' }, { value: 'none', label: 'Solid' }]} />
             </Row>
             <Row label="Glass strength"><input id="set-glass" type="range" min={20} max={95} value={s.glassStrength} onChange={(e) => set((x) => { x.glassStrength = Number(e.target.value) })} /></Row>

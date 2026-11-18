@@ -238,12 +238,13 @@ function useAppearance(): void {
     r.dataset.theme = dark ? 'dark' : 'light'
     r.dataset.density = s.density
     r.dataset.font = s.font
+    r.dataset.backdrop = s.backdrop || 'sky'
     r.classList.toggle('reduce-motion', s.reduceMotion)
     r.style.setProperty('--accent', s.accent)
     r.style.setProperty('--fs', s.fontSize + 'px')
     r.style.setProperty('--sidebar-w', s.sidebarWidth + 'px')
     r.style.setProperty('--glass', String(s.glassStrength / 100))
-  }, [dark, s.accent, s.fontSize, s.sidebarWidth, s.density, s.font, s.reduceMotion, s.glassStrength])
+  }, [dark, s.accent, s.fontSize, s.sidebarWidth, s.density, s.font, s.reduceMotion, s.glassStrength, s.backdrop])
   useEffect(() => {
     api.info().then((i) => document.documentElement.classList.toggle('mica', i.micaSupported && s.material !== 'none'))
   }, [s.material])
