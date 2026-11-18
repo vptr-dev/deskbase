@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { act, award, getData, patch, removeItem, updatePage, useData } from '../store'
+import { act, emit, getData, patch, removeItem, updatePage, useData } from '../store'
 import type { JournalEntry } from '../types'
 import { addDays, diffDays, longDate, parseDay, today, uid } from '../lib/util'
 import { AutoText, Button, ConfirmButton, Empty, MenuButton, Ring } from '../components/ui'
@@ -66,11 +66,8 @@ function Entry({ entry, wordGoal }: { entry: JournalEntry; wordGoal: number }): 
   const set = (fn: (j: JournalEntry) => void, key?: string): void => patch('journal', entry.id, (j) => { fn(j); j.updatedAt = Date.now() }, key)
   const words = entry.text.trim() ? entry.text.trim().split(/\s+/).length : 0
   const onBlur = (): void => {
-    // Reward the first meaningful entry of a day once.
-    if (words >= 30) act((d) => {
-      const src = 'journal:' + entry.id
-      if (!d.xpLog.some((e) => e.sourceId === src)) award(d, { xp: 15, gold: 3, label: 'Journal entry', source: 'journal', sourceId: src, stat: 'wis' })
-    })
+    // Value rules fire once per entry, after the first 30 words.
+    if (words >= 30) act((d) => emit(d, { on: 'journal', src: 'journal:' + entry.id, label: 'Journal entry', scope: entry.pageId }), { history: false })
   }
   return (
     <div className="journal-entry glass">

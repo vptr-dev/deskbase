@@ -135,7 +135,6 @@ export function parseQuickAdd(input: string): {
   take(/\s!(high|h|3|urgent)\b/i, () => (out.priority = 3))
   take(/\s!(med|medium|m|2)\b/i, () => (out.priority = 2))
   take(/\s!(low|l|1)\b/i, () => (out.priority = 1))
-  take(/\s\*(trivial|easy|medium|hard|epic)\b/i, (m) => (out.difficulty = m[1].toLowerCase() as any))
   take(/\severy\s?day|\sdaily\b/i, () => (out.repeat = 'daily'))
   take(/\severy\s?weekday|\sweekdays\b/i, () => (out.repeat = 'weekdays'))
   take(/\severy\s?week|\sweekly\b/i, () => (out.repeat = 'weekly'))

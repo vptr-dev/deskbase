@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { applyFreeze } from '../store'
-import { act, award, pageItems, removeItem, revoke, upsert, useData, patch, updatePage } from '../store'
-import type { Difficulty, Habit, StatKey } from '../types'
-import { DIFFICULTY, STAT_KEYS, freezableDay, habitBestStreak, habitDayTarget, habitDoneOn, habitDueToday, habitRate, habitScheduled, habitStreak, habitWeekCount, habitWeekKey, isWeekly } from '../lib/game'
+import { act, emit, pageItems, removeItem, unemit, upsert, useData, patch, updatePage } from '../store'
+import type { Habit } from '../types'
+import { habitBestStreak, habitDayTarget, habitDoneOn, habitDueToday, habitRate, habitScheduled, habitStreak, habitWeekCount, habitWeekKey, isWeekly } from '../lib/habits'
 import { COLORS } from '../lib/defaults'
 import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid } from '../lib/util'
 import { Button, ColorDots, ConfirmButton, Empty, IconPickerButton, MenuButton, Modal, Ring, Segmented } from '../components/ui'
@@ -16,26 +15,11 @@ export function logHabit(id: string, day: string, delta: number): void {
     const after = Math.max(0, before + delta)
     if (after === 0) delete h.log[day]
     else h.log[day] = after
-    const src = `${id}:${day}`
+    const src = `habit:${id}:${day}`
     if (h.kind === 'good') {
       const need = habitDayTarget(h)
-      const wasDone = before >= need
-      const isDone = after >= need
-      const df = DIFFICULTY[h.difficulty] ?? DIFFICULTY.easy
-      if (!wasDone && isDone) {
-        const streak = habitStreak(h)
-        const bonus = isWeekly(h) ? Math.min(20, streak * 2) : Math.min(20, Math.floor(streak / 7) * 2)
-        award(d, { xp: df.xp + bonus, gold: df.gold, label: h.name, source: 'habit', sourceId: src, stat: h.stat })
-      } else if (wasDone && !isDone) revoke(d, src)
-      if (isWeekly(h)) {
-        // Bonus for reaching the weekly target.
-        const wk = `${id}:w:${habitWeekKey(day)}`
-        const target = Math.max(1, h.target)
-        const count = habitWeekCount(h, day)
-        const had = d.xpLog.some((e) => e.sourceId === wk)
-        if (count >= target && !had) award(d, { xp: df.xp * 2, gold: df.gold * 2, label: `${h.name}: weekly target`, source: 'habit', sourceId: wk, stat: h.stat })
-        else if (count < target && had) revoke(d, wk)
-      }
+      if (before < need && after >= need) emit(d, { on: 'habit', src, label: h.name, scope: h.id })
+      else if (before >= need && after < need) unemit(d, src)
     }
   }, { key: 'habit:' + id + day })
 }
@@ -46,7 +30,6 @@ function newHabit(pageId: string, order: number): Habit {
 
 function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }): JSX.Element {
   const [h, setH] = useState<Habit>(habit)
-  const stats = useData((d) => d.profile.stats)
   const set = (p: Partial<Habit>): void => setH({ ...h, ...p })
   return (
     <Modal onClose={onClose} width={480}>
@@ -74,13 +57,6 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }):
               ))}
             </div>
           </>}
-          <label>Difficulty</label>
-          <Segmented small value={h.difficulty} onChange={(difficulty) => set({ difficulty: difficulty as Difficulty })} options={(Object.keys(DIFFICULTY) as Difficulty[]).map((k) => ({ value: k, label: DIFFICULTY[k].label }))} />
-          <label>Stat</label>
-          <select id="habit-stat" className="input" value={h.stat ?? ''} onChange={(e) => set({ stat: (e.target.value || null) as StatKey | null })}>
-            <option value="">None</option>
-            {STAT_KEYS.map((k) => <option key={k} value={k}>{stats[k].icon} {stats[k].name}</option>)}
-          </select>
         </>}
         <label>Color</label>
         <ColorDots value={h.color} colors={COLORS} onChange={(color) => set({ color })} />
@@ -123,9 +99,7 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null)
-  const freezes = useData((d) => d.inventory.freezes)
   const mode: 'week' | 'month' = useData((d) => d.pages[pageId]?.view?.habitMode) ?? 'week'
-  const gamified = useData((d) => d.settings.gamification)
   const habits = pageItems(all, pageId).filter((h) => !!h.archived === showArchived)
   const t = today()
   const days = Array.from({ length: 7 }, (_, i) => addDays(t, i - 6))
@@ -167,7 +141,6 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
             const weekly = isWeekly(h)
             const need = habitDayTarget(h)
             const frozen = new Set(h.frozen ?? [])
-            const freezeDay = gamified ? freezableDay(h) : null
             const note = h.dayNotes?.[t] ?? ''
             const recentNotes = Object.entries(h.dayNotes ?? {}).filter(([, v]) => v.trim()).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 5)
             return (
@@ -214,12 +187,6 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
                         { label: 'Delete', icon: 'trash', danger: true, onClick: () => removeItem('habits', h.id, 'habit') }
                       ]} />
                     </div>
-                    {freezeDay && (
-                      <div className="row gap-sm freeze-row">
-                        <span className="small">Missed {friendlyDay(freezeDay).toLowerCase() === 'yesterday' ? 'yesterday' : friendlyDay(freezeDay)}</span>
-                        <Button small disabled={freezes < 1} title={freezes < 1 ? 'Buy streak freezes in the item shop on the Character page' : undefined} onClick={() => applyFreeze(h.id, freezeDay)}>❄ Use streak freeze ({freezes})</Button>
-                      </div>
-                    )}
                     <Heatmap habit={h} />
                     <div className="row gap-sm">
                       <input id={`hnote-${h.id}`} className="input input-sm grow" placeholder="Note for today" value={noteDraft?.id === h.id ? noteDraft.text : note}

@@ -1,15 +1,14 @@
 import { create } from 'zustand'
 import { applyPatches, enablePatches, type Patch, produceWithPatches } from 'immer'
-import type { AppData, Difficulty, Page, PageType, StatKey, Task } from './types'
+import type { AppData, Page, PageType, Task } from './types'
 import { api } from './lib/api'
 import { freshData, newPage, normalize } from './lib/defaults'
-import { ACHIEVEMENTS, DIFFICULTY, levelInfo } from './lib/game'
-import { generateQuests, questProgress } from './lib/quests'
+import { applyRules, revertRules, type ValueEvent } from './lib/values'
 import { addDays, addMonths, friendlyDay, parseDay, today, uid } from './lib/util'
 
 enablePatches()
 
-export type Overlay = null | 'search' | 'settings' | 'trash' | 'newPage' | 'shortcuts' | 'notionImport' | 'movePage' | 'quickAdd'
+export type Overlay = null | 'search' | 'settings' | 'trash' | 'newPage' | 'shortcuts' | 'notionImport' | 'movePage' | 'quickAdd' | 'values'
 
 export interface Toast { id: string; text: string; icon?: string; kind?: 'xp' | 'info' | 'level' | 'achievement' | 'error'; undo?: boolean }
 
@@ -99,7 +98,6 @@ export function act(recipe: (d: AppData) => void, opts: { key?: string; history?
   const prev = getData()
   const [next, patches, inverse] = produceWithPatches(prev, (d: AppData) => {
     recipe(d)
-    checkAchievements(d)
   })
   if (!patches.length) return
   if (opts.history !== false) {
@@ -137,51 +135,14 @@ export function redo(): void {
   scheduleSave()
 }
 
-// ---------- gamification ----------
-export function award(d: AppData, opts: { xp: number; gold?: number; label: string; source: string; sourceId: string; stat?: StatKey | null }): void {
-  if (!d.settings.gamification) return
-  const mult = d.settings.xpMultiplier || 1
-  const potion = opts.xp > 0 && d.inventory.potionUntil > Date.now() ? 2 : 1
-  const xp = Math.round(opts.xp * mult * potion)
-  const gold = Math.round((opts.gold ?? 0) * mult)
-  const before = levelInfo(d.profile.xp).level
-  d.profile.xp = Math.max(0, d.profile.xp + xp)
-  d.profile.gold = Math.max(0, d.profile.gold + gold)
-  if (opts.stat && d.profile.stats[opts.stat]) d.profile.stats[opts.stat].xp = Math.max(0, d.profile.stats[opts.stat].xp + xp)
-  d.xpLog.unshift({ id: uid(), at: Date.now(), xp, gold, label: opts.label, source: opts.source, sourceId: opts.sourceId, stat: opts.stat ?? null })
-  if (d.xpLog.length > 5000) d.xpLog.length = 5000
-  const after = levelInfo(d.profile.xp).level
-  effects.push(() => {
-    if (xp > 0) toast(`+${xp} XP${gold ? `  ·  +${gold} gold` : ''}`, { kind: 'xp', icon: '✦' })
-    if (after > before) {
-      toast(`Level ${after} reached`, { kind: 'level', icon: '⬆' })
-      fireConfetti()
-    }
-  })
+// ---------- custom values ----------
+/** Run the user's value rules for something that happened. Call inside an act() recipe. */
+export function emit(d: AppData, ev: ValueEvent): void {
+  const fired = applyRules(d, ev)
+  if (fired.length) effects.push(() => toast(fired.join('  ·  '), { kind: 'xp', icon: '◆' }))
 }
-
-/** Reverse the XP given for a source (e.g. un-checking a task). */
-export function revoke(d: AppData, sourceId: string): void {
-  const idx = d.xpLog.findIndex((e) => e.sourceId === sourceId && (e.xp > 0 || e.gold > 0))
-  if (idx < 0) return
-  const e = d.xpLog[idx]
-  d.profile.xp = Math.max(0, d.profile.xp - e.xp)
-  d.profile.gold = Math.max(0, d.profile.gold - e.gold)
-  if (e.stat && d.profile.stats[e.stat]) d.profile.stats[e.stat].xp = Math.max(0, d.profile.stats[e.stat].xp - e.xp)
-  d.xpLog.splice(idx, 1)
-}
-
-function checkAchievements(d: AppData): void {
-  for (const a of ACHIEVEMENTS) {
-    if (d.profile.achievements[a.id]) continue
-    try {
-      if (a.test(d)) {
-        d.profile.achievements[a.id] = Date.now()
-        effects.push(() => toast(`Achievement unlocked: ${a.name}`, { kind: 'achievement', icon: a.icon }))
-      }
-    } catch { /* ignore */ }
-  }
-}
+/** Undo what rules did for an event source (e.g. a task was un-checked). */
+export const unemit = (d: AppData, src: string): void => revertRules(d, src)
 
 let confettiHandler: (() => void) | null = null
 export const onConfetti = (fn: () => void): void => { confettiHandler = fn }
@@ -226,10 +187,16 @@ export function updatePage(id: string, fn: (p: Page) => void, key?: string): voi
   }, { key })
 }
 
+/** Rows of a database page (pages that live inside it rather than in the sidebar). */
+export const dbRows = (d: AppData, dbId: string): Page[] =>
+  Object.values(d.pages).filter((p) => p.rowOf === dbId && !p.deletedAt).sort((a, b) => (a.rowOrder ?? a.createdAt) - (b.rowOrder ?? b.createdAt))
+
+/** Subpages and database rows below a page, recursively. */
 export function descendants(d: AppData, id: string): string[] {
   const out: string[] = []
   const walk = (pid: string): void => {
     for (const c of d.pages[pid]?.children ?? []) { out.push(c); walk(c) }
+    if (d.pages[pid]?.type === 'database') for (const r of Object.values(d.pages)) if (r.rowOf === pid) { out.push(r.id); walk(r.id) }
   }
   walk(id)
   return out
@@ -253,7 +220,8 @@ export function restorePage(id: string): void {
   act((d) => {
     for (const pid of [id, ...descendants(d, id)]) if (d.pages[pid]) d.pages[pid].deletedAt = null
     const p = d.pages[id]
-    if (p.parentId && d.pages[p.parentId]?.deletedAt) {
+    if (p.rowOf && d.pages[p.rowOf]?.deletedAt) d.pages[p.rowOf].deletedAt = null
+    if (!p.rowOf && p.parentId && d.pages[p.parentId]?.deletedAt) {
       // Parent is still in trash: move to root.
       d.pages[p.parentId].children = d.pages[p.parentId].children.filter((c) => c !== id)
       p.parentId = null
@@ -270,7 +238,7 @@ export function purgePage(id: string): void {
     d.rootOrder = d.rootOrder.filter((r) => r !== id)
     for (const pid of ids) {
       delete d.pages[pid]
-      for (const coll of ['tasks', 'habits', 'journal', 'goals', 'rewards', 'games', 'metrics'] as const) {
+      for (const coll of ['tasks', 'habits', 'journal', 'goals', 'metrics'] as const) {
         const c = d[coll] as Record<string, { pageId: string }>
         for (const [k, v] of Object.entries(c)) if (v.pageId === pid) delete c[k]
       }
@@ -290,7 +258,7 @@ export function duplicatePage(id: string): void {
       const copy: Page = { ...structuredClone(o), id: nid, parentId: parent, children: [], createdAt: Date.now(), updatedAt: Date.now(), favorite: false }
       copy.blocks = copy.blocks.map((b) => ({ ...b, id: uid() }))
       d.pages[nid] = copy
-      for (const coll of ['tasks', 'habits', 'goals', 'rewards', 'games', 'metrics'] as const) {
+      for (const coll of ['tasks', 'habits', 'goals', 'metrics'] as const) {
         const c = d[coll] as Record<string, any>
         for (const v of Object.values(c).filter((x: any) => x.pageId === pid)) {
           const cid = uid()
@@ -298,6 +266,13 @@ export function duplicatePage(id: string): void {
         }
       }
       copy.children = o.children.filter((c) => !d.pages[c]?.deletedAt).map((c) => clone(c, nid))
+      if (o.type === 'database') {
+        for (const r of Object.values(d.pages).filter((x) => x.rowOf === pid && !x.deletedAt)) {
+          const rid = clone(r.id, null)
+          d.pages[rid].rowOf = nid
+          d.pages[rid].favorite = false
+        }
+      }
       return nid
     }
     newId = clone(id, src.parentId)
@@ -381,10 +356,7 @@ export function setTaskDone(id: string, done: boolean): void {
     t.status = done ? 'done' : 'todo'
     t.doneAt = done ? Date.now() : null
     if (done) {
-      const diff = DIFFICULTY[t.difficulty as Difficulty] ?? DIFFICULTY.easy
-      const bonus = t.priority * 2 + (t.due && t.due < today() ? -Math.ceil(diff.xp * 0.2) : 0)
-      award(d, { xp: diff.xp + bonus, gold: diff.gold, label: t.title || 'Task', source: 'task', sourceId: t.id, stat: t.stat })
-      maybeLoot(d, t.id, diff.gold)
+      emit(d, { on: 'task', src: 'task:' + t.id, label: t.title || 'Task', scope: t.pageId, tags: t.tags })
       if (t.repeat !== 'none') {
         const nid = uid()
         const base = t.due && t.due > today() ? t.due : t.due ?? today()
@@ -394,98 +366,9 @@ export function setTaskDone(id: string, done: boolean): void {
         t.repeat = 'none'
       }
     } else {
-      revoke(d, t.id)
-      revoke(d, 'loot:' + t.id)
+      unemit(d, 'task:' + t.id)
     }
   })
-}
-
-/** Occasional random gold bonus when finishing something. */
-function maybeLoot(d: AppData, sourceId: string, base: number): void {
-  if (!d.settings.gamification || !d.settings.lootDrops || Math.random() > 0.08) return
-  const gold = Math.round((base + 4) * (1 + Math.random() * 3))
-  const before = d.profile.gold
-  award(d, { xp: 0, gold, label: 'Loot drop', source: 'loot', sourceId: 'loot:' + sourceId })
-  const got = d.profile.gold - before
-  if (got > 0) effects.push(() => toast(`Loot! Found ${got} gold`, { kind: 'achievement', icon: '🍀' }))
-}
-
-// ---------- quests & items ----------
-export function ensureQuests(): void {
-  const d = getData()
-  if (!d.settings.gamification || d.quests.date === today()) return
-  act((dr) => { dr.quests = { date: today(), list: generateQuests(dr), bonusClaimed: false } }, { history: false })
-}
-
-export function claimQuest(id: string): void {
-  act((d) => {
-    const q = d.quests.list.find((x) => x.id === id)
-    if (!q || q.claimed || d.quests.date !== today() || questProgress(d, q) < q.target) return
-    q.claimed = true
-    award(d, { xp: q.xp, gold: q.gold, label: 'Quest: ' + q.title, source: 'quest', sourceId: `quest:${d.quests.date}:${q.id}` })
-    if (!d.quests.bonusClaimed && d.quests.list.every((x) => x.claimed)) {
-      d.quests.bonusClaimed = true
-      const gold = 15 + Math.floor(Math.random() * 26)
-      award(d, { xp: 40, gold, label: 'Daily quests cleared', source: 'quest-bonus', sourceId: 'quest-bonus:' + d.quests.date })
-      effects.push(() => { toast(`Bonus chest: +${gold} gold`, { kind: 'achievement', icon: '🎁' }); fireConfetti() })
-    }
-  }, { history: false })
-}
-
-export const FREEZE_COST = 60
-export const FREEZE_MAX = 5
-export function buyFreeze(): void {
-  act((d) => {
-    if (d.profile.gold < FREEZE_COST || d.inventory.freezes >= FREEZE_MAX) return
-    d.profile.gold -= FREEZE_COST
-    d.inventory.freezes++
-    d.xpLog.unshift({ id: uid(), at: Date.now(), xp: 0, gold: -FREEZE_COST, label: 'Bought a streak freeze', source: 'shop', sourceId: 'shop:' + uid() })
-  })
-  toast('Streak freeze added', { icon: '❄️' })
-}
-export function applyFreeze(habitId: string, day: string): void {
-  act((d) => {
-    const h = d.habits[habitId]
-    if (!h || d.inventory.freezes < 1 || h.frozen?.includes(day)) return
-    d.inventory.freezes--
-    h.frozen = [...(h.frozen ?? []), day]
-  })
-}
-
-export function rerollQuest(id: string): void {
-  act((d) => {
-    const i = d.quests.list.findIndex((x) => x.id === id)
-    const q = d.quests.list[i]
-    if (!q || q.claimed || d.quests.rerolled || d.quests.date !== today() || d.profile.gold < REROLL_COST) return
-    const fresh = generateQuests(d, d.quests.list.map((x) => x.kind))[0]
-    if (!fresh) return
-    d.profile.gold -= REROLL_COST
-    d.quests.rerolled = true
-    d.quests.list[i] = fresh
-    d.xpLog.unshift({ id: uid(), at: Date.now(), xp: 0, gold: -REROLL_COST, label: 'Rerolled a quest', source: 'shop', sourceId: 'shop:' + uid() })
-  }, { history: false })
-}
-
-export const REROLL_COST = 15
-export const POTION_COST = 80
-export const POTION_MAX = 3
-export const POTION_MINUTES = 60
-export function buyPotion(): void {
-  act((d) => {
-    if (d.profile.gold < POTION_COST || d.inventory.potions >= POTION_MAX) return
-    d.profile.gold -= POTION_COST
-    d.inventory.potions++
-    d.xpLog.unshift({ id: uid(), at: Date.now(), xp: 0, gold: -POTION_COST, label: 'Bought an XP potion', source: 'shop', sourceId: 'shop:' + uid() })
-  })
-  toast('XP potion added', { icon: '🧪' })
-}
-export function drinkPotion(): void {
-  act((d) => {
-    if (d.inventory.potions < 1 || d.inventory.potionUntil > Date.now()) return
-    d.inventory.potions--
-    d.inventory.potionUntil = Date.now() + POTION_MINUTES * 60_000
-  })
-  toast(`Double XP for ${POTION_MINUTES} minutes`, { kind: 'achievement', icon: '🧪' })
 }
 
 /** Move every open overdue task (optionally only on one page) to today. */
@@ -533,7 +416,7 @@ export function deleteTask(id: string): void {
 }
 
 // ---------- generic collections ----------
-type Coll = 'habits' | 'journal' | 'goals' | 'rewards' | 'games' | 'metrics'
+type Coll = 'habits' | 'journal' | 'goals' | 'metrics'
 export function upsert<K extends Coll>(coll: K, item: AppData[K][string]): void {
   act((d) => { (d[coll] as any)[(item as any).id] = item })
 }

@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { act, getData, moveOverdueToToday, setTaskDone, toast, updatePage, useData } from '../store'
 import type { Task, TaskStatus } from '../types'
-import { DIFFICULTY } from '../lib/game'
 import { addDays, friendlyDay, today } from '../lib/util'
 import { QuickAdd, TaskRow, PRIORITY, useTaskDrawer } from '../components/TaskItems'
 import { Button, Empty, MenuButton, Progress, Segmented } from '../components/ui'
 import { Icon } from '../components/Icon'
 
 type Filter = 'all' | 'today' | 'upcoming' | 'overdue' | 'nodate' | 'done'
-type Sort = 'manual' | 'due' | 'priority' | 'difficulty' | 'created' | 'title'
-type Group = 'none' | 'due' | 'priority' | 'tag' | 'difficulty'
+type Sort = 'manual' | 'due' | 'priority' | 'created' | 'title'
+type Group = 'none' | 'due' | 'priority' | 'tag'
 
 export function filterTasks(tasks: Task[], filter: Filter, q: string, tag: string | null): Task[] {
   const t = today()
@@ -30,7 +29,6 @@ export function filterTasks(tasks: Task[], filter: Filter, q: string, tag: strin
 }
 
 export function sortTasks(tasks: Task[], sort: Sort): Task[] {
-  const diffRank = (d: string): number => Object.keys(DIFFICULTY).indexOf(d)
   const arr = [...tasks]
   arr.sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1
@@ -38,7 +36,6 @@ export function sortTasks(tasks: Task[], sort: Sort): Task[] {
     switch (sort) {
       case 'due': return (a.due ?? '9999') .localeCompare(b.due ?? '9999') || (a.time ?? '').localeCompare(b.time ?? '')
       case 'priority': return b.priority - a.priority
-      case 'difficulty': return diffRank(b.difficulty) - diffRank(a.difficulty)
       case 'created': return b.createdAt - a.createdAt
       case 'title': return a.title.localeCompare(b.title)
       default: return a.order - b.order
@@ -65,8 +62,6 @@ function groupTasks(tasks: Task[], group: Group): { key: string; label: string; 
       else { key = 'later'; label = 'Later'; rank = '4' }
     } else if (group === 'priority') {
       key = String(x.priority); label = PRIORITY[x.priority].label + ' priority'; rank = String(9 - x.priority)
-    } else if (group === 'difficulty') {
-      key = x.difficulty; label = DIFFICULTY[x.difficulty].label; rank = String(9 - Object.keys(DIFFICULTY).indexOf(x.difficulty))
     } else {
       key = x.tags[0] ?? '~'; label = x.tags[0] ? '#' + x.tags[0] : 'No tag'; rank = x.tags[0] ?? '~'
     }
@@ -151,8 +146,8 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
           <Icon name="search" size={14} />
           <input id={`task-search-${pageId}`} placeholder="Filter" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <MenuButton icon="sort" title="Sort" items={(['manual', 'due', 'priority', 'difficulty', 'created', 'title'] as Sort[]).map((s) => ({ label: 'Sort: ' + s, checked: sort === s, onClick: () => setView('sort', s) }))} />
-        <MenuButton icon="list" title="Group" items={(['none', 'due', 'priority', 'difficulty', 'tag'] as Group[]).map((g) => ({ label: 'Group: ' + g, checked: group === g, onClick: () => setView('group', g) }))} />
+        <MenuButton icon="sort" title="Sort" items={(['manual', 'due', 'priority', 'created', 'title'] as Sort[]).map((s) => ({ label: 'Sort: ' + s, checked: sort === s, onClick: () => setView('sort', s) }))} />
+        <MenuButton icon="list" title="Group" items={(['none', 'due', 'priority', 'tag'] as Group[]).map((g) => ({ label: 'Group: ' + g, checked: group === g, onClick: () => setView('group', g) }))} />
         <MenuButton title="More" items={[
           { label: hideDone ? 'Show completed' : 'Hide completed', icon: hideDone ? 'eye' : 'eyeOff', onClick: () => setView('hideDone', !hideDone) },
           { label: 'Clear completed', icon: 'trash', onClick: () => {

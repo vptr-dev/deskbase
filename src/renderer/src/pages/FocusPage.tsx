@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { act, award, getData, toast, useData } from '../store'
+import { act, emit, getData, toast, useData } from '../store'
 import { api } from '../lib/api'
 import { DAYS_SHORT, addDays, dayKey, formatMinutes, parseDay, today, uid } from '../lib/util'
 import { BarChart, Button, Ring, Segmented, Stat } from '../components/ui'
@@ -41,7 +41,7 @@ export const focusActions = {
       act((d) => {
         const id = uid()
         d.focus.unshift({ id, start: s.startedAt || Date.now() - elapsed * 60000, minutes: elapsed, label: s.label, taskId: s.taskId, kind: 'focus' })
-        award(d, { xp: Math.max(1, Math.round(elapsed / 2)), gold: Math.floor(elapsed / 10), label: `Focus ${elapsed}m${s.label ? ' · ' + s.label : ''}`, source: 'focus', sourceId: id, stat: 'int' })
+        emit(d, { on: 'focus', src: 'focus:' + id, label: `Focus ${elapsed}m${s.label ? ' · ' + s.label : ''}`, minutes: elapsed })
       })
     }
     const st = getData().settings

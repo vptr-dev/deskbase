@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPage, duplicatePage, movePage, openPage, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
-import { levelInfo } from '../lib/game'
-import { formatLeft, usePotionLeft } from './Quests'
 import { typeInfo } from '../lib/defaults'
 import { api, type UpdateStatus } from '../lib/api'
 import { exportPageMarkdown } from '../lib/exporters'
@@ -143,15 +141,11 @@ export function Sidebar(): JSX.Element {
   const favIds = useData((d) => Object.values(d.pages).filter((p) => p.favorite && !p.deletedAt).map((p) => p.id).join(','))
   const width = useData((d) => d.settings.sidebarWidth)
   const collapsed = useData((d) => d.settings.sidebarCollapsed)
-  const gamified = useData((d) => d.settings.gamification)
   const profile = useData((d) => d.profile)
   const current = useApp((s) => s.current)
   const pages = useData((d) => d.pages)
-  const lv = levelInfo(profile.xp)
-  const potionLeft = usePotionLeft(useData((d) => d.inventory.potionUntil))
   const roots = rootIds ? rootIds.split(',') : []
   const favs = favIds ? favIds.split(',') : []
-  const characterPage = Object.values(pages).find((p) => p.type === 'character' && !p.deletedAt)
   const [filter, setFilter] = useState<string | null>(null)
   const fq = (filter ?? '').trim().toLowerCase()
   const data = useData((d) => d)
@@ -178,23 +172,15 @@ export function Sidebar(): JSX.Element {
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`} aria-hidden={collapsed}>
       <div className="sidebar-top drag">
-        <button className="profile-chip no-drag" onClick={() => characterPage && openPage(characterPage.id)} title="Character">
-          <span className="profile-avatar">{profile.avatar}</span>
-          <span className="profile-name">{profile.name}</span>
+        <button className="profile-chip no-drag" onClick={() => setOverlay('settings')} title="Workspace settings">
+          <span className="profile-avatar">{profile.avatar || (profile.name || 'W').slice(0, 1).toUpperCase()}</span>
+          <span className="profile-name">{profile.name || 'Workspace'}</span>
         </button>
         <button className="icon-btn no-drag" title="Collapse sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = true })}>
           <Icon name="left" size={15} stroke={2} />
         </button>
       </div>
 
-      {gamified && (
-        <button className="sidebar-level" onClick={() => characterPage && openPage(characterPage.id)} title={`${lv.into} / ${lv.need} XP`}>
-          <span>Lv {lv.level}</span>
-          <Progress value={lv.pct} height={4} />
-          {potionLeft > 0 && <span className="potion-chip" title={`Double XP · ${formatLeft(potionLeft)} left`}>2×</span>}
-          <span className="gold"><Icon name="coin" size={12} /> {profile.gold}</span>
-        </button>
-      )}
 
       <nav className="sidebar-nav">
         <button className="nav-item" onClick={() => setOverlay('search')}><Icon name="search" size={15} /> <span>Search</span><kbd>Ctrl K</kbd></button>

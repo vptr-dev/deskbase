@@ -4,7 +4,7 @@ import { api } from './lib/api'
 import { COVERS, typeInfo } from './lib/defaults'
 import { exportPageMarkdown } from './lib/exporters'
 import { MovePageDialog } from './components/MovePage'
-import { habitWeek } from './lib/game'
+import { habitWeek } from './lib/habits'
 import { playLevelUp } from './lib/sound'
 import { Sidebar } from './components/Sidebar'
 import { Icon } from './components/Icon'
@@ -14,11 +14,9 @@ import { DocPage, BlockEditor } from './pages/DocPage'
 import { BoardPage, TasksPage } from './pages/TasksPage'
 import { HabitsPage } from './pages/HabitsPage'
 import { JournalPage } from './pages/JournalPage'
-import { GoalsPage, RewardsPage } from './pages/GoalsPage'
-import { CharacterPage } from './pages/CharacterPage'
+import { GoalsPage } from './pages/GoalsPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { FocusMini, FocusPage, focusActions } from './pages/FocusPage'
-import { GamesPage } from './pages/GamesPage'
 import { TrackerPage } from './pages/TrackerPage'
 import { TodayPage } from './pages/TodayPage'
 import { ReviewPage } from './pages/ReviewPage'
@@ -92,10 +90,7 @@ function PageBody({ page }: { page: Page }): JSX.Element {
     case 'habits': return <HabitsPage pageId={page.id} />
     case 'journal': return <JournalPage pageId={page.id} />
     case 'goals': return <GoalsPage pageId={page.id} />
-    case 'character': return <CharacterPage />
-    case 'rewards': return <RewardsPage pageId={page.id} />
     case 'focus': return <FocusPage />
-    case 'games': return <GamesPage pageId={page.id} />
     case 'tracker': return <TrackerPage pageId={page.id} />
     case 'review': return <ReviewPage pageId={page.id} />
     default: return <DocPage pageId={page.id} />
@@ -153,7 +148,7 @@ function PageView({ id }: { id: string }): JSX.Element | null {
   const info = typeInfo(page.type)
   const showNotes = page.type !== 'doc' && page.view?.notes
   return (
-    <div className={`page ${page.fullWidth || ['calendar', 'board', 'games'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
+    <div className={`page ${page.fullWidth || ['calendar', 'board', 'database', 'dashboard'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
       <PageCover page={page} />
       <div className="page-header">
         <IconPickerButton size="lg" value={page.icon} placeholder={info.icon} onChange={(icon) => updatePage(id, (p) => { p.icon = icon })} />

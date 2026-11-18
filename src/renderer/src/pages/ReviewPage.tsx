@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { moveOverdueToToday, openPage, updatePage, useData } from '../store'
-import { habitDoneOn, habitScheduled } from '../lib/game'
+import { habitDoneOn, habitScheduled } from '../lib/habits'
 import { DAYS_SHORT, addDays, dayKey, formatMinutes, friendlyDay, parseDay, today, weekStartOf } from '../lib/util'
 import { AutoText, BarChart, Stat } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { MOODS } from './JournalPage'
+import { formatValue } from '../lib/values'
 
 const shortDate = (k: string): string => parseDay(k).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 
@@ -27,7 +28,6 @@ export function ReviewPage({ pageId }: { pageId: string }): JSX.Element {
   const s = useMemo(() => {
     const tasks = Object.values(d.tasks)
     const done = tasks.filter((t) => t.done && inRange(t.doneAt, from, to))
-    const xp = d.xpLog.filter((e) => inRange(e.at, from, to))
     const habits = Object.values(d.habits).filter((h) => !h.archived && h.kind === 'good' && d.pages[h.pageId] && !d.pages[h.pageId].deletedAt)
     let sched = 0
     let hit = 0
@@ -35,23 +35,22 @@ export function ReviewPage({ pageId }: { pageId: string }): JSX.Element {
     const focus = d.focus.filter((f) => f.kind === 'focus' && inRange(f.start, from, to)).reduce((a, f) => a + f.minutes, 0)
     const entries = Object.values(d.journal).filter((j) => j.date >= from && j.date < to && j.text.trim())
     const moods = entries.filter((j) => j.mood > 0)
-    const gameMins = Object.values(d.games).flatMap((g) => g.sessions.filter((x) => x.date >= from && x.date < to).map((x) => ({ g, m: x.minutes })))
-    const byGame = new Map<string, number>()
-    for (const { g, m } of gameMins) byGame.set(g.title, (byGame.get(g.title) ?? 0) + m)
+    const fromMs = new Date(from + 'T00:00').getTime()
+    const toMs = new Date(to + 'T00:00').getTime()
+    const valueChanges = Object.values(d.values)
+      .map((v) => ({ v, delta: v.log.filter((e) => e.at >= fromMs && e.at < toMs).reduce((a, e) => a + e.delta, 0) }))
+      .filter((x) => x.delta !== 0)
     const tagCount = new Map<string, number>()
     for (const t of done) for (const g of t.tags) tagCount.set(g, (tagCount.get(g) ?? 0) + 1)
     return {
       done,
       perDay: days.map((k, i) => ({ label: DAYS_SHORT[(i + weekStart) % 7], value: done.filter((t) => dayKey(new Date(t.doneAt!)) === k).length })),
-      xp: xp.reduce((a, e) => a + Math.max(0, e.xp), 0),
-      gold: xp.reduce((a, e) => a + Math.max(0, e.gold), 0),
       habitRate: sched ? hit / sched : null,
       focus,
       entries: entries.length,
       mood: moods.length ? moods.reduce((a, j) => a + j.mood, 0) / moods.length : 0,
-      games: [...byGame.entries()].sort((a, b) => b[1] - a[1]),
+      valueChanges,
       tags: [...tagCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6),
-      achievements: Object.entries(d.profile.achievements).filter(([, at]) => inRange(at, from, to)).length,
       overdue: tasks.filter((t) => !t.done && !t.archived && t.due && t.due < today()).length,
       next: tasks.filter((t) => !t.done && !t.archived && t.due && t.due >= to && t.due < addDays(to, 7)).sort((a, b) => a.due!.localeCompare(b.due!))
     }
@@ -67,7 +66,6 @@ export function ReviewPage({ pageId }: { pageId: string }): JSX.Element {
       </div>
       <div className="stat-row">
         <Stat label="Tasks done" value={s.done.length} />
-        {d.settings.gamification && <Stat label="XP earned" value={s.xp} sub={s.gold ? `${s.gold} gold` : undefined} />}
         <Stat label="Habits" value={s.habitRate === null ? '–' : `${Math.round(s.habitRate * 100)}%`} />
         <Stat label="Focus" value={s.focus ? formatMinutes(Math.round(s.focus)) : '0m'} />
         <Stat label="Journal" value={s.entries} sub={s.mood ? `mood ${MOODS[Math.round(s.mood)] ?? ''}` : undefined} />
@@ -81,10 +79,9 @@ export function ReviewPage({ pageId }: { pageId: string }): JSX.Element {
           <div className="panel-head"><h3>Highlights</h3></div>
           <div className="review-list">
             {s.tags.length > 0 && <div className="row gap-xs wrap">{s.tags.map(([t, n]) => <span key={t} className="chip">#{t} · {n}</span>)}</div>}
-            {s.games.slice(0, 3).map(([title, m]) => <div key={title} className="row between small"><span>🎮 {title}</span><span className="muted">{formatMinutes(m)}</span></div>)}
-            {s.achievements > 0 && <div className="small">🏆 {s.achievements} achievement{s.achievements === 1 ? '' : 's'} unlocked</div>}
+            {s.valueChanges.map(({ v, delta }) => <div key={v.id} className="row between small"><span>{v.icon} {v.name}</span><span className="muted">{delta > 0 ? '+' : ''}{formatValue(v, delta)}</span></div>)}
             {s.done.slice().sort((a, b) => b.priority - a.priority).slice(0, 5).map((t) => <div key={t.id} className="row gap-xs small"><Icon name="check" size={12} className="accent" /><span className="ellipsis">{t.title}</span></div>)}
-            {!s.done.length && !s.games.length && <div className="muted small">Nothing logged this week.</div>}
+            {!s.done.length && !s.valueChanges.length && <div className="muted small">Nothing logged this week.</div>}
           </div>
         </section>
         {isCurrent && (s.overdue > 0 || s.next.length > 0) && (

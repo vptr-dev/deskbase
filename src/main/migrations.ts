@@ -7,7 +7,7 @@
  * A backup of the file is written automatically before any migration runs.
  */
 
-export const CURRENT_SCHEMA = 4
+export const CURRENT_SCHEMA = 5
 
 type Raw = Record<string, any>
 
@@ -47,6 +47,31 @@ const migrations: Record<number, (d: Raw) => Raw> = {
       games,
       inventory: { freezes: 0, potions: 0, potionUntil: 0, ...inv },
       countdowns: Array.isArray(d.countdowns) ? d.countdowns : []
+    }
+  },
+  // 4 -> 5: the game layer and game library were removed (0.5.0). Their data moves to `legacy`
+  // untouched; pages of removed types become plain pages in the trash. Adds values and rules.
+  4: (d) => {
+    const legacy: Raw = { ...(d.legacy && typeof d.legacy === 'object' ? d.legacy : {}) }
+    for (const k of ['games', 'xpLog', 'quests', 'inventory', 'rewards']) if (d[k] !== undefined) legacy[k] = d[k]
+    const p: Raw = d.profile && typeof d.profile === 'object' ? d.profile : {}
+    legacy.profile = { xp: p.xp, gold: p.gold, stats: p.stats, achievements: p.achievements, title: p.title }
+    const now = Date.now()
+    const pages: Raw = { ...(d.pages ?? {}) }
+    for (const [k, pg] of Object.entries(pages)) {
+      if (pg && typeof pg === 'object' && ['games', 'character', 'rewards'].includes(pg.type)) {
+        pages[k] = { ...pg, type: 'doc', legacyType: pg.type, deletedAt: pg.deletedAt ?? now }
+      }
+    }
+    const { games, xpLog, quests, inventory, rewards, ...rest } = d
+    void games; void xpLog; void quests; void inventory; void rewards
+    return {
+      ...rest,
+      pages,
+      legacy,
+      profile: { name: typeof p.name === 'string' ? p.name : '', avatar: typeof p.avatar === 'string' ? p.avatar : '' },
+      values: d.values && typeof d.values === 'object' ? d.values : {},
+      rules: Array.isArray(d.rules) ? d.rules : []
     }
   }
 }

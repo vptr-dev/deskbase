@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
-import type { Difficulty, Repeat, StatKey, Task } from '../types'
-import { DIFFICULTY, STAT_KEYS } from '../lib/game'
+import type { Repeat, Task } from '../types'
 import { formatTime, friendlyDay, parseQuickAdd, snoozeOptions, today, uid } from '../lib/util'
 import { AutoText, Button, Checkbox, ConfirmButton, Menu, type MenuItem, Popover, Segmented } from './ui'
 import { Icon } from './Icon'
@@ -31,7 +30,7 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', au
       priority: parsed.priority ?? defaults.priority ?? 0,
       tags: [...(defaults.tags ?? []), ...parsed.tags],
       repeat: parsed.repeat ?? 'none',
-      difficulty: parsed.difficulty ?? defaults.difficulty ?? 'easy'
+      difficulty: defaults.difficulty ?? 'easy'
     })
     setV('')
     onAdded?.(id)
@@ -54,7 +53,6 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', au
           {parsed.time && <span className="chip"><Icon name="clock" size={12} />{parsed.time}</span>}
           {parsed.repeat && <span className="chip"><Icon name="repeat" size={12} />{parsed.repeat}</span>}
           {parsed.priority ? <span className="chip" style={{ color: PRIORITY[parsed.priority].color }}><Icon name="flag" size={12} />{PRIORITY[parsed.priority].label}</span> : null}
-          {parsed.difficulty && <span className="chip">{DIFFICULTY[parsed.difficulty].label}</span>}
           {parsed.tags.map((t) => <span key={t} className="chip">#{t}</span>)}
         </div>
       )}
@@ -69,7 +67,6 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
   const pageTitle = useData((d) => (showPage ? d.pages[task.pageId]?.title : ''))
   const goalTitle = useData((d) => (task.goalId ? d.goals[task.goalId]?.title : ''))
   const use24h = useData((d) => d.settings.use24h)
-  const gamified = useData((d) => d.settings.gamification)
   const [over, setOver] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const overdue = !task.done && task.due && task.due < today()
@@ -117,7 +114,6 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
         </div>
       </div>
       {task.priority > 0 && <Icon name="flag" size={14} className="task-flag" fill />}
-      {gamified && <span className="xp-chip">{DIFFICULTY[task.difficulty]?.xp ?? 10} XP</span>}
     </div>
   )
 }
@@ -125,8 +121,6 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
 export function TaskDetail({ id, onClose }: { id: string; onClose: () => void }): JSX.Element | null {
   const task = useData((d) => d.tasks[id])
   const pages = useData((d) => d.pages)
-  const stats = useData((d) => d.profile.stats)
-  const gamified = useData((d) => d.settings.gamification)
   const goals = useData((d) => d.goals)
   const [tagInput, setTagInput] = useState('')
   const [subInput, setSubInput] = useState('')
@@ -160,15 +154,6 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
           </select>
           <label>Priority</label>
           <Segmented small value={task.priority} onChange={(v) => set((t) => { t.priority = v as Task['priority'] })} options={PRIORITY.map((p) => ({ value: p.v, label: p.label }))} />
-          {gamified && <>
-            <label>Difficulty</label>
-            <Segmented small value={task.difficulty} onChange={(v) => set((t) => { t.difficulty = v as Difficulty })} options={(Object.keys(DIFFICULTY) as Difficulty[]).map((k) => ({ value: k, label: DIFFICULTY[k].label }))} />
-            <label>Stat</label>
-            <select id={`stat-${id}`} className="input input-sm" value={task.stat ?? ''} onChange={(e) => set((t) => { t.stat = (e.target.value || null) as StatKey | null })}>
-              <option value="">None</option>
-              {STAT_KEYS.map((k) => <option key={k} value={k}>{stats[k].icon} {stats[k].name}</option>)}
-            </select>
-          </>}
           <label>Estimate</label>
           <div className="row gap-sm">
             <input id={`est-${id}`} type="number" min={0} step={5} className="input input-sm w-80" value={task.estimate ?? ''} onChange={(e) => set((t) => { t.estimate = e.target.value ? Number(e.target.value) : null })} />

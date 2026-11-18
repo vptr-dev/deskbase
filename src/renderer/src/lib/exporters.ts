@@ -57,11 +57,6 @@ export function pageToMarkdown(id: string): string {
       for (const m of g.milestones) out.push(`  - [${m.done ? 'x' : ' '}] ${m.title}`)
     }
   }
-  const games = Object.values(d.games).filter((g) => g.pageId === id)
-  if (games.length) {
-    out.push('', '| Game | Platform | Status | Hours | Rating |', '|---|---|---|---|---|')
-    for (const g of games) out.push(`| ${g.title} | ${g.platform} | ${g.status} | ${g.hours} | ${g.rating || ''} |`)
-  }
   return out.join('\n') + '\n'
 }
 

@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { moveOverdueToToday, openPage, useData } from '../store'
-import { habitDayTarget, habitDoneOn, habitDueToday, habitStreak, habitWeekCount, isWeekly, levelInfo, xpToday } from '../lib/game'
-import { QuestsPanel } from '../components/Quests'
+import { habitDayTarget, habitDoneOn, habitDueToday, habitStreak, habitWeekCount, isWeekly } from '../lib/habits'
 import { CountdownsPanel } from '../components/Countdowns'
 import { addDays, longDate, today } from '../lib/util'
 import { Progress, Ring } from '../components/ui'
@@ -24,9 +23,6 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
   const journal = useData((d) => d.journal)
   const goals = useData((d) => d.goals)
   const profile = useData((d) => d.profile)
-  const gamified = useData((d) => d.settings.gamification)
-  const xpGoal = useData((d) => d.settings.dailyXpGoal)
-  const todayXp = useData(xpToday)
   const focus = useFocus()
   const [, openTask, drawer] = useTaskDrawer()
   const t = today()
@@ -47,20 +43,17 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
   const focusPage = Object.values(pages).find((p) => p.type === 'focus' && !p.deletedAt)
   const activeGoals = Object.values(goals).filter((g) => !g.done && pages[g.pageId] && !pages[g.pageId].deletedAt).slice(0, 4)
   const total = due.length + overdue.length + doneToday.length
-  const lv = levelInfo(profile.xp)
 
   return (
     <div className="today">
       <div className="today-hero">
         <div>
-          <div className="today-greet">{greeting()}, {profile.name}</div>
+          <div className="today-greet">{greeting()}{profile.name ? `, ${profile.name}` : ''}</div>
           <div className="muted">{longDate(t)}</div>
         </div>
         <div className="spacer" />
         <div className="today-rings">
           <div className="ring-block"><Ring value={total ? doneToday.length / total : 0} size={58} stroke={5}><span className="strong">{doneToday.length}</span></Ring><span className="muted small">Tasks</span></div>
-          {gamified && <div className="ring-block"><Ring value={xpGoal ? todayXp / xpGoal : 0} size={58} stroke={5} color="#ff9f0a"><span className="strong">{todayXp}</span></Ring><span className="muted small">XP</span></div>}
-          {gamified && <div className="ring-block"><Ring value={lv.pct} size={58} stroke={5} color="#30d158"><span className="strong">{lv.level}</span></Ring><span className="muted small">Level</span></div>}
         </div>
       </div>
 
@@ -74,8 +67,6 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
           {upcoming.length > 0 && <><div className="group-label">Coming up</div><div className="task-list">{upcoming.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={openTask} />)}</div></>}
           {doneToday.length > 0 && <><div className="group-label">Done today<span className="count">{doneToday.length}</span></div><div className="task-list">{doneToday.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={openTask} />)}</div></>}
         </section>
-
-        <QuestsPanel />
 
         <CountdownsPanel />
 

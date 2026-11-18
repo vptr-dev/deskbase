@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { act, award, pageItems, patch, removeItem, upsert, useData } from '../store'
+import { act, emit, pageItems, patch, removeItem, upsert, useData } from '../store'
 import type { Metric } from '../types'
 import { COLORS } from '../lib/defaults'
 import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid, weekStartOf } from '../lib/util'
@@ -109,8 +109,7 @@ function MetricCard({ m, onEdit }: { m: Metric; onEdit: () => void }): JSX.Eleme
     act((d) => {
       const x = d.metrics[m.id]
       x.entries.push({ date: t, value: n })
-      const src = `metric:${m.id}:${t}`
-      if (!d.xpLog.some((e) => e.sourceId === src)) award(d, { xp: 3, gold: 0, label: `Logged ${x.name}`, source: 'metric', sourceId: src, stat: 'vit' })
+      emit(d, { on: 'metric', src: `metric:${m.id}:${t}:${x.entries.length}`, label: `Logged ${x.name}`, scope: m.id })
     })
     setVal('')
   }

@@ -8,7 +8,7 @@ import type { AppData, PageType } from '../types'
 import { api } from '../lib/api'
 import { COLORS, newPage, typeInfo } from '../lib/defaults'
 import { pageToMarkdown } from '../lib/exporters'
-import { habitDoneOn, habitScheduled, levelInfo, xpToday } from '../lib/game'
+import { habitDoneOn, habitScheduled } from '../lib/habits'
 import { addDays, longDate, today, uid } from '../lib/util'
 import { ensureEntry } from '../pages/JournalPage'
 import { Icon } from './Icon'
@@ -32,14 +32,13 @@ function buildSystem(d: AppData, pageId: string | null): string {
   const page = pageId ? d.pages[pageId] : undefined
   let pageText = page ? pageToMarkdown(page.id) : ''
   if (pageText.length > 12000) pageText = pageText.slice(0, 12000) + '\n…(page continues)'
-  const lv = levelInfo(d.profile.xp)
   return [
-    `You are the assistant inside Planner, a personal planner and life tracker app on the user's computer. Today is ${longDate(t)} (${t}). The user's name is ${d.profile.name}.`,
+    `You are the assistant inside Planner, a personal planner and life tracker app on the user's computer. Today is ${longDate(t)} (${t}). ${d.profile.name ? `The user's name is ${d.profile.name}.` : ''}`,
     'Be concise, warm and practical. Use short Markdown: brief paragraphs and bullet lists. No long preambles.',
     '',
     'When the user asks you to add, create, plan or change something in the app, also include ONE fenced code block whose language is `actions`, containing a JSON array. The user reviews and applies it. Supported actions:',
-    '{"type":"add_task","title":"…","due":"YYYY-MM-DD","time":"HH:MM","priority":0-3,"tags":["…"],"difficulty":"trivial|easy|medium|hard|epic","notes":"…","subtasks":["…"]}',
-    '{"type":"create_page","title":"…","pageType":"doc|tasks|habits|journal|goals|tracker|games","icon":"emoji","markdown":"page content in Markdown"}',
+    '{"type":"add_task","title":"…","due":"YYYY-MM-DD","time":"HH:MM","priority":0-3,"tags":["…"],"notes":"…","subtasks":["…"]}',
+    '{"type":"create_page","title":"…","pageType":"doc|tasks|habits|journal|goals|tracker","icon":"emoji","markdown":"page content in Markdown"}',
     '{"type":"append_to_page","markdown":"…"}  (adds to the page that is open now)',
     '{"type":"add_habit","name":"…","icon":"emoji","kind":"good|bad"}',
     '{"type":"add_goal","title":"…","milestones":["…"],"deadline":"YYYY-MM-DD"}',
@@ -47,7 +46,6 @@ function buildSystem(d: AppData, pageId: string | null): string {
     'Only include fields you know. Never invent actions the user did not ask for. Do not mention the JSON in your prose.',
     '',
     '## Current state',
-    d.settings.gamification ? `Level ${lv.level}, ${xpToday(d)} XP earned today, ${d.profile.gold} gold.` : '',
     overdue.length ? `Overdue tasks:\n${overdue.slice(0, 25).map(fmt).join('\n')}` : 'No overdue tasks.',
     due.length ? `Due today:\n${due.map(fmt).join('\n')}` : 'Nothing due today.',
     soon.length ? `Next 7 days:\n${soon.slice(0, 25).map(fmt).join('\n')}` : '',
@@ -83,7 +81,7 @@ function describe(a: AiAction): { icon: string; text: string } {
 function applyAction(a: AiAction): boolean {
   const cur = useApp.getState().current
   const d = getData()
-  const PAGE_TYPES: PageType[] = ['doc', 'tasks', 'board', 'habits', 'journal', 'goals', 'tracker', 'games', 'rewards', 'calendar', 'focus', 'character', 'today']
+  const PAGE_TYPES: PageType[] = ['doc', 'tasks', 'board', 'habits', 'journal', 'goals', 'tracker', 'calendar', 'focus', 'today', 'database', 'dashboard']
   switch (a.type) {
     case 'add_task': {
       if (!a.title) return false

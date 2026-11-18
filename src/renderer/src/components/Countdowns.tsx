@@ -20,13 +20,11 @@ interface Row { id: string; title: string; icon: string; color: string; date: st
 
 export function CountdownsPanel(): JSX.Element {
   const list = useData((d) => d.countdowns)
-  const games = useData((d) => d.games)
   const [editing, setEditing] = useState<Countdown | null>(null)
   const [showPast, setShowPast] = useState(false)
   const t = today()
   const rows: Row[] = [
-    ...list.filter((c) => c.date).map((c) => { const date = nextDate(c, t); return { id: c.id, title: c.title, icon: c.icon, color: c.color, date, days: diffDays(date, t), src: c } }),
-    ...Object.values(games).filter((g) => g.status === 'wishlist' && g.releaseDate && g.releaseDate >= t).map((g) => ({ id: 'g:' + g.id, title: g.title, icon: '🎮', color: g.color, date: g.releaseDate!, days: diffDays(g.releaseDate!, t), game: true }))
+    ...list.filter((c) => c.date).map((c) => { const date = nextDate(c, t); return { id: c.id, title: c.title, icon: c.icon, color: c.color, date, days: diffDays(date, t), src: c } })
   ].sort((a, b) => a.date.localeCompare(b.date))
   const upcoming = rows.filter((r) => r.days >= 0)
   const past = rows.filter((r) => r.days < 0)

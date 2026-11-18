@@ -7,12 +7,11 @@ export type PageType =
   | 'habits'
   | 'journal'
   | 'goals'
-  | 'character'
-  | 'rewards'
   | 'focus'
-  | 'games'
   | 'tracker'
   | 'review'
+  | 'database'
+  | 'dashboard'
 
 export type BlockType =
   | 'p'
@@ -59,6 +58,99 @@ export interface Page {
   cover?: string | null
   /** per-page view preferences (filters, sort, layout) */
   view?: Record<string, any>
+  /** database pages: properties and views */
+  db?: DbSchema
+  /** set when this page is a row of the database page with this id (rows are hidden from the sidebar) */
+  rowOf?: string | null
+  /** row property values keyed by property id */
+  props?: Record<string, any>
+  /** manual row order inside its database */
+  rowOrder?: number
+  /** dashboard pages: widgets on the grid */
+  widgets?: Widget[]
+}
+
+// ---------- databases ----------
+export type PropType = 'text' | 'number' | 'select' | 'multi' | 'status' | 'date' | 'checkbox' | 'url' | 'progress'
+export interface PropOption { id: string; name: string; color: string }
+export interface DbProp {
+  id: string
+  name: string
+  type: PropType
+  options?: PropOption[]
+  /** number display */
+  format?: 'plain' | 'percent' | 'currency' | 'decimal'
+  /** progress: maximum value (default 100) */
+  max?: number
+}
+export type ViewType = 'table' | 'board' | 'gallery' | 'list' | 'calendar'
+export interface DbFilter { id: string; prop: string; op: 'is' | 'not' | 'contains' | 'empty' | 'notEmpty' | 'gt' | 'lt' | 'checked' | 'unchecked'; value?: any }
+export interface DbView {
+  id: string
+  name: string
+  type: ViewType
+  groupBy?: string | null
+  dateProp?: string | null
+  sort?: { prop: string; dir: 'asc' | 'desc' } | null
+  filters?: DbFilter[]
+  hidden?: string[]
+  widths?: Record<string, number>
+  /** gallery/board: properties shown on cards */
+  cardProps?: string[]
+}
+export interface DbSchema { props: DbProp[]; views: DbView[] }
+
+// ---------- dashboards ----------
+export type WidgetType =
+  | 'value' | 'chart' | 'progress' | 'tasks' | 'habits' | 'database' | 'calendar' | 'clock'
+  | 'note' | 'countdown' | 'focus' | 'quickadd' | 'stat' | 'page' | 'goals'
+export interface Widget {
+  id: string
+  type: WidgetType
+  /** grid position in columns/rows */
+  x: number
+  y: number
+  w: number
+  h: number
+  title?: string
+  config: Record<string, any>
+}
+
+// ---------- custom values ----------
+export interface ValueEntry { id: string; at: number; delta: number; note: string; src?: string }
+export interface TrackedValue {
+  id: string
+  name: string
+  icon: string
+  color: string
+  unit: string
+  /** starting value when the value never resets */
+  base: number
+  goal?: number | null
+  decimals: number
+  /** 'day' etc: the shown value counts only changes since the start of that period */
+  reset: 'never' | 'day' | 'week' | 'month'
+  log: ValueEntry[]
+  order: number
+  createdAt: number
+}
+export type RuleTrigger = 'task' | 'habit' | 'focus' | 'journal' | 'row' | 'metric' | 'goal'
+export interface ValueRule {
+  id: string
+  valueId: string
+  on: RuleTrigger
+  /** task: list page; habit: habit id; row: database page id; metric: metric id; empty = any */
+  scope?: string | null
+  /** task: only tasks with this tag */
+  tag?: string | null
+  /** row: property id that must change to `option` (status/select) or become checked (checkbox) */
+  prop?: string | null
+  option?: string | null
+  mode: 'add' | 'set'
+  amount: number
+  /** focus: multiply the amount by minutes focused */
+  perMinute?: boolean
+  enabled: boolean
 }
 
 export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'epic'
@@ -154,47 +246,6 @@ export interface Goal {
   order: number
 }
 
-export interface Reward {
-  id: string
-  pageId: string
-  name: string
-  icon: string
-  cost: number
-  notes: string
-  purchases: number[]
-  repeatable: boolean
-  order: number
-}
-
-export type GameStatus = 'playing' | 'backlog' | 'wishlist' | 'paused' | 'completed' | 'dropped'
-
-export interface Game {
-  id: string
-  pageId: string
-  title: string
-  platform: string
-  genre: string
-  status: GameStatus
-  hours: number
-  rating: number
-  completion: number
-  startedAt?: string | null
-  finishedAt?: string | null
-  notes: string
-  color: string
-  favorite?: boolean
-  createdAt: number
-  sessions: { id: string; date: string; minutes: number; note: string }[]
-  goals: Subtask[]
-  /** wishlist: price / deal notes */
-  price?: string
-  releaseDate?: string | null
-  /** cover image as a small data URL */
-  cover?: string | null
-  /** estimated hours to beat */
-  estimate?: number | null
-}
-
 export interface Metric {
   id: string
   pageId: string
@@ -218,27 +269,11 @@ export interface FocusSession {
   kind: 'focus' | 'break'
 }
 
-export interface XpEvent {
-  id: string
-  at: number
-  xp: number
-  gold: number
-  label: string
-  source: string
-  sourceId: string
-  stat?: StatKey | null
-}
-
-export interface StatInfo { name: string; icon: string; xp: number }
-
 export interface Profile {
+  /** workspace / greeting name */
   name: string
+  /** workspace icon */
   avatar: string
-  title: string
-  xp: number
-  gold: number
-  stats: Record<StatKey, StatInfo>
-  achievements: Record<string, number>
 }
 
 export interface Settings {
@@ -260,22 +295,19 @@ export interface Settings {
   longBreakEvery: number
   autoUpdate: boolean
   sounds: boolean
-  gamification: boolean
   notifications: boolean
-  xpMultiplier: number
   showCompleted: boolean
   confirmDelete: boolean
   reduceMotion: boolean
   spellcheck: boolean
   glassStrength: number
-  dailyXpGoal: number
-  lootDrops: boolean
+  /** backdrop behind the glass: 'mica' shows the desktop tint, others are gradients from styles.css */
+  backdrop: string
+  /** desktop widget window on another monitor */
+  widget: { enabled: boolean; displayId: number | null; pageId: string | null; opacity: number }
   closeToTray: boolean
   quickAddHotkey: boolean
 }
-
-export type QuestKind = 'tasks' | 'habits' | 'focus' | 'journal' | 'early' | 'priority' | 'tracker' | 'game' | 'xp'
-export interface Quest { id: string; kind: QuestKind; title: string; target: number; xp: number; gold: number; claimed: boolean }
 
 export interface Countdown { id: string; title: string; date: string; icon: string; color: string; yearly?: boolean }
 
@@ -289,17 +321,16 @@ export interface AppData {
   habits: Record<string, Habit>
   journal: Record<string, JournalEntry>
   goals: Record<string, Goal>
-  rewards: Record<string, Reward>
-  games: Record<string, Game>
   metrics: Record<string, Metric>
   focus: FocusSession[]
-  xpLog: XpEvent[]
   profile: Profile
   settings: Settings
   recent: string[]
   tags: Record<string, string>
   assistant: { messages: AssistantMessage[] }
-  quests: { date: string; list: Quest[]; bonusClaimed?: boolean; rerolled?: boolean }
-  inventory: { freezes: number; potions: number; potionUntil: number }
   countdowns: Countdown[]
+  values: Record<string, TrackedValue>
+  rules: ValueRule[]
+  /** data from removed features, kept so nothing is ever lost */
+  legacy?: Record<string, any>
 }

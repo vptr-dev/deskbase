@@ -1,23 +1,21 @@
-import type { AppData, Page, PageType, Settings } from '../types'
-import { DEFAULT_STATS } from './game'
+import type { AppData, DbSchema, Page, PageType, Settings } from '../types'
 import { uid } from './util'
 
-export const SCHEMA = 4
+export const SCHEMA = 5
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: '📄', desc: 'Notes and documents' },
-  { type: 'tasks', name: 'To-do list', icon: '☑️', desc: 'Tasks and quests' },
+  { type: 'database', name: 'Database', icon: '🗃️', desc: 'Table, board, gallery, calendar' },
+  { type: 'dashboard', name: 'Dashboard', icon: '📊', desc: 'Widgets you arrange yourself' },
+  { type: 'tasks', name: 'To-do list', icon: '☑️', desc: 'Tasks with dates and reminders' },
   { type: 'board', name: 'Board', icon: '🗂️', desc: 'Kanban columns' },
-  { type: 'today', name: 'Today', icon: '☀️', desc: 'Your day at a glance' },
-  { type: 'calendar', name: 'Calendar', icon: '📅', desc: 'Month and week view' },
+  { type: 'calendar', name: 'Calendar', icon: '📅', desc: 'Month, week and agenda' },
   { type: 'habits', name: 'Habits', icon: '🔁', desc: 'Daily habits and streaks' },
   { type: 'journal', name: 'Journal', icon: '📓', desc: 'Daily entries and mood' },
   { type: 'goals', name: 'Goals', icon: '🎯', desc: 'Goals and milestones' },
-  { type: 'character', name: 'Character', icon: '🧙', desc: 'Level, stats, achievements' },
-  { type: 'rewards', name: 'Rewards', icon: '🎁', desc: 'Spend the gold you earn' },
-  { type: 'focus', name: 'Focus', icon: '⏱️', desc: 'Pomodoro timer' },
-  { type: 'games', name: 'Game library', icon: '🎮', desc: 'Track the games you play' },
   { type: 'tracker', name: 'Tracker', icon: '📈', desc: 'Weight, sleep, water, anything' },
+  { type: 'focus', name: 'Focus', icon: '⏱️', desc: 'Pomodoro timer' },
+  { type: 'today', name: 'Today', icon: '☀️', desc: 'Your day at a glance' },
   { type: 'review', name: 'Weekly review', icon: '🗓️', desc: 'Your week at a glance' }
 ]
 
@@ -41,6 +39,17 @@ export const ACCENTS: { name: string; value: string }[] = [
 /** Page cover gradients; the colors live in styles.css as --cover-<id>. */
 export const COVERS = ['dawn', 'ocean', 'forest', 'sunset', 'aurora', 'dusk', 'peach', 'slate', 'mint', 'berry', 'sand', 'night']
 
+/** Backdrops behind the glass; colors live in styles.css as --backdrop-<id>. 'mica' = the Windows material only. */
+export const BACKDROPS: { id: string; name: string }[] = [
+  { id: 'mica', name: 'Desktop' },
+  { id: 'sky', name: 'Sky' },
+  { id: 'peach', name: 'Peach' },
+  { id: 'lilac', name: 'Lilac' },
+  { id: 'mint', name: 'Mint' },
+  { id: 'aurora', name: 'Aurora' },
+  { id: 'midnight', name: 'Midnight' }
+]
+
 export const COLORS = ['#0a84ff', '#5e5ce6', '#bf5af2', '#ff375f', '#ff453a', '#ff9f0a', '#e5b000', '#30d158', '#00c7be', '#40c8e0', '#8e8e93', '#a2845e']
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -62,24 +71,37 @@ export const DEFAULT_SETTINGS: Settings = {
   longBreakEvery: 4,
   autoUpdate: true,
   sounds: true,
-  gamification: true,
   notifications: true,
-  xpMultiplier: 1,
   showCompleted: true,
   confirmDelete: true,
   reduceMotion: false,
   spellcheck: true,
-  glassStrength: 60,
-  dailyXpGoal: 100,
-  lootDrops: true,
+  glassStrength: 55,
+  backdrop: 'sky',
+  widget: { enabled: false, displayId: null, pageId: null, opacity: 100 },
   closeToTray: false,
   quickAddHotkey: true
+}
+
+export function newDatabase(): DbSchema {
+  return {
+    props: [
+      { id: uid(), name: 'Status', type: 'status', options: [
+        { id: uid(), name: 'Not started', color: '#8e8e93' },
+        { id: uid(), name: 'In progress', color: '#0a84ff' },
+        { id: uid(), name: 'Done', color: '#30d158' }
+      ] },
+      { id: uid(), name: 'Tags', type: 'multi', options: [] },
+      { id: uid(), name: 'Date', type: 'date' }
+    ],
+    views: [{ id: uid(), name: 'Table', type: 'table', filters: [], hidden: [] }]
+  }
 }
 
 export function newPage(type: PageType, title?: string, parentId: string | null = null): Page {
   const info = typeInfo(type)
   const now = Date.now()
-  return {
+  const page: Page = {
     id: uid(),
     title: title ?? (type === 'doc' ? '' : info.name),
     icon: type === 'doc' ? '' : info.icon,
@@ -93,55 +115,35 @@ export function newPage(type: PageType, title?: string, parentId: string | null 
     expanded: true,
     view: {}
   }
+  if (type === 'database') page.db = newDatabase()
+  if (type === 'dashboard') page.widgets = []
+  return page
 }
 
+/** A brand new workspace is empty: no pages until you make them. */
 export function freshData(): AppData {
-  const pages: Page[] = [
-    newPage('today', 'Today'),
-    newPage('tasks', 'To-do'),
-    newPage('habits', 'Habits'),
-    newPage('journal', 'Journal'),
-    newPage('goals', 'Goals'),
-    newPage('character', 'Character'),
-    newPage('games', 'Games'),
-    newPage('calendar', 'Calendar')
-  ]
-  const notes = newPage('doc', 'Notes')
-  notes.icon = '📝'
-  pages.push(notes)
-  const map: Record<string, Page> = {}
-  for (const p of pages) map[p.id] = p
   return {
     schema: SCHEMA,
-    pages: map,
-    rootOrder: pages.map((p) => p.id),
+    pages: {},
+    rootOrder: [],
     tasks: {},
     habits: {},
     journal: {},
     goals: {},
-    rewards: {},
-    games: {},
     metrics: {},
     focus: [],
-    xpLog: [],
-    profile: {
-      name: 'Player',
-      avatar: '🧙',
-      title: '',
-      xp: 0,
-      gold: 0,
-      stats: structuredClone(DEFAULT_STATS),
-      achievements: {}
-    },
-    settings: { ...DEFAULT_SETTINGS, lastPage: pages[0].id },
+    profile: { name: '', avatar: '' },
+    settings: { ...DEFAULT_SETTINGS },
     recent: [],
     tags: {},
     assistant: { messages: [] },
-    quests: { date: '', list: [] },
-    inventory: { freezes: 0, potions: 0, potionUntil: 0 },
-    countdowns: []
+    countdowns: [],
+    values: {},
+    rules: []
   }
 }
+
+const obj = (x: any): Record<string, any> => (x && typeof x === 'object' && !Array.isArray(x) ? x : {})
 
 /** Fill in anything missing so older or hand-edited files always load. */
 export function normalize(raw: any): AppData {
@@ -150,42 +152,45 @@ export function normalize(raw: any): AppData {
   const d: AppData = {
     ...base,
     ...raw,
-    pages: raw.pages ?? {},
+    pages: obj(raw.pages),
     rootOrder: Array.isArray(raw.rootOrder) ? raw.rootOrder : Object.keys(raw.pages ?? {}),
-    profile: {
-      ...base.profile,
-      ...(raw.profile ?? {}),
-      stats: { ...base.profile.stats, ...(raw.profile?.stats ?? {}) },
-      achievements: raw.profile?.achievements ?? {}
-    },
-    settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) },
-    focus: raw.focus ?? [],
-    xpLog: raw.xpLog ?? [],
-    recent: raw.recent ?? [],
-    tags: raw.tags ?? {},
+    profile: { name: typeof raw.profile?.name === 'string' ? raw.profile.name : '', avatar: typeof raw.profile?.avatar === 'string' ? raw.profile.avatar : '' },
+    settings: { ...DEFAULT_SETTINGS, ...obj(raw.settings), widget: { ...DEFAULT_SETTINGS.widget, ...obj(raw.settings?.widget) } },
+    focus: Array.isArray(raw.focus) ? raw.focus : [],
+    recent: Array.isArray(raw.recent) ? raw.recent : [],
+    tags: obj(raw.tags),
     assistant: { messages: Array.isArray(raw.assistant?.messages) ? raw.assistant.messages : [] },
-    quests: raw.quests && Array.isArray(raw.quests.list) ? { date: String(raw.quests.date ?? ''), list: raw.quests.list, bonusClaimed: !!raw.quests.bonusClaimed, rerolled: !!raw.quests.rerolled } : { date: '', list: [] },
-    inventory: {
-      freezes: Math.max(0, Number(raw.inventory?.freezes) || 0),
-      potions: Math.max(0, Number(raw.inventory?.potions) || 0),
-      potionUntil: Math.max(0, Number(raw.inventory?.potionUntil) || 0)
-    },
-    countdowns: Array.isArray(raw.countdowns) ? raw.countdowns.filter((c: any) => c && typeof c === 'object' && c.id).map((c: any) => ({ title: '', date: '', icon: '📅', color: '#0a84ff', ...c })) : []
+    countdowns: Array.isArray(raw.countdowns) ? raw.countdowns.filter((c: any) => c && typeof c === 'object' && c.id).map((c: any) => ({ title: '', date: '', icon: '📅', color: '#0a84ff', ...c })) : [],
+    values: obj(raw.values),
+    rules: Array.isArray(raw.rules) ? raw.rules.filter((r: any) => r && typeof r === 'object' && r.id && r.valueId) : []
   }
-  for (const k of ['tasks', 'habits', 'journal', 'goals', 'rewards', 'games', 'metrics'] as const) {
-    ;(d as any)[k] = raw[k] ?? {}
+  for (const k of ['tasks', 'habits', 'journal', 'goals', 'metrics'] as const) {
+    ;(d as any)[k] = obj(raw[k])
   }
   for (const p of Object.values(d.pages)) {
-    p.children = p.children ?? []
+    p.children = Array.isArray(p.children) ? p.children : []
     p.blocks = p.blocks?.length ? p.blocks : [{ id: uid(), type: 'p', text: '' }]
     p.view = p.view ?? {}
+    if (p.type === 'database') {
+      const db = obj(p.db)
+      p.db = { props: Array.isArray(db.props) ? db.props.filter((x: any) => x && x.id) : [], views: Array.isArray(db.views) ? db.views.filter((x: any) => x && x.id) : [] }
+      for (const pr of p.db.props) if (['select', 'multi', 'status'].includes(pr.type)) pr.options = Array.isArray(pr.options) ? pr.options : []
+      if (!p.db.views.length) p.db.views.push({ id: uid(), name: 'Table', type: 'table', filters: [], hidden: [] })
+    }
+    if (p.type === 'dashboard') p.widgets = Array.isArray(p.widgets) ? p.widgets.filter((w) => w && w.id && w.type).map((w) => ({ ...w, config: obj(w.config) })) : []
+    if (p.rowOf) p.props = obj(p.props)
   }
-  // Repair the tree: drop missing ids, re-attach orphans at the root.
-  const exists = (id: string): boolean => Boolean(d.pages[id])
-  d.rootOrder = d.rootOrder.filter(exists)
+  // Rows whose database is gone become normal pages again.
   for (const p of Object.values(d.pages)) {
-    p.children = p.children.filter(exists)
-    if (p.parentId && !exists(p.parentId)) p.parentId = null
+    if (p.rowOf && d.pages[p.rowOf]?.type !== 'database') { p.rowOf = null; p.parentId = null }
+  }
+  // Repair the tree: drop missing ids and rows, re-attach orphans at the root.
+  const inTree = (id: string): boolean => Boolean(d.pages[id]) && !d.pages[id].rowOf
+  d.rootOrder = [...new Set(d.rootOrder.filter(inTree))]
+  for (const p of Object.values(d.pages)) {
+    p.children = p.children.filter(inTree)
+    if (p.rowOf) continue
+    if (p.parentId && !inTree(p.parentId)) p.parentId = null
     if (!p.parentId && !d.rootOrder.includes(p.id)) d.rootOrder.push(p.id)
   }
   for (const t of Object.values(d.tasks)) {
@@ -204,13 +209,15 @@ export function normalize(raw: any): AppData {
     h.dayNotes = h.dayNotes ?? {}
     h.frozen = Array.isArray(h.frozen) ? h.frozen : []
   }
-  for (const g of Object.values(d.games)) {
-    g.sessions = g.sessions ?? []
-    g.goals = g.goals ?? []
-    g.price = g.price ?? ''
-    g.releaseDate = g.releaseDate ?? null
-    g.cover = typeof g.cover === 'string' && g.cover.startsWith('data:image/') ? g.cover : null
-    g.estimate = typeof g.estimate === 'number' && g.estimate > 0 ? g.estimate : null
+  for (const v of Object.values(d.values)) {
+    v.log = Array.isArray(v.log) ? v.log : []
+    v.base = Number(v.base) || 0
+    v.decimals = Math.max(0, Math.min(4, Number(v.decimals) || 0))
+    v.reset = ['day', 'week', 'month'].includes(v.reset) ? v.reset : 'never'
+    v.unit = v.unit ?? ''
+    v.icon = v.icon ?? '◆'
+    v.color = v.color ?? '#0a84ff'
   }
+  d.rules = d.rules.filter((r) => d.values[r.valueId])
   return d
 }

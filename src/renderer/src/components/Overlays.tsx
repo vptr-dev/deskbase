@@ -92,9 +92,6 @@ export function CommandPalette(): JSX.Element {
       for (const j of Object.values(data.journal).filter((j) => (j.title + j.text).toLowerCase().includes(ql)).slice(0, 5)) {
         out.push({ id: 'j' + j.id, icon: '📓', title: j.title || j.date, sub: j.text.slice(0, 80), run: () => openPage(j.pageId) })
       }
-      for (const g of Object.values(data.games).filter((g) => g.title.toLowerCase().includes(ql)).slice(0, 5)) {
-        out.push({ id: 'g' + g.id, icon: '🎮', title: g.title, sub: g.platform, run: () => openPage(g.pageId) })
-      }
       for (const h of Object.values(data.habits).filter((h) => h.name.toLowerCase().includes(ql)).slice(0, 5)) {
         out.push({ id: 'h' + h.id, icon: h.icon, title: h.name, sub: 'Habit', run: () => openPage(h.pageId) })
       }
@@ -124,7 +121,7 @@ export function CommandPalette(): JSX.Element {
     <Modal onClose={() => setOverlay(null)} width={600} className="palette">
       <div className="palette-input">
         <Icon name="search" size={18} />
-        <input id="palette-q" autoFocus placeholder="Search pages, tasks, journal, games, or run a command" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
+        <input id="palette-q" autoFocus placeholder="Search pages, tasks, journal, or run a command" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(results.length - 1, s + 1)) }
           if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 1)) }
           if (e.key === 'Enter') run(results[sel])
@@ -202,7 +199,7 @@ export function SettingsDialog(): JSX.Element {
   const profile = useData((d) => d.profile)
   const pages = useData((d) => d.pages)
   const initialTab = useApp((st) => st.overlayArg)
-  const [tab, setTab] = useState<'general' | 'appearance' | 'game' | 'assistant' | 'data' | 'about'>(['general', 'appearance', 'game', 'assistant', 'data', 'about'].includes(initialTab) ? initialTab : 'general')
+  const [tab, setTab] = useState<'general' | 'appearance' | 'assistant' | 'data' | 'about'>(['general', 'appearance', 'assistant', 'data', 'about'].includes(initialTab) ? initialTab : 'general')
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [backups, setBackups] = useState<{ name: string; date: string; size: number }[]>([])
   const [upd, setUpd] = useState<UpdateStatus>({ state: 'idle' })
@@ -214,14 +211,14 @@ export function SettingsDialog(): JSX.Element {
     <Modal onClose={() => setOverlay(null)} width={720} className="settings">
       <div className="settings-layout">
         <nav className="settings-nav">
-          {(['general', 'appearance', 'game', 'assistant', 'data', 'about'] as const).map((t) => (
-            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', game: 'Game', assistant: 'Assistant', data: 'Data & backups', about: 'About & updates' }[t]}</button>
+          {(['general', 'appearance', 'assistant', 'data', 'about'] as const).map((t) => (
+            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', assistant: 'Assistant', data: 'Data & backups', about: 'About & updates' }[t]}</button>
           ))}
         </nav>
         <div className="settings-body">
           {tab === 'general' && <>
             <h3>General</h3>
-            <Row label="Your name"><input id="set-name" className="input input-sm" value={profile.name} onChange={(e) => act((d) => { d.profile.name = e.target.value }, { key: 'pname' })} /></Row>
+            <Row label="Workspace name" sub="Shown in the sidebar and greetings"><input id="set-name" className="input input-sm" value={profile.name} onChange={(e) => act((d) => { d.profile.name = e.target.value }, { key: 'pname' })} /></Row>
             <Row label="Open on start"><select id="set-start" className="input input-sm" value={s.startPage} onChange={(e) => set((x) => { x.startPage = e.target.value })}>
               <option value="last">Last opened page</option>
               {Object.values(pages).filter((p) => !p.deletedAt).map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
@@ -252,19 +249,6 @@ export function SettingsDialog(): JSX.Element {
             <Row label="Font"><Segmented small value={s.font} onChange={(v) => set((x) => { x.font = v })} options={[{ value: 'system', label: 'Default' }, { value: 'serif', label: 'Serif' }, { value: 'mono', label: 'Mono' }]} /></Row>
             <Row label="Density"><Segmented small value={s.density} onChange={(v) => set((x) => { x.density = v })} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} /></Row>
             <Row label="Reduce motion"><Toggle checked={s.reduceMotion} onChange={(v) => set((x) => { x.reduceMotion = v })} /></Row>
-          </>}
-          {tab === 'game' && <>
-            <h3>Game</h3>
-            <Row label="XP, gold and levels" sub="Turn off for a plain planner"><Toggle checked={s.gamification} onChange={(v) => set((x) => { x.gamification = v })} /></Row>
-            <Row label="Daily XP goal"><input id="set-xpgoal" type="number" min={10} step={10} className="input input-sm w-80" value={s.dailyXpGoal} onChange={(e) => set((x) => { x.dailyXpGoal = Math.max(10, Number(e.target.value) || 100) })} /></Row>
-            <Row label="Loot drops" sub="Random gold bonus when finishing tasks"><Toggle checked={s.lootDrops} onChange={(v) => set((x) => { x.lootDrops = v })} /></Row>
-            <Row label="XP multiplier"><Segmented small value={s.xpMultiplier} onChange={(v) => set((x) => { x.xpMultiplier = v })} options={[{ value: 0.5, label: '0.5×' }, { value: 1, label: '1×' }, { value: 1.5, label: '1.5×' }, { value: 2, label: '2×' }]} /></Row>
-            <Row label="Reset progress" sub="Sets XP, gold, stats and achievements to zero. Tasks are kept.">
-              <ConfirmButton label="Reset" confirmLabel="Reset progress" icon="restore" onConfirm={() => act((d) => {
-                d.profile.xp = 0; d.profile.gold = 0; d.profile.achievements = {}; d.xpLog = []
-                for (const k of Object.keys(d.profile.stats)) (d.profile.stats as any)[k].xp = 0
-              })} />
-            </Row>
           </>}
           {tab === 'assistant' && <AssistantSettings />}
           {tab === 'data' && <>
