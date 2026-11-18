@@ -91,6 +91,24 @@ export function weekStartOf(k: string, weekStart: 0 | 1): string {
   return addDays(k, -diff)
 }
 
+const WEEKDAY_RE = '(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tues?|wed|thu(?:rs?)?|fri|sat)'
+const MONTH_RE = '(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)'
+const weekdayIndex = (w: string): number => DAYS_SHORT.findIndex((d) => d.toLowerCase() === w.toLowerCase().slice(0, 3))
+const monthIndex = (m: string): number => MONTHS.findIndex((x) => x.toLowerCase() === m.toLowerCase().slice(0, 3))
+
+/** Snooze targets relative to today. */
+export function snoozeOptions(): { label: string; due: string }[] {
+  const t = today()
+  const dow = parseDay(t).getDay()
+  return [
+    { label: 'Tomorrow', due: addDays(t, 1) },
+    { label: 'In 2 days', due: addDays(t, 2) },
+    { label: 'This weekend', due: addDays(t, ((6 - dow + 7) % 7) || 7) },
+    { label: 'Next week', due: addDays(t, (8 - dow) % 7 || 7) },
+    { label: 'Next month', due: addMonths(t, 1) }
+  ]
+}
+
 /** Natural-language quick add: "Pay rent tomorrow 5pm !high #home every month" */
 export function parseQuickAdd(input: string): {
   title: string
@@ -129,17 +147,40 @@ export function parseQuickAdd(input: string): {
     out.time = `${pad(h)}:${pad(Number(m[2] ?? 0))}`
   })
   take(/\s(?:at\s)([01]?\d|2[0-3]):([0-5]\d)\b/, (m) => (out.time = `${pad(Number(m[1]))}:${m[2]}`))
-  take(/\s(today|tonight)\b/i, () => (out.due = today()))
-  take(/\s(tomorrow|tmr|tmrw)\b/i, () => (out.due = addDays(today(), 1)))
-  take(/\snext week\b/i, () => (out.due = addDays(today(), 7)))
-  take(/\sin (\d+) days?\b/i, (m) => (out.due = addDays(today(), Number(m[1]))))
+  const t0 = today()
+  const now = new Date()
+  take(/\s(today|tonight)\b/i, () => (out.due = t0))
+  take(/\s(tomorrow|tmr|tmrw)\b/i, () => (out.due = addDays(t0, 1)))
+  take(/\s(?:end of (?:the )?month|eom)\b/i, () => (out.due = dayKey(new Date(now.getFullYear(), now.getMonth() + 1, 0))))
+  take(/\s(?:end of (?:the )?week|eow)\b/i, () => (out.due = addDays(t0, (7 - now.getDay()) % 7)))
+  take(/\send of (?:the )?year\b/i, () => (out.due = `${now.getFullYear()}-12-31`))
+  take(/\s(?:this )?weekend\b/i, () => (out.due = addDays(t0, (6 - now.getDay() + 7) % 7)))
+  take(new RegExp(`\\snext ${WEEKDAY_RE}\\b`, 'i'), (m) => {
+    const toMonday = (8 - now.getDay()) % 7 || 7
+    out.due = addDays(t0, toMonday + ((weekdayIndex(m[1]) + 6) % 7))
+  })
+  take(/\snext week\b/i, () => (out.due = addDays(t0, 7)))
+  take(/\snext month\b/i, () => (out.due = addMonths(t0, 1)))
+  take(/\snext year\b/i, () => (out.due = addMonths(t0, 12)))
+  take(/\sin (\d+|an?|one|two|three|four|five|six) (day|week|month|year)s?\b/i, (m) => {
+    const words: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 }
+    const n = words[m[1].toLowerCase()] ?? Number(m[1])
+    const unit = m[2].toLowerCase()
+    out.due = unit === 'day' ? addDays(t0, n) : unit === 'week' ? addDays(t0, n * 7) : addMonths(t0, unit === 'month' ? n : n * 12)
+  })
   take(/\s(\d{4}-\d{2}-\d{2})\b/, (m) => (out.due = m[1]))
-  take(/\s(?:on\s)?(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b/i, (m) => {
-    const idx = DAYS_SHORT.findIndex((d) => d.toLowerCase() === m[1].toLowerCase().slice(0, 3))
-    const now = new Date().getDay()
-    let diff = (idx - now + 7) % 7
+  const onDate = (month: number, day: number): void => {
+    if (month < 0 || day < 1 || day > 31) return
+    let k = dayKey(new Date(now.getFullYear(), month, day))
+    if (k < t0) k = dayKey(new Date(now.getFullYear() + 1, month, day))
+    out.due = k
+  }
+  take(new RegExp(`\\s(?:on\\s)?${MONTH_RE}\\s(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'i'), (m) => onDate(monthIndex(m[1]), Number(m[2])))
+  take(new RegExp(`\\s(?:on\\s)?(\\d{1,2})(?:st|nd|rd|th)?\\s${MONTH_RE}\\b`, 'i'), (m) => onDate(monthIndex(m[2]), Number(m[1])))
+  take(new RegExp(`\\s(?:on\\s)?${WEEKDAY_RE}\\b`, 'i'), (m) => {
+    let diff = (weekdayIndex(m[1]) - now.getDay() + 7) % 7
     if (diff === 0) diff = 7
-    out.due = addDays(today(), diff)
+    out.due = addDays(t0, diff)
   })
   if (out.repeat && !out.due) out.due = today()
   out.title = s.replace(/\s+/g, ' ').trim()

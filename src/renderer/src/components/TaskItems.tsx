@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { act, addTask, deleteTask, setTaskDone, updateTask, useApp, useData } from '../store'
+import { act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
 import type { Difficulty, Repeat, StatKey, Task } from '../types'
 import { DIFFICULTY, STAT_KEYS } from '../lib/game'
-import { formatTime, friendlyDay, parseQuickAdd, today, uid } from '../lib/util'
-import { AutoText, Button, Checkbox, ConfirmButton, Segmented } from './ui'
+import { formatTime, friendlyDay, parseQuickAdd, snoozeOptions, today, uid } from '../lib/util'
+import { AutoText, Button, Checkbox, ConfirmButton, Menu, type MenuItem, Popover, Segmented } from './ui'
 import { Icon } from './Icon'
 
 export const PRIORITY = [
@@ -67,7 +67,20 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
   const use24h = useData((d) => d.settings.use24h)
   const gamified = useData((d) => d.settings.gamification)
   const [over, setOver] = useState(false)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const overdue = !task.done && task.due && task.due < today()
+  const menuItems: MenuItem[] = [
+    { label: 'Open', icon: 'expand', onClick: () => onOpen(task.id) },
+    { label: task.done ? 'Mark not done' : 'Complete', icon: 'check', onClick: () => setTaskDone(task.id, !task.done) },
+    { divider: true, label: '' },
+    { label: 'Due today', icon: 'calendar', disabled: task.due === today(), onClick: () => updateTask(task.id, (t) => { t.due = today() }) },
+    ...snoozeOptions().slice(0, 4).map((o) => ({ label: `Snooze: ${o.label.toLowerCase()}`, icon: 'snooze', hint: friendlyDay(o.due), onClick: () => snoozeTask(task.id, o.due) })),
+    ...(task.due ? [{ label: 'Remove date', icon: 'x', onClick: () => updateTask(task.id, (t) => { t.due = null; t.time = null }) }] : []),
+    { divider: true, label: '' },
+    ...PRIORITY.slice(1).map((p) => ({ label: `${p.label} priority`, checked: task.priority === p.v, onClick: () => updateTask(task.id, (t) => { t.priority = (t.priority === p.v ? 0 : p.v) as Task['priority'] }) })),
+    { divider: true, label: '' },
+    { label: 'Delete', icon: 'trash', danger: true, onClick: () => deleteTask(task.id) }
+  ]
   const subDone = task.subtasks.filter((s) => s.done).length
   return (
     <div
@@ -78,7 +91,9 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
       onDragOver={(e) => { if (onDropOn) { e.preventDefault(); setOver(true) } }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); onDropOn?.() }}
+      onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }) }}
     >
+      {menu && <Popover anchor={menu} onClose={() => setMenu(null)}><div onClick={(e) => e.stopPropagation()}><Menu items={menuItems} onClose={() => setMenu(null)} /></div></Popover>}
       <Checkbox checked={task.done} onChange={(v) => setTaskDone(task.id, v)} round color={PRIORITY[task.priority].v ? PRIORITY[task.priority].color : undefined} />
       <div className="task-main">
         <div className="task-title">{task.title || <span className="muted">Untitled</span>}</div>
@@ -123,6 +138,12 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
             <input id={`time-${id}`} type="time" className="input input-sm" value={task.time ?? ''} onChange={(e) => set((t) => { t.time = e.target.value || null })} />
             {task.due && <Button small kind="ghost" icon="x" title="Clear date" onClick={() => set((t) => { t.due = null; t.time = null })} />}
           </div>
+          {!task.done && <>
+            <label>Snooze</label>
+            <div className="row gap-xs wrap">
+              {snoozeOptions().map((o) => <button key={o.label} className="chip-btn" title={friendlyDay(o.due)} onClick={() => snoozeTask(id, o.due)}>{o.label}</button>)}
+            </div>
+          </>}
           <label>Repeat</label>
           <select id={`repeat-${id}`} className="input input-sm" value={task.repeat} onChange={(e) => set((t) => { t.repeat = e.target.value as Repeat; if (t.repeat !== 'none' && !t.due) t.due = today() })}>
             {REPEATS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}

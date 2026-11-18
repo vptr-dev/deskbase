@@ -735,3 +735,16 @@ input[type='checkbox'] { accent-color: var(--accent); }
 .picker-card.rolling { transform: scale(0.98); opacity: 0.85; }
 .picker-card .game-cover.sm { width: 64px; height: 64px; font-size: 1.7em; }
 .picker-title { font-size: 1.2em; font-weight: 650; font-family: var(--font-display); }
+.cal-cell.drop { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent); }
+.cal-item[draggable='true'] { cursor: grab; }
+.agenda { display: flex; flex-direction: column; gap: 14px; max-width: 760px; }
+.agenda-head { display: flex; align-items: baseline; gap: 10px; margin: 0 4px 6px; }
+.agenda-head.accent .strong { color: var(--accent); }
+.agenda-head.danger .strong { color: var(--danger); }
+.agenda .task-list { padding: 4px; }
+.section-btn { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; color: var(--muted); opacity: 0; transition: opacity 0.15s; }
+.sidebar-scroll:hover .section-btn, .section-btn:focus-visible { opacity: 1; }
+.section-btn:hover { background: var(--hover); color: var(--fg); }
+.sidebar-filter { margin: 2px 4px 6px; width: calc(100% - 8px); }
+.tree-path { margin-left: auto; max-width: 45%; font-size: 11px; color: var(--muted); }
+.move-path { max-width: 45%; }

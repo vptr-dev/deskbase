@@ -6,6 +6,7 @@ import { api, type UpdateStatus } from '../lib/api'
 import { exportPageMarkdown } from '../lib/exporters'
 import { Icon } from './Icon'
 import { Menu, Popover, Progress } from './ui'
+import { pagePath } from './MovePage'
 
 type DropPos = 'before' | 'after' | 'inside'
 let dragId: string | null = null
@@ -53,7 +54,8 @@ function PageRow({ id, depth }: { id: string; depth: number }): JSX.Element | nu
     { label: page.favorite ? 'Remove from favorites' : 'Add to favorites', icon: 'star', onClick: () => updatePage(id, (p) => { p.favorite = !p.favorite }) },
     { label: 'Duplicate', icon: 'copy', onClick: () => duplicatePage(id) },
     { label: 'Export as Markdown', icon: 'download', onClick: () => exportPageMarkdown(id) },
-    { label: 'Move to root', icon: 'left', onClick: () => movePage(id, null, useApp.getState().data.rootOrder.length), disabled: !page.parentId },
+    { label: 'Move to…', icon: 'folder', onClick: () => setOverlay('movePage', { pageId: id }) },
+    { label: 'Move to top level', icon: 'left', onClick: () => movePage(id, null, useApp.getState().data.rootOrder.length), disabled: !page.parentId },
     { divider: true, label: '' },
     { label: 'Move to trash', icon: 'trash', danger: true, onClick: () => trashPage(id) }
   ]
@@ -148,6 +150,10 @@ export function Sidebar(): JSX.Element {
   const roots = rootIds ? rootIds.split(',') : []
   const favs = favIds ? favIds.split(',') : []
   const characterPage = Object.values(pages).find((p) => p.type === 'character' && !p.deletedAt)
+  const [filter, setFilter] = useState<string | null>(null)
+  const fq = (filter ?? '').trim().toLowerCase()
+  const data = useData((d) => d)
+  const matches = fq ? Object.values(pages).filter((p) => !p.deletedAt && (p.title || 'Untitled').toLowerCase().includes(fq)).sort((a, b) => (a.title || '').localeCompare(b.title || '')) : []
 
   const startResize = (e: React.MouseEvent): void => {
     e.preventDefault()
@@ -205,8 +211,28 @@ export function Sidebar(): JSX.Element {
             ))}
           </>
         )}
-        <div className="sidebar-section">Pages</div>
-        {roots.map((id) => <PageRow key={id} id={id} depth={0} />)}
+        <div className="sidebar-section row between">
+          <span>Pages</span>
+          <button className="section-btn" title="Filter pages" onClick={() => setFilter(filter === null ? '' : null)}><Icon name={filter === null ? 'filter' : 'x'} size={12} stroke={2} /></button>
+        </div>
+        {filter !== null && (
+          <input id="sidebar-filter" autoFocus className="input input-sm sidebar-filter" placeholder="Filter pages" value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setFilter(null)
+              if (e.key === 'Enter' && matches[0]) openPage(matches[0].id)
+            }} />
+        )}
+        {fq ? (
+          matches.length ? matches.map((p) => (
+            <button key={p.id} className={`tree-row ${current === p.id ? 'active' : ''}`} style={{ paddingLeft: 8 }} onClick={() => openPage(p.id)} title={pagePath(data, p.id)}>
+              <span className="tree-chevron invisible" />
+              <span className="tree-icon">{p.icon || typeInfo(p.type).icon}</span>
+              <span className="tree-title">{p.title || 'Untitled'}</span>
+              {p.parentId && <span className="tree-path ellipsis">{pagePath(data, p.id)}</span>}
+            </button>
+          )) : <div className="muted small pad">No pages match</div>
+        ) : roots.map((id) => <PageRow key={id} id={id} depth={0} />)}
         <button className="tree-row add-row" style={{ paddingLeft: 8 }} onClick={() => setOverlay('newPage', { parentId: null })}>
           <span className="tree-chevron invisible" />
           <span className="tree-icon"><Icon name="plus" size={14} /></span>

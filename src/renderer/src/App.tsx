@@ -3,6 +3,7 @@ import { act, boot, duplicatePage, flushSave, getData, onConfetti, openPage, red
 import { api } from './lib/api'
 import { typeInfo } from './lib/defaults'
 import { exportPageMarkdown } from './lib/exporters'
+import { MovePageDialog } from './components/MovePage'
 import { playLevelUp } from './lib/sound'
 import { Sidebar } from './components/Sidebar'
 import { Icon } from './components/Icon'
@@ -315,6 +316,7 @@ export function App(): JSX.Element {
                 { divider: true, label: '' },
                 { label: 'Add subpage', icon: 'plus', onClick: () => setOverlay('newPage', { parentId: page.id }) },
                 { label: 'Duplicate', icon: 'copy', onClick: () => duplicatePage(page.id) },
+                { label: 'Move to…', icon: 'folder', onClick: () => setOverlay('movePage', { pageId: page.id }) },
                 { label: 'Export as Markdown', icon: 'download', onClick: () => exportPageMarkdown(page.id) },
                 { divider: true, label: '' },
                 { label: `Edited ${new Date(page.updatedAt).toLocaleString()}`, disabled: true },
@@ -340,6 +342,7 @@ export function App(): JSX.Element {
       {overlay === 'settings' && <SettingsDialog />}
       {overlay === 'trash' && <TrashDialog />}
       {overlay === 'shortcuts' && <ShortcutsDialog />}
+      {overlay === 'movePage' && <MovePageDialog />}
       <Toasts />
       <Confetti />
     </div>

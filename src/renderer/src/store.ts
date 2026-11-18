@@ -4,11 +4,11 @@ import type { AppData, Difficulty, Page, PageType, StatKey, Task } from './types
 import { api } from './lib/api'
 import { freshData, newPage, normalize } from './lib/defaults'
 import { ACHIEVEMENTS, DIFFICULTY, levelInfo } from './lib/game'
-import { addDays, addMonths, parseDay, today, uid } from './lib/util'
+import { addDays, addMonths, friendlyDay, parseDay, today, uid } from './lib/util'
 
 enablePatches()
 
-export type Overlay = null | 'search' | 'settings' | 'trash' | 'newPage' | 'shortcuts' | 'notionImport'
+export type Overlay = null | 'search' | 'settings' | 'trash' | 'newPage' | 'shortcuts' | 'notionImport' | 'movePage'
 
 export interface Toast { id: string; text: string; icon?: string; kind?: 'xp' | 'info' | 'level' | 'achievement' | 'error'; undo?: boolean }
 
@@ -394,6 +394,22 @@ export function setTaskDone(id: string, done: boolean): void {
       revoke(d, t.id)
     }
   })
+}
+
+export function snoozeTask(id: string, due: string): void {
+  act((d) => {
+    const t = d.tasks[id]
+    if (!t) return
+    if (t.remindAt) {
+      const r = new Date(t.remindAt)
+      const nd = parseDay(due)
+      nd.setHours(r.getHours(), r.getMinutes(), 0, 0)
+      t.remindAt = nd.getTime()
+      t.reminded = false
+    }
+    t.due = due
+  })
+  toast(`Snoozed to ${friendlyDay(due).toLowerCase() === 'tomorrow' ? 'tomorrow' : friendlyDay(due)}`, { undo: true })
 }
 
 export function deleteTask(id: string): void {
