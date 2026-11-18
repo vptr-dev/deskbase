@@ -82,8 +82,8 @@ export const questDef = (k: QuestKind): QuestDef => QUEST_DEFS.find((q) => q.kin
 export const questProgress = (d: AppData, q: Quest): number => Math.min(q.target, questDef(q.kind).progress(d))
 
 /** Three random quests for today, favouring the parts of the app that are in use. */
-export function generateQuests(d: AppData): Quest[] {
-  const pool = QUEST_DEFS.map((def) => ({ def, made: def.make(d) })).filter((x) => x.made)
+export function generateQuests(d: AppData, exclude: QuestKind[] = []): Quest[] {
+  const pool = QUEST_DEFS.filter((def) => !exclude.includes(def.kind)).map((def) => ({ def, made: def.make(d) })).filter((x) => x.made)
   const out: Quest[] = []
   while (out.length < 3 && pool.length) {
     const i = Math.floor(Math.random() * pool.length)

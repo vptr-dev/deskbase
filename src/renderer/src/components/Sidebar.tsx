@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPage, duplicatePage, movePage, openPage, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
 import { levelInfo } from '../lib/game'
+import { formatLeft, usePotionLeft } from './Quests'
 import { typeInfo } from '../lib/defaults'
 import { api, type UpdateStatus } from '../lib/api'
 import { exportPageMarkdown } from '../lib/exporters'
@@ -147,6 +148,7 @@ export function Sidebar(): JSX.Element {
   const current = useApp((s) => s.current)
   const pages = useData((d) => d.pages)
   const lv = levelInfo(profile.xp)
+  const potionLeft = usePotionLeft(useData((d) => d.inventory.potionUntil))
   const roots = rootIds ? rootIds.split(',') : []
   const favs = favIds ? favIds.split(',') : []
   const characterPage = Object.values(pages).find((p) => p.type === 'character' && !p.deletedAt)
@@ -189,6 +191,7 @@ export function Sidebar(): JSX.Element {
         <button className="sidebar-level" onClick={() => characterPage && openPage(characterPage.id)} title={`${lv.into} / ${lv.need} XP`}>
           <span>Lv {lv.level}</span>
           <Progress value={lv.pct} height={4} />
+          {potionLeft > 0 && <span className="potion-chip" title={`Double XP · ${formatLeft(potionLeft)} left`}>2×</span>}
           <span className="gold"><Icon name="coin" size={12} /> {profile.gold}</span>
         </button>
       )}

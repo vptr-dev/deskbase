@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { openPage, useData } from '../store'
+import { moveOverdueToToday, openPage, useData } from '../store'
 import { habitDayTarget, habitDoneOn, habitDueToday, habitStreak, habitWeekCount, isWeekly, levelInfo, xpToday } from '../lib/game'
 import { QuestsPanel } from '../components/Quests'
 import { addDays, longDate, today } from '../lib/util'
@@ -67,7 +67,7 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
         <section className="panel glass span2">
           <div className="panel-head"><h3>Tasks</h3><span className="muted small">{due.length + overdue.length} to do</span></div>
           {listPage && <QuickAdd pageId={listPage.id} defaults={{ due: t }} placeholder="Add a task for today" />}
-          {overdue.length > 0 && <><div className="group-label danger">Overdue<span className="count">{overdue.length}</span></div><div className="task-list">{overdue.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={openTask} />)}</div></>}
+          {overdue.length > 0 && <><div className="group-label danger">Overdue<span className="count">{overdue.length}</span><button className="link" onClick={() => moveOverdueToToday()}>Move all to today</button></div><div className="task-list">{overdue.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={openTask} />)}</div></>}
           <div className="task-list">{due.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={openTask} />)}</div>
           {due.length + overdue.length === 0 && <div className="muted pad">All clear for today.</div>}
           {upcoming.length > 0 && <><div className="group-label">Coming up</div><div className="task-list">{upcoming.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={openTask} />)}</div></>}

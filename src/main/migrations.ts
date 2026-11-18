@@ -7,7 +7,7 @@
  * A backup of the file is written automatically before any migration runs.
  */
 
-export const CURRENT_SCHEMA = 3
+export const CURRENT_SCHEMA = 4
 
 type Raw = Record<string, any>
 
@@ -33,6 +33,20 @@ const migrations: Record<number, (d: Raw) => Raw> = {
       tasks: Object.fromEntries(Object.entries(d.tasks ?? {}).map(([k, t]: [string, any]) => [k, t && typeof t === 'object' ? { goalId: null, ...t } : t])),
       quests: d.quests ?? { date: '', list: [] },
       inventory: d.inventory ?? { freezes: 0 }
+    }
+  },
+  // 3 -> 4: XP potions, quest reroll, countdowns, game covers and time estimates (0.4.0).
+  3: (d) => {
+    const games: Raw = { ...(d.games ?? {}) }
+    for (const [k, g] of Object.entries(games)) {
+      if (g && typeof g === 'object') games[k] = { cover: null, estimate: null, ...g }
+    }
+    const inv = d.inventory && typeof d.inventory === 'object' ? d.inventory : {}
+    return {
+      ...d,
+      games,
+      inventory: { freezes: 0, potions: 0, potionUntil: 0, ...inv },
+      countdowns: Array.isArray(d.countdowns) ? d.countdowns : []
     }
   }
 }

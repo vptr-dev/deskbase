@@ -141,7 +141,8 @@ export function redo(): void {
 export function award(d: AppData, opts: { xp: number; gold?: number; label: string; source: string; sourceId: string; stat?: StatKey | null }): void {
   if (!d.settings.gamification) return
   const mult = d.settings.xpMultiplier || 1
-  const xp = Math.round(opts.xp * mult)
+  const potion = opts.xp > 0 && d.inventory.potionUntil > Date.now() ? 2 : 1
+  const xp = Math.round(opts.xp * mult * potion)
   const gold = Math.round((opts.gold ?? 0) * mult)
   const before = levelInfo(d.profile.xp).level
   d.profile.xp = Math.max(0, d.profile.xp + xp)
@@ -449,6 +450,64 @@ export function applyFreeze(habitId: string, day: string): void {
     d.inventory.freezes--
     h.frozen = [...(h.frozen ?? []), day]
   })
+}
+
+export function rerollQuest(id: string): void {
+  act((d) => {
+    const i = d.quests.list.findIndex((x) => x.id === id)
+    const q = d.quests.list[i]
+    if (!q || q.claimed || d.quests.rerolled || d.quests.date !== today() || d.profile.gold < REROLL_COST) return
+    const fresh = generateQuests(d, d.quests.list.map((x) => x.kind))[0]
+    if (!fresh) return
+    d.profile.gold -= REROLL_COST
+    d.quests.rerolled = true
+    d.quests.list[i] = fresh
+    d.xpLog.unshift({ id: uid(), at: Date.now(), xp: 0, gold: -REROLL_COST, label: 'Rerolled a quest', source: 'shop', sourceId: 'shop:' + uid() })
+  }, { history: false })
+}
+
+export const REROLL_COST = 15
+export const POTION_COST = 80
+export const POTION_MAX = 3
+export const POTION_MINUTES = 60
+export function buyPotion(): void {
+  act((d) => {
+    if (d.profile.gold < POTION_COST || d.inventory.potions >= POTION_MAX) return
+    d.profile.gold -= POTION_COST
+    d.inventory.potions++
+    d.xpLog.unshift({ id: uid(), at: Date.now(), xp: 0, gold: -POTION_COST, label: 'Bought an XP potion', source: 'shop', sourceId: 'shop:' + uid() })
+  })
+  toast('XP potion added', { icon: '🧪' })
+}
+export function drinkPotion(): void {
+  act((d) => {
+    if (d.inventory.potions < 1 || d.inventory.potionUntil > Date.now()) return
+    d.inventory.potions--
+    d.inventory.potionUntil = Date.now() + POTION_MINUTES * 60_000
+  })
+  toast(`Double XP for ${POTION_MINUTES} minutes`, { kind: 'achievement', icon: '🧪' })
+}
+
+/** Move every open overdue task (optionally only on one page) to today. */
+export function moveOverdueToToday(pageId?: string): number {
+  const t0 = today()
+  const ids = Object.values(getData().tasks).filter((t) => !t.done && !t.archived && t.due && t.due < t0 && (!pageId || t.pageId === pageId)).map((t) => t.id)
+  if (!ids.length) return 0
+  act((d) => {
+    for (const id of ids) {
+      const t = d.tasks[id]
+      if (t.remindAt) {
+        const r = new Date(t.remindAt)
+        const nd = parseDay(t0)
+        nd.setHours(r.getHours(), r.getMinutes(), 0, 0)
+        t.remindAt = nd.getTime()
+        t.reminded = false
+      }
+      t.due = t0
+    }
+  })
+  toast(`Moved ${ids.length} task${ids.length === 1 ? '' : 's'} to today`, { undo: true })
+  return ids.length
 }
 
 export function snoozeTask(id: string, due: string): void {

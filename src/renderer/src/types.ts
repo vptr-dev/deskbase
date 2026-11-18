@@ -188,6 +188,10 @@ export interface Game {
   /** wishlist: price / deal notes */
   price?: string
   releaseDate?: string | null
+  /** cover image as a small data URL */
+  cover?: string | null
+  /** estimated hours to beat */
+  estimate?: number | null
 }
 
 export interface Metric {
@@ -265,10 +269,14 @@ export interface Settings {
   glassStrength: number
   dailyXpGoal: number
   lootDrops: boolean
+  closeToTray: boolean
+  quickAddHotkey: boolean
 }
 
 export type QuestKind = 'tasks' | 'habits' | 'focus' | 'journal' | 'early' | 'priority' | 'tracker' | 'game' | 'xp'
 export interface Quest { id: string; kind: QuestKind; title: string; target: number; xp: number; gold: number; claimed: boolean }
+
+export interface Countdown { id: string; title: string; date: string; icon: string; color: string }
 
 export interface AssistantMessage { id: string; role: 'user' | 'assistant'; content: string; at: number; applied?: number[] }
 
@@ -290,6 +298,7 @@ export interface AppData {
   recent: string[]
   tags: Record<string, string>
   assistant: { messages: AssistantMessage[] }
-  quests: { date: string; list: Quest[]; bonusClaimed?: boolean }
-  inventory: { freezes: number }
+  quests: { date: string; list: Quest[]; bonusClaimed?: boolean; rerolled?: boolean }
+  inventory: { freezes: number; potions: number; potionUntil: number }
+  countdowns: Countdown[]
 }

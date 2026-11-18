@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
-import { act, setTaskDone, toast, updatePage, useData } from '../store'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { act, getData, moveOverdueToToday, setTaskDone, toast, updatePage, useData } from '../store'
 import type { Task, TaskStatus } from '../types'
 import { DIFFICULTY } from '../lib/game'
 import { addDays, friendlyDay, today } from '../lib/util'
@@ -102,6 +102,27 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
   const doneToday = mine.filter((t) => t.done && t.doneAt && new Date(t.doneAt).toDateString() === new Date().toDateString()).length
   const tags = [...new Set(mine.flatMap((t) => t.tags))].sort()
   const pct = mine.length ? mine.filter((t) => t.done).length / mine.length : 0
+  const overdueCount = mine.filter((t) => !t.done && !t.archived && t.due && t.due < today()).length
+  const [selected, setSelected] = useState<string[]>([])
+  const anchor = useRef<string | null>(null)
+  const order = groups.flatMap((g) => g.items.map((t) => t.id))
+  const select = (id: string, range: boolean): void => {
+    if (range && anchor.current && order.includes(anchor.current)) {
+      const [a, b] = [order.indexOf(anchor.current), order.indexOf(id)].sort((x, y) => x - y)
+      setSelected((s) => [...new Set([...s, ...order.slice(a, b + 1)])])
+    } else {
+      anchor.current = id
+      setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+    }
+  }
+  // Drop ids that disappeared (deleted, filtered out).
+  const live = selected.filter((id) => order.includes(id))
+  useEffect(() => {
+    if (!live.length) return
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') setSelected([]) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [live.length])
 
   const dropOn = (target: Task): void => {
     const from = dragId.current
@@ -139,7 +160,9 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
             act((d) => { for (const t of Object.values(d.tasks)) if (t.pageId === pageId && t.done) delete d.tasks[t.id] })
             toast(`Cleared ${n} completed`, { undo: true })
           } },
-          { label: 'Complete all visible', icon: 'check', onClick: () => visible.filter((t) => !t.done).forEach((t) => setTaskDone(t.id, true)) }
+          { label: 'Complete all visible', icon: 'check', onClick: () => visible.filter((t) => !t.done).forEach((t) => setTaskDone(t.id, true)) },
+          { label: 'Select all visible', icon: 'list', onClick: () => setSelected(order) },
+          { label: `Move overdue to today${overdueCount ? ` (${overdueCount})` : ''}`, icon: 'calendar', disabled: !overdueCount, onClick: () => moveOverdueToToday(pageId) }
         ]} />
       </div>
 
@@ -156,6 +179,7 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
         <span>{open} open</span><span>·</span><span>{doneToday} done today</span>
         <Progress value={pct} height={4} className="grow" />
         <span>{Math.round(pct * 100)}%</span>
+        {overdueCount > 0 && <button className="link danger-link" onClick={() => moveOverdueToToday(pageId)}>{overdueCount} overdue · move to today</button>}
       </div>
 
       {visible.length === 0 ? (
@@ -166,12 +190,13 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
             {g.label && <div className="group-label">{g.label}<span className="count">{g.items.length}</span></div>}
             <div className="task-list glass">
               {g.items.map((t) => (
-                <TaskRow key={t.id} task={t} onOpen={openTask} draggable={sort === 'manual' || group === 'none'} onDragStart={() => { dragId.current = t.id }} onDropOn={() => dropOn(t)} />
+                <TaskRow key={t.id} task={t} onOpen={openTask} selected={live.includes(t.id)} onSelect={select} draggable={sort === 'manual' || group === 'none'} onDragStart={() => { dragId.current = t.id }} onDropOn={() => dropOn(t)} />
               ))}
             </div>
           </div>
         ))
       )}
+      {live.length > 0 && <BulkBar ids={live} onClear={() => setSelected([])} />}
       {drawer}
     </div>
   )
@@ -229,4 +254,35 @@ function BoardAdd({ pageId, status }: { pageId: string; status: TaskStatus }): J
   const [on, setOn] = useState(false)
   if (!on) return <Button kind="ghost" small icon="plus" className="board-add" onClick={() => setOn(true)}>New</Button>
   return <QuickAdd pageId={pageId} defaults={{ status }} placeholder="Card title, then Enter" />
+}
+
+/** Floating action bar for a multi-selection of tasks (Ctrl/Shift click). */
+export function BulkBar({ ids, onClear }: { ids: string[]; onClear: () => void }): JSX.Element {
+  const lists = useData((d) => Object.values(d.pages).filter((p) => !p.deletedAt && (p.type === 'tasks' || p.type === 'board')))
+  const t0 = today()
+  const each = (fn: (t: Task) => void): void => act((d) => { for (const id of ids) if (d.tasks[id]) fn(d.tasks[id]) })
+  const n = ids.length
+  return (
+    <div className="bulk-bar glass-strong" role="toolbar" aria-label="Selected tasks">
+      <span className="bulk-count">{n} selected</span>
+      <Button small icon="check" onClick={() => {
+        const open = ids.filter((id) => !getData().tasks[id]?.done)
+        if (open.length) open.forEach((id) => setTaskDone(id, true))
+        else ids.forEach((id) => setTaskDone(id, false))
+        onClear()
+      }}>Complete</Button>
+      <MenuButton icon="calendar" title="Due date" label="Due" items={[
+        { label: 'Today', onClick: () => each((t) => { t.due = t0 }) },
+        { label: 'Tomorrow', onClick: () => each((t) => { t.due = addDays(t0, 1) }) },
+        { label: 'In a week', onClick: () => each((t) => { t.due = addDays(t0, 7) }) },
+        { label: 'Push one day', onClick: () => each((t) => { t.due = addDays(t.due && t.due > t0 ? t.due : t0, 1) }) },
+        { divider: true, label: '' },
+        { label: 'Remove date', icon: 'x', onClick: () => each((t) => { t.due = null; t.time = null }) }
+      ]} />
+      <MenuButton icon="flag" title="Priority" label="Priority" items={PRIORITY.map((p) => ({ label: p.label, onClick: () => each((t) => { t.priority = p.v as Task['priority'] }) }))} />
+      <MenuButton icon="folder" title="Move to list" label="Move" items={lists.map((p) => ({ label: `${p.icon} ${p.title || 'Untitled'}`, onClick: () => { each((t) => { t.pageId = p.id }); onClear(); toast(`Moved ${n} task${n === 1 ? '' : 's'}`, { undo: true }) } }))} />
+      <Button small icon="trash" onClick={() => { act((d) => { for (const id of ids) delete d.tasks[id] }); onClear(); toast(`Deleted ${n} task${n === 1 ? '' : 's'}`, { undo: true }) }}>Delete</Button>
+      <button className="icon-btn" title="Clear selection (Esc)" onClick={onClear}><Icon name="x" size={14} /></button>
+    </div>
+  )
 }

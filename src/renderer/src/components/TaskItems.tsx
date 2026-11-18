@@ -60,8 +60,9 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task' }: 
   )
 }
 
-export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDropOn }: {
+export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDropOn, selected, onSelect }: {
   task: Task; showPage?: boolean; onOpen: (id: string) => void; draggable?: boolean; onDragStart?: () => void; onDropOn?: () => void
+  selected?: boolean; onSelect?: (id: string, range: boolean) => void
 }): JSX.Element {
   const pageTitle = useData((d) => (showPage ? d.pages[task.pageId]?.title : ''))
   const goalTitle = useData((d) => (task.goalId ? d.goals[task.goalId]?.title : ''))
@@ -85,8 +86,12 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
   const subDone = task.subtasks.filter((s) => s.done).length
   return (
     <div
-      className={`task-row ${task.done ? 'done' : ''} ${over ? 'drag-over' : ''}`}
-      onClick={() => onOpen(task.id)}
+      className={`task-row ${task.done ? 'done' : ''} ${over ? 'drag-over' : ''} ${selected ? 'selected' : ''}`}
+      onClick={(e) => {
+        if (onSelect && (e.ctrlKey || e.metaKey || e.shiftKey)) { e.preventDefault(); onSelect(task.id, e.shiftKey) }
+        else onOpen(task.id)
+      }}
+      onMouseDown={(e) => { if (onSelect && e.shiftKey) e.preventDefault() }}
       draggable={draggable}
       onDragStart={(e) => { e.dataTransfer.setData('text/task', task.id); onDragStart?.() }}
       onDragOver={(e) => { if (onDropOn) { e.preventDefault(); setOver(true) } }}

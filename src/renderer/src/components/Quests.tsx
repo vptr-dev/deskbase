@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { buyFreeze, claimQuest, ensureQuests, FREEZE_COST, FREEZE_MAX, useData } from '../store'
+import { useEffect, useState } from 'react'
+import { buyFreeze, buyPotion, claimQuest, drinkPotion, ensureQuests, FREEZE_COST, FREEZE_MAX, POTION_COST, POTION_MAX, POTION_MINUTES, REROLL_COST, rerollQuest, useData } from '../store'
 import { questDef, questProgress } from '../lib/quests'
 import { Button, Progress } from './ui'
 import { Icon } from './Icon'
@@ -32,7 +32,12 @@ export function QuestsPanel(): JSX.Element | null {
             </div>
             {q.claimed ? <span className="quest-done"><Icon name="check" size={14} stroke={3} /></span>
               : ready ? <Button small kind="primary" onClick={() => claimQuest(q.id)}>Claim</Button>
-              : <span className="xp-chip">{q.xp} XP</span>}
+              : <>
+                {!quests.rerolled && p === 0 && (
+                  <button className="icon-btn quest-reroll" title={`Reroll this quest (${REROLL_COST} gold, once a day)`} disabled={data.profile.gold < REROLL_COST} onClick={() => rerollQuest(q.id)}><Icon name="dice" size={14} /></button>
+                )}
+                <span className="xp-chip">{q.xp} XP</span>
+              </>}
           </div>
         )
       })}
@@ -44,6 +49,9 @@ export function ShopPanel(): JSX.Element | null {
   const gold = useData((d) => d.profile.gold)
   const freezes = useData((d) => d.inventory.freezes)
   const gamified = useData((d) => d.settings.gamification)
+  const potions = useData((d) => d.inventory.potions)
+  const potionUntil = useData((d) => d.inventory.potionUntil)
+  const left = usePotionLeft(potionUntil)
   if (!gamified) return null
   return (
     <section className="panel glass">
@@ -56,6 +64,31 @@ export function ShopPanel(): JSX.Element | null {
         </div>
         <Button small disabled={gold < FREEZE_COST || freezes >= FREEZE_MAX} onClick={buyFreeze}><Icon name="coin" size={13} /> {FREEZE_COST}</Button>
       </div>
+      <div className="shop-item">
+        <span className="quest-icon">🧪</span>
+        <div className="grow min0">
+          <div>XP potion</div>
+          <div className="muted small">{left > 0 ? `Active · ${formatLeft(left)} left` : `Double XP for ${POTION_MINUTES} minutes`} · {potions}/{POTION_MAX} held</div>
+        </div>
+        {potions > 0 && left <= 0 && <Button small kind="primary" onClick={drinkPotion}>Drink</Button>}
+        <Button small disabled={gold < POTION_COST || potions >= POTION_MAX} onClick={buyPotion}><Icon name="coin" size={13} /> {POTION_COST}</Button>
+      </div>
     </section>
   )
+}
+
+/** Milliseconds left on an active XP potion, refreshed every 15 s. */
+export function usePotionLeft(until: number): number {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    if (until <= Date.now()) return
+    const id = setInterval(() => setNow(Date.now()), 15_000)
+    return () => clearInterval(id)
+  }, [until])
+  return Math.max(0, until - now)
+}
+
+export const formatLeft = (ms: number): string => {
+  const m = Math.ceil(ms / 60_000)
+  return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`
 }

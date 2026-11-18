@@ -2,7 +2,7 @@ import type { AppData, Page, PageType, Settings } from '../types'
 import { DEFAULT_STATS } from './game'
 import { uid } from './util'
 
-export const SCHEMA = 3
+export const SCHEMA = 4
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: '📄', desc: 'Notes and documents' },
@@ -67,7 +67,9 @@ export const DEFAULT_SETTINGS: Settings = {
   spellcheck: true,
   glassStrength: 60,
   dailyXpGoal: 100,
-  lootDrops: true
+  lootDrops: true,
+  closeToTray: false,
+  quickAddHotkey: true
 }
 
 export function newPage(type: PageType, title?: string, parentId: string | null = null): Page {
@@ -132,7 +134,8 @@ export function freshData(): AppData {
     tags: {},
     assistant: { messages: [] },
     quests: { date: '', list: [] },
-    inventory: { freezes: 0 }
+    inventory: { freezes: 0, potions: 0, potionUntil: 0 },
+    countdowns: []
   }
 }
 
@@ -157,8 +160,13 @@ export function normalize(raw: any): AppData {
     recent: raw.recent ?? [],
     tags: raw.tags ?? {},
     assistant: { messages: Array.isArray(raw.assistant?.messages) ? raw.assistant.messages : [] },
-    quests: raw.quests && Array.isArray(raw.quests.list) ? { date: String(raw.quests.date ?? ''), list: raw.quests.list, bonusClaimed: !!raw.quests.bonusClaimed } : { date: '', list: [] },
-    inventory: { freezes: Math.max(0, Number(raw.inventory?.freezes) || 0) }
+    quests: raw.quests && Array.isArray(raw.quests.list) ? { date: String(raw.quests.date ?? ''), list: raw.quests.list, bonusClaimed: !!raw.quests.bonusClaimed, rerolled: !!raw.quests.rerolled } : { date: '', list: [] },
+    inventory: {
+      freezes: Math.max(0, Number(raw.inventory?.freezes) || 0),
+      potions: Math.max(0, Number(raw.inventory?.potions) || 0),
+      potionUntil: Math.max(0, Number(raw.inventory?.potionUntil) || 0)
+    },
+    countdowns: Array.isArray(raw.countdowns) ? raw.countdowns.filter((c: any) => c && typeof c === 'object' && c.id).map((c: any) => ({ title: '', date: '', icon: '📅', color: '#0a84ff', ...c })) : []
   }
   for (const k of ['tasks', 'habits', 'journal', 'goals', 'rewards', 'games', 'metrics'] as const) {
     ;(d as any)[k] = raw[k] ?? {}
@@ -197,6 +205,8 @@ export function normalize(raw: any): AppData {
     g.goals = g.goals ?? []
     g.price = g.price ?? ''
     g.releaseDate = g.releaseDate ?? null
+    g.cover = typeof g.cover === 'string' && g.cover.startsWith('data:image/') ? g.cover : null
+    g.estimate = typeof g.estimate === 'number' && g.estimate > 0 ? g.estimate : null
   }
   return d
 }
