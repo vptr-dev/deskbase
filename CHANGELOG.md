@@ -4,6 +4,19 @@
 
 ## 0.4.0 — 2026-11-18
 
+- Select several tasks with Ctrl or Shift click, then complete, reschedule, change priority, move or delete them together.
+- "Move overdue to today" on to-do lists, the Today page and the weekly review.
+- Quick add from anywhere: press Ctrl Shift Space (can be turned off in Settings), or use "Quick add task" in the command palette.
+- Optional tray icon: with "Close to tray" on, closing the window keeps Planner running in the tray.
+- New Weekly review page: tasks done per day, XP, habit rate, focus time, journal mood, games played, and a reflection note for each week.
+- Countdowns on the Today page (trips, birthdays that repeat every year, launches). Wishlist games with a release date show up there too.
+- Game library: cover images (choose, drop or paste), your own "time to beat" estimate with progress, last played on cards, and a 12-week play chart per game. The stats show how many hours your backlog still needs.
+- Habits: month view with "don't break the chain" strips.
+- Daily quests: reroll one quest a day for 15 gold.
+- Item shop: XP potion (double XP for an hour).
+- Pages can have a gradient cover.
+- Pick any accent color with the new custom color option.
+
 ## 0.3.0 — 2026-11-18
 
 - Game library: "What should I play?" picks a random game from your backlog.
