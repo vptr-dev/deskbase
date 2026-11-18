@@ -205,7 +205,11 @@ export function SettingsDialog(): JSX.Element {
           {tab === 'appearance' && <>
             <h3>Appearance</h3>
             <Row label="Theme"><Segmented small value={s.theme} onChange={(v) => set((x) => { x.theme = v })} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} /></Row>
-            <Row label="Accent color"><div className="color-dots">{ACCENTS.map((a) => <button key={a.value} title={a.name} className={`color-dot ${s.accent === a.value ? 'active' : ''}`} style={{ background: a.value }} onClick={() => set((x) => { x.accent = a.value })} />)}</div></Row>
+            <Row label="Accent color"><div className="color-dots">{ACCENTS.map((a) => <button key={a.value} title={a.name} className={`color-dot ${s.accent === a.value ? 'active' : ''}`} style={{ background: a.value }} onClick={() => set((x) => { x.accent = a.value })} />)}
+              <label title="Custom color" className={`color-dot custom-dot ${ACCENTS.some((a) => a.value === s.accent) ? '' : 'active'}`} style={ACCENTS.some((a) => a.value === s.accent) ? undefined : { ['--custom' as any]: s.accent }}>
+                <input id="accent-custom" type="color" value={s.accent} onChange={(e) => { const v = e.target.value; set((x) => { x.accent = v }) }} />
+              </label>
+            </div></Row>
             <Row label="Window material" sub={info && !info.micaSupported ? 'Mica needs Windows 11' : 'Mica tints the window with your wallpaper'}>
               <Segmented small value={s.material} onChange={(v) => { set((x) => { x.material = v }); api.setMaterial(v) }} options={[{ value: 'mica', label: 'Mica' }, { value: 'acrylic', label: 'Acrylic' }, { value: 'none', label: 'Solid' }]} />
             </Row>

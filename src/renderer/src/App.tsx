@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { act, boot, duplicatePage, flushSave, getData, onConfetti, openPage, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
 import { api } from './lib/api'
-import { typeInfo } from './lib/defaults'
+import { COVERS, typeInfo } from './lib/defaults'
 import { exportPageMarkdown } from './lib/exporters'
 import { MovePageDialog } from './components/MovePage'
 import { habitWeek } from './lib/game'
 import { playLevelUp } from './lib/sound'
 import { Sidebar } from './components/Sidebar'
 import { Icon } from './components/Icon'
-import { IconPickerButton, MenuButton } from './components/ui'
+import { Button, IconPickerButton, MenuButton, Popover } from './components/ui'
 import { CommandPalette, NewPageDialog, SettingsDialog, ShortcutsDialog, TrashDialog } from './components/Overlays'
 import { DocPage, BlockEditor } from './pages/DocPage'
 import { BoardPage, TasksPage } from './pages/TasksPage'
@@ -115,6 +115,32 @@ function SubpageList({ page }: { page: Page }): JSX.Element | null {
   )
 }
 
+function CoverPicker({ value, onPick }: { value?: string | null; onPick: (c: string) => void }): JSX.Element {
+  return (
+    <div className="cover-grid">
+      {COVERS.map((c) => <button key={c} title={c} className={`cover-swatch ${value === c ? 'active' : ''}`} style={{ background: `var(--cover-${c})` }} onClick={() => onPick(c)} />)}
+    </div>
+  )
+}
+
+function PageCover({ page }: { page: Page }): JSX.Element | null {
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  if (!page.cover || !COVERS.includes(page.cover)) return null
+  return (
+    <div className="page-cover" style={{ background: `var(--cover-${page.cover})` }}>
+      {!page.locked && (
+        <div className="page-cover-actions">
+          <Button small onClick={(e) => setEl(e.currentTarget as HTMLElement)}>Change cover</Button>
+          <Button small onClick={() => updatePage(page.id, (p) => { p.cover = null })}>Remove</Button>
+        </div>
+      )}
+      {el && <Popover anchor={el} onClose={() => setEl(null)} width={300} align="end"><CoverPicker value={page.cover} onPick={(c) => { updatePage(page.id, (p) => { p.cover = c }); setEl(null) }} /></Popover>}
+    </div>
+  )
+}
+
+const randomCover = (): string => COVERS[Math.floor(Math.random() * COVERS.length)]
+
 function PageView({ id }: { id: string }): JSX.Element | null {
   const page = useData((d) => d.pages[id])
   const titleRef = useRef<HTMLInputElement>(null)
@@ -125,7 +151,8 @@ function PageView({ id }: { id: string }): JSX.Element | null {
   const info = typeInfo(page.type)
   const showNotes = page.type !== 'doc' && page.view?.notes
   return (
-    <div className={`page ${page.fullWidth || ['calendar', 'board', 'games'].includes(page.type) ? 'full' : ''} page-${page.type}`}>
+    <div className={`page ${page.fullWidth || ['calendar', 'board', 'games'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
+      <PageCover page={page} />
       <div className="page-header">
         <IconPickerButton size="lg" value={page.icon} placeholder={info.icon} onChange={(icon) => updatePage(id, (p) => { p.icon = icon })} />
         <input
@@ -312,6 +339,7 @@ export function App(): JSX.Element {
             <span className="no-drag">
               <MenuButton items={[
                 { label: page.favorite ? 'Remove from favorites' : 'Add to favorites', icon: 'star', onClick: () => updatePage(page.id, (p) => { p.favorite = !p.favorite }) },
+                { label: page.cover ? 'Remove cover' : 'Add cover', icon: 'grid', onClick: () => updatePage(page.id, (p) => { p.cover = p.cover ? null : randomCover() }) },
                 { label: 'Full width', checked: !!page.fullWidth, onClick: () => updatePage(page.id, (p) => { p.fullWidth = !p.fullWidth }) },
                 { label: 'Lock page', checked: !!page.locked, onClick: () => updatePage(page.id, (p) => { p.locked = !p.locked }) },
                 ...(page.type !== 'doc' ? [{ label: 'Show notes area', checked: !!page.view?.notes, onClick: () => updatePage(page.id, (p) => { p.view = { ...(p.view ?? {}), notes: !p.view?.notes } }) }] : []),

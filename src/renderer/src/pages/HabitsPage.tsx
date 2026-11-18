@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { applyFreeze } from '../store'
-import { act, award, pageItems, removeItem, revoke, upsert, useData, patch } from '../store'
+import { act, award, pageItems, removeItem, revoke, upsert, useData, patch, updatePage } from '../store'
 import type { Difficulty, Habit, StatKey } from '../types'
 import { DIFFICULTY, STAT_KEYS, freezableDay, habitBestStreak, habitDayTarget, habitDoneOn, habitDueToday, habitRate, habitScheduled, habitStreak, habitWeekCount, habitWeekKey, isWeekly } from '../lib/game'
 import { COLORS } from '../lib/defaults'
-import { DAYS_SHORT, addDays, friendlyDay, parseDay, today, uid } from '../lib/util'
+import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid } from '../lib/util'
 import { Button, ColorDots, ConfirmButton, Empty, IconPickerButton, MenuButton, Modal, Ring, Segmented } from '../components/ui'
 import { Icon } from '../components/Icon'
 
@@ -124,6 +124,7 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
   const [overId, setOverId] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null)
   const freezes = useData((d) => d.inventory.freezes)
+  const mode: 'week' | 'month' = useData((d) => d.pages[pageId]?.view?.habitMode) ?? 'week'
   const gamified = useData((d) => d.settings.gamification)
   const habits = pageItems(all, pageId).filter((h) => !!h.archived === showArchived)
   const t = today()
@@ -149,11 +150,12 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
         <Ring value={scheduledToday.length ? doneToday / scheduledToday.length : 0} size={40} stroke={4}><span className="small">{doneToday}/{scheduledToday.length}</span></Ring>
         <div className="toolbar-text"><div className="strong">Today</div><div className="muted small">{scheduledToday.length - doneToday} left</div></div>
         <div className="spacer" />
+        <Segmented small value={mode} onChange={(v) => updatePage(pageId, (p) => { p.view = { ...(p.view ?? {}), habitMode: v } })} options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }]} />
         <Button kind="ghost" small icon={showArchived ? 'eye' : 'eyeOff'} onClick={() => setShowArchived(!showArchived)}>{showArchived ? 'Active' : 'Archived'}</Button>
         <Button kind="primary" small icon="plus" onClick={() => setEditing(newHabit(pageId, habits.length))}>New habit</Button>
       </div>
 
-      {habits.length === 0 ? <Empty icon="🔁" title={showArchived ? 'No archived habits' : 'No habits yet'} /> : (
+      {habits.length === 0 ? <Empty icon="🔁" title={showArchived ? 'No archived habits' : 'No habits yet'} /> : mode === 'month' ? <MonthChains habits={habits} /> : (
         <div className="habit-table glass">
           <div className="habit-head">
             <div />
@@ -242,3 +244,60 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
     </div>
   )
 }
+
+/** Whole-month "don't break the chain" view: one strip per habit, done days link up. */
+function MonthChains({ habits }: { habits: Habit[] }): JSX.Element {
+  const t = today()
+  const [ym, setYm] = useState(t.slice(0, 7))
+  const [y, m] = ym.split('-').map(Number)
+  const count = new Date(y, m, 0).getDate()
+  const days = Array.from({ length: count }, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`)
+  const shift = (n: number): void => { const d = new Date(y, m - 1 + n, 1); setYm(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`) }
+  return (
+    <div className="chains glass">
+      <div className="chains-nav">
+        <button className="icon-btn" title="Previous month" onClick={() => shift(-1)}><Icon name="left" size={14} /></button>
+        <span className="strong">{MONTHS_LONG[m - 1]} {y}</span>
+        <button className="icon-btn" title="Next month" disabled={ym >= t.slice(0, 7)} onClick={() => shift(1)}><Icon name="right" size={14} /></button>
+        {ym !== t.slice(0, 7) && <button className="link small" onClick={() => setYm(t.slice(0, 7))}>This month</button>}
+      </div>
+      <div className="chains-scroll">
+        <div className="chain-head" style={{ ['--n' as any]: count }}>
+          <span />
+          {days.map((k) => <span key={k} className={`chain-day ${k === t ? 'today' : ''}`}>{parseDay(k).getDate()}</span>)}
+          <span />
+        </div>
+        {habits.map((h) => {
+          const done = (k: string): boolean => (h.kind === 'good' ? habitDoneOn(h, k) : !(h.log[k] > 0) && k <= t && k >= dayOf(h.createdAt))
+          const hits = days.filter((k) => k <= t && done(k)).length
+          const elapsed = days.filter((k) => k <= t && k >= dayOf(h.createdAt)).length
+          return (
+            <div key={h.id} className="chain-row" style={{ ['--n' as any]: count, ['--c' as any]: h.color }}>
+              <span className="chain-name ellipsis" title={h.name}>{h.icon} {h.name}</span>
+              {days.map((k, i) => {
+                const on = k <= t && done(k)
+                const prev = i > 0 && days[i - 1] <= t && done(days[i - 1])
+                const next = i < days.length - 1 && days[i + 1] <= t && done(days[i + 1])
+                const slip = h.kind === 'bad' && (h.log[k] ?? 0) > 0
+                const frozen = (h.frozen ?? []).includes(k) && !on
+                return (
+                  <button
+                    key={k}
+                    disabled={k > t}
+                    className={`chain-cell ${on ? 'on' : ''} ${on && prev ? 'l' : ''} ${on && next ? 'r' : ''} ${slip ? 'slip' : ''} ${frozen ? 'frozen' : ''} ${k === t ? 'today' : ''} ${habitScheduled(h, k) ? '' : 'off'}`}
+                    title={`${friendlyDay(k)}${h.kind === 'bad' ? (slip ? ' · slipped' : '') : ` · ${h.log[k] ?? 0}/${habitDayTarget(h)}`}`}
+                    onClick={() => logHabit(h.id, k, h.kind === 'good' && habitDoneOn(h, k) ? -(h.log[k] ?? 0) : 1)}
+                    onContextMenu={(e) => { e.preventDefault(); logHabit(h.id, k, -1) }}
+                  />
+                )
+              })}
+              <span className="chain-count muted small tabular" title={h.kind === 'bad' ? 'Clean days' : 'Days done'}>{hits}/{elapsed || 0}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const dayOf = (ts: number): string => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }

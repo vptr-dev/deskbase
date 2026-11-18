@@ -37,6 +37,9 @@ export const ACCENTS: { name: string; value: string }[] = [
   { name: 'Graphite', value: '#8e8e93' }
 ]
 
+/** Page cover gradients; the colors live in styles.css as --cover-<id>. */
+export const COVERS = ['dawn', 'ocean', 'forest', 'sunset', 'aurora', 'dusk', 'peach', 'slate', 'mint', 'berry', 'sand', 'night']
+
 export const COLORS = ['#0a84ff', '#5e5ce6', '#bf5af2', '#ff375f', '#ff453a', '#ff9f0a', '#e5b000', '#30d158', '#00c7be', '#40c8e0', '#8e8e93', '#a2845e']
 
 export const DEFAULT_SETTINGS: Settings = {

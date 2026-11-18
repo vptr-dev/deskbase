@@ -1,6 +1,18 @@
 /* Layout: Mica window → translucent sidebar on the left, a frosted content layer on the right,
    glass cards inside. All colors come from the tokens below. */
 :root {
+  --cover-dawn: linear-gradient(120deg, #fbc2eb 0%, #a6c1ee 100%);
+  --cover-ocean: linear-gradient(120deg, #2b5876 0%, #4e9fd1 55%, #8fd3f4 100%);
+  --cover-forest: linear-gradient(120deg, #134e3a 0%, #3f8f5b 55%, #a8d5a2 100%);
+  --cover-sunset: linear-gradient(120deg, #ff7e5f 0%, #feb47b 100%);
+  --cover-aurora: linear-gradient(120deg, #0f2027 0%, #2c5364 40%, #30d1a0 100%);
+  --cover-dusk: linear-gradient(120deg, #3a1c71 0%, #d76d77 60%, #ffaf7b 100%);
+  --cover-peach: linear-gradient(120deg, #ffecd2 0%, #fcb69f 100%);
+  --cover-slate: linear-gradient(120deg, #3e4a5a 0%, #8693a5 100%);
+  --cover-mint: linear-gradient(120deg, #d4fc79 0%, #96e6a1 100%);
+  --cover-berry: linear-gradient(120deg, #8e2de2 0%, #ff375f 100%);
+  --cover-sand: linear-gradient(120deg, #e6dada 0%, #c9b79c 100%);
+  --cover-night: linear-gradient(120deg, #0f0c29 0%, #302b63 55%, #24243e 100%);
   --accent: #0a84ff;
   --fs: 14px;
   --sidebar-w: 248px;
@@ -800,3 +812,35 @@ input[type='checkbox'] { accent-color: var(--accent); }
 .countdown-days { flex-shrink: 0; font-size: 1.05em; }
 .countdowns > .link { margin-top: 4px; }
 .block { display: block; }
+.chains { padding: 10px 12px 12px; }
+.chains-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.chains-nav .strong { min-width: 120px; text-align: center; }
+.chains-scroll { overflow-x: auto; }
+.chain-head, .chain-row { display: grid; grid-template-columns: minmax(130px, 180px) repeat(var(--n), minmax(16px, 1fr)) 52px; align-items: center; min-width: 720px; }
+.chain-head { font-size: 10px; color: var(--muted); padding-bottom: 4px; }
+.chain-day { text-align: center; font-variant-numeric: tabular-nums; }
+.chain-day.today { color: var(--accent); font-weight: 700; }
+.chain-row { padding: 5px 0; border-top: 1px solid var(--line); }
+.chain-name { padding-right: 8px; font-size: 13px; }
+.chain-count { text-align: right; }
+.chain-cell { --c: var(--accent); height: 18px; margin: 0 2px; border-radius: 6px; background: var(--track); transition: background 0.12s; }
+.chain-cell:not(:disabled):hover { box-shadow: inset 0 0 0 1.5px var(--c); }
+.chain-cell:disabled { opacity: 0.35; cursor: default; }
+.chain-cell.off:not(.on) { opacity: 0.45; }
+.chain-cell.on { background: var(--c); }
+.chain-cell.on.l { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.chain-cell.on.r { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.chain-cell.slip { background: var(--danger); }
+.chain-cell.frozen { background: color-mix(in srgb, #40c8e0 35%, transparent); }
+.chain-cell.today { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+.custom-dot { position: relative; overflow: hidden; cursor: pointer; background: conic-gradient(#ff453a, #ff9f0a, #ffd60a, #30d158, #40c8e0, #0a84ff, #bf5af2, #ff453a); }
+.custom-dot.active { background: var(--custom); }
+.custom-dot input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; border: 0; padding: 0; }
+.page-cover { position: relative; height: 150px; margin: 0 0 -28px; border-radius: 14px; overflow: hidden; }
+.page-cover-actions { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; opacity: 0; transition: opacity 0.15s; }
+.page-cover:hover .page-cover-actions, .page-cover-actions:focus-within { opacity: 1; }
+.page-cover-actions .btn { background: var(--card-strong); }
+.cover-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px; }
+.cover-swatch { height: 38px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--line); }
+.cover-swatch.active { box-shadow: 0 0 0 2px var(--accent); }
+.page-has-cover .page-header { position: relative; z-index: 1; }
