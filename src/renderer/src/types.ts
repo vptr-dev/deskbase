@@ -276,7 +276,7 @@ export interface Settings {
 export type QuestKind = 'tasks' | 'habits' | 'focus' | 'journal' | 'early' | 'priority' | 'tracker' | 'game' | 'xp'
 export interface Quest { id: string; kind: QuestKind; title: string; target: number; xp: number; gold: number; claimed: boolean }
 
-export interface Countdown { id: string; title: string; date: string; icon: string; color: string }
+export interface Countdown { id: string; title: string; date: string; icon: string; color: string; yearly?: boolean }
 
 export interface AssistantMessage { id: string; role: 'user' | 'assistant'; content: string; at: number; applied?: number[] }
 

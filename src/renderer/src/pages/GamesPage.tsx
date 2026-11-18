@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { act, award, getData, patch, removeItem, revoke, updatePage, upsert, useData } from '../store'
 import type { Game, GameStatus } from '../types'
 import { COLORS } from '../lib/defaults'
-import { MONTHS_LONG, diffDays, formatMinutes, friendlyDay, plural, today, uid } from '../lib/util'
+import { MONTHS_LONG, addDays, diffDays, weekStartOf, formatMinutes, friendlyDay, plural, today, uid } from '../lib/util'
 import { AutoText, BarChart, Button, Checkbox, ConfirmButton, Empty, MenuButton, Modal, Progress, Segmented, Stat } from '../components/ui'
 import { Icon } from '../components/Icon'
+import { imageToDataUrl, pickImage } from '../lib/image'
 
 export const GAME_STATUS: { v: GameStatus; label: string; color: string }[] = [
   { v: 'playing', label: 'Playing', color: '#0a84ff' },
@@ -16,6 +17,29 @@ export const GAME_STATUS: { v: GameStatus; label: string; color: string }[] = [
 ]
 const PLATFORMS = ['PC', 'PlayStation 5', 'PlayStation 4', 'Xbox Series', 'Xbox One', 'Switch', 'Switch 2', 'Steam Deck', 'Mobile', 'Retro', 'Other']
 const statusInfo = (s: GameStatus): (typeof GAME_STATUS)[number] => GAME_STATUS.find((x) => x.v === s) ?? GAME_STATUS[1]
+
+/** Cover art: the user's image if set, else the colored letter tile. */
+export function GameCover({ g, sm }: { g: Pick<Game, 'title' | 'color' | 'cover'>; sm?: boolean }): JSX.Element {
+  if (g.cover) return <div className={`game-cover has-img ${sm ? 'sm' : ''}`}><img src={g.cover} alt="" draggable={false} /></div>
+  return <div className={`game-cover ${sm ? 'sm' : ''}`} style={{ background: sm ? g.color : `linear-gradient(135deg, ${g.color}, ${g.color}88)` }}>{(g.title || '?').slice(0, 1).toUpperCase()}</div>
+}
+
+const ago = (day: string): string => {
+  const n = diffDays(day, today())
+  return n <= 0 ? 'today' : n === 1 ? 'yesterday' : n < 30 ? `${n}d ago` : n < 365 ? `${Math.floor(n / 30)}mo ago` : `${Math.floor(n / 365)}y ago`
+}
+
+/** Hours per week over the last 12 weeks from the session log. */
+function weeklyHours(g: Game): { label: string; value: number }[] {
+  const start = weekStartOf(today(), 1)
+  return Array.from({ length: 12 }, (_, i) => {
+    const from = addDays(start, -7 * (11 - i))
+    const to = addDays(from, 7)
+    const mins = g.sessions.filter((s) => s.date >= from && s.date < to).reduce((a, s) => a + s.minutes, 0)
+    const d = new Date(from + 'T00:00')
+    return { label: i % 3 === 0 ? `${d.getDate()}/${d.getMonth() + 1}` : '', value: Math.round((mins / 60) * 10) / 10 }
+  })
+}
 
 function setGameStatus(id: string, status: GameStatus): void {
   act((d) => {
@@ -160,7 +184,7 @@ function BacklogPicker({ games, onClose, onOpen }: { games: Game[]; onClose: () 
         <Segmented small value={pool} onChange={setPool} options={[{ value: 'backlog', label: 'Backlog' }, { value: 'paused', label: 'Backlog + paused' }, { value: 'any', label: 'Unfinished' }]} />
         {pick ? (
           <div className={`picker-card ${rolling ? 'rolling' : ''}`}>
-            <div className="game-cover sm" style={{ background: `linear-gradient(135deg, ${pick.color}, ${pick.color}88)` }}>{pick.title.slice(0, 1).toUpperCase()}</div>
+            <GameCover g={pick} sm />
             <div className="min0">
               <div className="picker-title ellipsis">{pick.title}</div>
               <div className="muted small ellipsis">{[pick.platform, pick.genre].filter(Boolean).join(' · ') || statusInfo(pick.status).label}</div>
@@ -181,12 +205,35 @@ function BacklogPicker({ games, onClose, onOpen }: { games: Game[]; onClose: () 
 
 function GameEditor({ game, onClose }: { game: Game; onClose: () => void }): JSX.Element {
   const [g, setG] = useState(game)
-  const set = (p: Partial<Game>): void => setG({ ...g, ...p })
+  const set = (p: Partial<Game>): void => setG((cur) => ({ ...cur, ...p }))
+  const [coverErr, setCoverErr] = useState('')
+  const loadCover = async (file: Blob | null): Promise<void> => {
+    if (!file) return
+    try { set({ cover: await imageToDataUrl(file, 480, 640) }); setCoverErr('') } catch { setCoverErr('Could not read that image') }
+  }
   return (
     <Modal onClose={onClose} width={520}>
       <div className="modal-head"><h3>{game.title ? 'Edit game' : 'Add game'}</h3></div>
-      <div className="modal-body form">
-        <input id="game-title" autoFocus className="input" placeholder="Game title" value={g.title} onChange={(e) => set({ title: e.target.value })} />
+      <div className="modal-body form" onPaste={(e) => { const f = [...e.clipboardData.files].find((x) => x.type.startsWith('image/')); if (f) { e.preventDefault(); loadCover(f) } }}>
+        <div className="cover-edit">
+          <div
+            className="cover-drop"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); loadCover([...e.dataTransfer.files].find((x) => x.type.startsWith('image/')) ?? null) }}
+            onClick={async () => loadCover(await pickImage())}
+            title="Choose, drop or paste a cover image"
+          >
+            <GameCover g={g} />
+          </div>
+          <div className="grow min0 form">
+            <input id="game-title" autoFocus className="input" placeholder="Game title" value={g.title} onChange={(e) => set({ title: e.target.value })} />
+            <div className="row gap-sm wrap">
+              <Button small icon="upload" onClick={async () => loadCover(await pickImage())}>{g.cover ? 'Change cover' : 'Add cover'}</Button>
+              {g.cover && <Button small kind="ghost" onClick={() => set({ cover: null })}>Remove</Button>}
+            </div>
+            {coverErr && <div className="small danger">{coverErr}</div>}
+          </div>
+        </div>
         <div className="form-2">
           <div><label>Platform</label>
             <input id="game-platform" className="input" list="platforms" value={g.platform} onChange={(e) => set({ platform: e.target.value })} />
@@ -202,6 +249,8 @@ function GameEditor({ game, onClose }: { game: Game; onClose: () => void }): JSX
           <div><label>Hours played</label><input id="game-hours" type="number" min={0} step={0.5} className="input" value={g.hours} onChange={(e) => set({ hours: Math.max(0, Number(e.target.value) || 0) })} /></div>
           <div><label>Completion %</label><input id="game-comp" type="number" min={0} max={100} className="input" value={g.completion} onChange={(e) => set({ completion: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /></div>
         </div>
+        <label>Time to beat (hours, your estimate)</label>
+        <input id="game-estimate" type="number" min={0} step={0.5} className="input" placeholder="e.g. 40" value={g.estimate ?? ''} onChange={(e) => { const v = Number(e.target.value); set({ estimate: v > 0 ? v : null }) }} />
         <label>Rating</label>
         <div className="stars">
           {Array.from({ length: 10 }, (_, i) => (
@@ -246,7 +295,7 @@ function GameDetail({ id, onEdit, onClose }: { id: string; onEdit: () => void; o
     <div className="drawer-backdrop" onClick={onClose}>
       <div className="drawer glass-strong" onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
-          <div className="game-cover sm" style={{ background: g.color }}>{g.title.slice(0, 1).toUpperCase()}</div>
+          <GameCover g={g} sm />
           <div className="grow min0"><div className="drawer-title">{g.title}</div><div className="muted small">{[g.platform, g.genre].filter(Boolean).join(' · ')}</div></div>
           <Button kind="ghost" small icon="edit" title="Edit" onClick={onEdit} />
           <Button kind="ghost" small icon="x" title="Close" onClick={onClose} />
@@ -261,6 +310,12 @@ function GameDetail({ id, onEdit, onClose }: { id: string; onEdit: () => void; o
             <Stat label="Rating" value={g.rating ? `${g.rating}/10` : '–'} />
           </div>
           <Progress value={g.completion / 100} color={st.color} />
+          {g.estimate ? (
+            <div className="estimate">
+              <div className="row between small"><span>{g.hours}h of ~{g.estimate}h</span><span className="muted">{g.hours >= g.estimate ? 'Past the estimate' : `≈ ${Math.round((g.estimate - g.hours) * 10) / 10}h left`}</span></div>
+              <Progress value={Math.min(1, g.hours / g.estimate)} height={4} color="var(--accent)" />
+            </div>
+          ) : null}
           {(g.releaseDate || g.price) && (
             <div className="row gap-sm wrap small">
               {g.releaseDate && <span className="chip-btn">{releaseLabel(g.releaseDate)}</span>}
@@ -284,6 +339,12 @@ function GameDetail({ id, onEdit, onClose }: { id: string; onEdit: () => void; o
                 setNote('')
               }}>Log</Button>
             </div>
+            {g.sessions.length > 0 && (
+              <div className="game-chart">
+                <div className="row between small muted"><span>Last 12 weeks</span><span>Last played {ago(lastPlayed(g))}</span></div>
+                <BarChart data={weeklyHours(g)} height={80} color={st.color} format={(v) => `${v}h`} />
+              </div>
+            )}
             {g.sessions.slice(0, 12).map((s) => <div key={s.id} className="history-row"><span>{s.date}</span><span className="muted ellipsis">{s.note}</span><span>{formatMinutes(s.minutes)}</span></div>)}
           </div>
           <div className="drawer-section">
@@ -331,9 +392,10 @@ export function GamesPage({ pageId }: { pageId: string }): JSX.Element {
   const shown = games
     .filter((g) => (tab === 'all' || g.status === tab) && (!q || (g.title + g.platform + g.genre).toLowerCase().includes(q.toLowerCase())))
     .sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'hours' ? b.hours - a.hours : sort === 'rating' ? b.rating - a.rating : sort === 'release' ? (a.releaseDate ?? '9999').localeCompare(b.releaseDate ?? '9999') : sort === 'played' ? lastPlayed(b).localeCompare(lastPlayed(a)) : b.createdAt - a.createdAt)
-  const blank = (): Game => ({ id: uid(), pageId, title: '', platform: 'PC', genre: '', status: tab !== 'all' ? tab : 'backlog', hours: 0, rating: 0, completion: 0, notes: '', color: COLORS[games.length % COLORS.length], createdAt: Date.now(), sessions: [], goals: [], price: '', releaseDate: null })
+  const blank = (): Game => ({ id: uid(), pageId, title: '', platform: 'PC', genre: '', status: tab !== 'all' ? tab : 'backlog', hours: 0, rating: 0, completion: 0, notes: '', color: COLORS[games.length % COLORS.length], createdAt: Date.now(), sessions: [], goals: [], price: '', releaseDate: null, cover: null, estimate: null })
   const totalHours = games.reduce((a, g) => a + g.hours, 0)
   const rated = games.filter((g) => g.rating)
+  const backlogLeft = games.filter((g) => ['backlog', 'playing', 'paused'].includes(g.status) && g.estimate).reduce((a, g) => a + Math.max(0, g.estimate! - g.hours), 0)
   return (
     <div className="games-page">
       <div className="stat-row">
@@ -341,6 +403,7 @@ export function GamesPage({ pageId }: { pageId: string }): JSX.Element {
         <Stat label="Playing" value={games.filter((g) => g.status === 'playing').length} />
         <Stat label="Completed" value={games.filter((g) => g.status === 'completed').length} />
         <Stat label="Hours" value={Math.round(totalHours)} />
+        {backlogLeft > 0 && <Stat label="Backlog to beat" value={`${Math.round(backlogLeft)}h`} />}
         <Stat label="Avg rating" value={rated.length ? (rated.reduce((a, g) => a + g.rating, 0) / rated.length).toFixed(1) : '–'} />
       </div>
       <div className="toolbar">
@@ -360,10 +423,10 @@ export function GamesPage({ pageId }: { pageId: string }): JSX.Element {
             const st = statusInfo(g.status)
             return (
               <button key={g.id} className="game-card glass" onClick={() => setDetail(g.id)}>
-                <div className="game-cover" style={{ background: `linear-gradient(135deg, ${g.color}, ${g.color}88)` }}>{g.title.slice(0, 1).toUpperCase()}</div>
+                <GameCover g={g} />
                 <div className="game-info">
                   <div className="game-title ellipsis">{g.title}</div>
-                  <div className="muted small ellipsis">{g.platform}{g.hours ? ` · ${g.hours}h` : ''}</div>
+                  <div className="muted small ellipsis">{g.platform}{g.hours ? ` · ${g.hours}${g.estimate ? `/${g.estimate}` : ''}h` : g.estimate ? ` · ~${g.estimate}h` : ''}{g.sessions.length ? ` · ${ago(lastPlayed(g))}` : ''}</div>
                   {g.status === 'wishlist' && (g.releaseDate || g.price) && <div className="small accent ellipsis">{[g.releaseDate ? releaseLabel(g.releaseDate) : '', g.price].filter(Boolean).join(' · ')}</div>}
                   <div className="row between">
                     <span className="status-pill" style={{ ['--c' as any]: st.color }}>{st.label}</span>
@@ -377,12 +440,12 @@ export function GamesPage({ pageId }: { pageId: string }): JSX.Element {
         </div>
       ) : (
         <div className="table glass">
-          <div className="tr th"><span>Title</span><span>Platform</span><span>Status</span><span>Hours</span><span>%</span><span>Rating</span></div>
+          <div className="tr th"><span>Title</span><span>Platform</span><span>Status</span><span>Hours</span><span>%</span><span>Rating</span><span>Last played</span></div>
           {shown.map((g) => (
             <button key={g.id} className="tr" onClick={() => setDetail(g.id)}>
               <span className="strong ellipsis">{g.title}</span><span>{g.platform}</span>
               <span><span className="status-pill" style={{ ['--c' as any]: statusInfo(g.status).color }}>{statusInfo(g.status).label}</span></span>
-              <span>{g.hours}</span><span>{g.completion}</span><span>{g.rating || ''}</span>
+              <span>{g.hours}{g.estimate ? <span className="muted">/{g.estimate}</span> : null}</span><span>{g.completion}</span><span>{g.rating || ''}</span><span className="muted">{g.sessions.length ? ago(lastPlayed(g)) : ''}</span>
             </button>
           ))}
         </div>

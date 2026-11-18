@@ -783,3 +783,20 @@ input[type='checkbox'] { accent-color: var(--accent); }
 .bulk-bar { position: sticky; bottom: 16px; z-index: 20; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: fit-content; max-width: 100%; margin: 16px auto 0; padding: 6px 8px 6px 14px; border-radius: 14px; box-shadow: var(--shadow-lg); }
 .bulk-count { font-weight: 600; font-size: 12.5px; margin-right: 6px; font-variant-numeric: tabular-nums; }
 .group-label .link { margin-left: auto; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.games-page .tr { grid-template-columns: 2fr 1fr 1fr 80px 50px 60px 90px; min-width: 660px; }
+.game-cover.has-img { padding: 0; overflow: hidden; background: var(--track); }
+.game-cover.has-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-edit { display: flex; gap: 14px; align-items: flex-start; }
+.cover-drop { width: 120px; flex-shrink: 0; border-radius: 10px; overflow: hidden; cursor: pointer; box-shadow: inset 0 0 0 1px var(--line); }
+.cover-drop .game-cover { border-radius: 0; font-size: 2em; }
+.cover-drop:hover { box-shadow: 0 0 0 2px var(--accent); }
+.estimate { display: grid; gap: 5px; }
+.game-chart { display: grid; gap: 6px; margin: 4px 0 8px; }
+.countdown-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 4px; border-radius: 8px; text-align: left; }
+.countdown-row:not(:disabled):hover { background: var(--hover); }
+.countdown-row:disabled { cursor: default; opacity: 1; }
+.countdown-row.past { opacity: 0.6; }
+.countdown-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; background: color-mix(in srgb, var(--c) 18%, transparent); }
+.countdown-days { flex-shrink: 0; font-size: 1.05em; }
+.countdowns > .link { margin-top: 4px; }
+.block { display: block; }

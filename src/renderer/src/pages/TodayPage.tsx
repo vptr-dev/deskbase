@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { moveOverdueToToday, openPage, useData } from '../store'
 import { habitDayTarget, habitDoneOn, habitDueToday, habitStreak, habitWeekCount, isWeekly, levelInfo, xpToday } from '../lib/game'
 import { QuestsPanel } from '../components/Quests'
+import { CountdownsPanel } from '../components/Countdowns'
 import { addDays, longDate, today } from '../lib/util'
 import { Progress, Ring } from '../components/ui'
 import { QuickAdd, TaskRow, useTaskDrawer } from '../components/TaskItems'
@@ -75,6 +76,8 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
         </section>
 
         <QuestsPanel />
+
+        <CountdownsPanel />
 
         <section className="panel glass">
           <div className="panel-head"><h3>Habits</h3><span className="muted small">{todaysHabits.filter((h) => h.kind === 'good' && habitDoneOn(h, t)).length}/{todaysHabits.filter((h) => h.kind === 'good').length}</span></div>
