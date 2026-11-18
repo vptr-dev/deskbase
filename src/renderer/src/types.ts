@@ -178,6 +178,9 @@ export interface Game {
   createdAt: number
   sessions: { id: string; date: string; minutes: number; note: string }[]
   goals: Subtask[]
+  /** wishlist: price / deal notes */
+  price?: string
+  releaseDate?: string | null
 }
 
 export interface Metric {

@@ -718,3 +718,20 @@ input[type='checkbox'] { accent-color: var(--accent); }
   .app.assistant-open .sidebar > * { opacity: 0; pointer-events: none; }
 }
 .tbl-head td.tbl-x { background: none; }
+
+/* ---------- 0.3.0 additions ---------- */
+.mt-sm { margin-top: 10px; }
+.tabular { font-variant-numeric: tabular-nums; }
+.fg { color: var(--fg); }
+.hbars { display: flex; flex-direction: column; gap: 7px; }
+.hbar-row { display: grid; grid-template-columns: minmax(70px, 34%) 1fr auto; gap: 10px; align-items: center; font-size: 0.92em; }
+.hbar-track { height: 8px; border-radius: 6px; background: var(--track); overflow: hidden; }
+.hbar { height: 100%; border-radius: 6px; background: var(--accent); transition: width 0.3s ease; }
+.stack-bar { display: flex; height: 12px; border-radius: 8px; overflow: hidden; gap: 2px; background: var(--track); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 0.86em; color: var(--fg-2); }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.games-insights { margin-bottom: 4px; }
+.picker-card { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: var(--radius); background: var(--hover); transition: transform 0.12s; }
+.picker-card.rolling { transform: scale(0.98); opacity: 0.85; }
+.picker-card .game-cover.sm { width: 64px; height: 64px; font-size: 1.7em; }
+.picker-title { font-size: 1.2em; font-weight: 650; font-family: var(--font-display); }

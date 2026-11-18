@@ -7,7 +7,7 @@
  * A backup of the file is written automatically before any migration runs.
  */
 
-export const CURRENT_SCHEMA = 2
+export const CURRENT_SCHEMA = 3
 
 type Raw = Record<string, any>
 
@@ -15,7 +15,25 @@ const migrations: Record<number, (d: Raw) => Raw> = {
   // 0 -> 1: files written before versioning existed (or empty objects).
   0: (d) => ({ ...d, schema: 1 }),
   // 1 -> 2: assistant chat history (0.2.0).
-  1: (d) => ({ ...d, assistant: d.assistant ?? { messages: [] } })
+  1: (d) => ({ ...d, assistant: d.assistant ?? { messages: [] } }),
+  // 2 -> 3: game wishlist fields, habit weekly targets, quests, inventory (0.3.0).
+  2: (d) => {
+    const games: Raw = { ...(d.games ?? {}) }
+    for (const [k, g] of Object.entries(games)) {
+      if (g && typeof g === 'object') games[k] = { price: '', releaseDate: null, ...g }
+    }
+    const habits: Raw = { ...(d.habits ?? {}) }
+    for (const [k, h] of Object.entries(habits)) {
+      if (h && typeof h === 'object') habits[k] = { period: 'day', dayNotes: {}, ...h }
+    }
+    return {
+      ...d,
+      games,
+      habits,
+      quests: d.quests ?? { date: '', list: [] },
+      inventory: d.inventory ?? { freezes: 0, frozen: {} }
+    }
+  }
 }
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {

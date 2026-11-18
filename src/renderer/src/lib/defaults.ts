@@ -2,7 +2,7 @@ import type { AppData, Page, PageType, Settings } from '../types'
 import { DEFAULT_STATS } from './game'
 import { uid } from './util'
 
-export const SCHEMA = 2
+export const SCHEMA = 3
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: '📄', desc: 'Notes and documents' },
@@ -186,6 +186,8 @@ export function normalize(raw: any): AppData {
   for (const g of Object.values(d.games)) {
     g.sessions = g.sessions ?? []
     g.goals = g.goals ?? []
+    g.price = g.price ?? ''
+    g.releaseDate = g.releaseDate ?? null
   }
   return d
 }
