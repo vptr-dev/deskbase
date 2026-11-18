@@ -4,6 +4,7 @@ import type { AppData, Difficulty, Page, PageType, StatKey, Task } from './types
 import { api } from './lib/api'
 import { freshData, newPage, normalize } from './lib/defaults'
 import { ACHIEVEMENTS, DIFFICULTY, levelInfo } from './lib/game'
+import { generateQuests, questProgress } from './lib/quests'
 import { addDays, addMonths, friendlyDay, parseDay, today, uid } from './lib/util'
 
 enablePatches()
@@ -160,7 +161,7 @@ export function award(d: AppData, opts: { xp: number; gold?: number; label: stri
 
 /** Reverse the XP given for a source (e.g. un-checking a task). */
 export function revoke(d: AppData, sourceId: string): void {
-  const idx = d.xpLog.findIndex((e) => e.sourceId === sourceId && e.xp > 0)
+  const idx = d.xpLog.findIndex((e) => e.sourceId === sourceId && (e.xp > 0 || e.gold > 0))
   if (idx < 0) return
   const e = d.xpLog[idx]
   d.profile.xp = Math.max(0, d.profile.xp - e.xp)
@@ -382,6 +383,7 @@ export function setTaskDone(id: string, done: boolean): void {
       const diff = DIFFICULTY[t.difficulty as Difficulty] ?? DIFFICULTY.easy
       const bonus = t.priority * 2 + (t.due && t.due < today() ? -Math.ceil(diff.xp * 0.2) : 0)
       award(d, { xp: diff.xp + bonus, gold: diff.gold, label: t.title || 'Task', source: 'task', sourceId: t.id, stat: t.stat })
+      maybeLoot(d, t.id, diff.gold)
       if (t.repeat !== 'none') {
         const nid = uid()
         const base = t.due && t.due > today() ? t.due : t.due ?? today()
@@ -392,7 +394,60 @@ export function setTaskDone(id: string, done: boolean): void {
       }
     } else {
       revoke(d, t.id)
+      revoke(d, 'loot:' + t.id)
     }
+  })
+}
+
+/** Occasional random gold bonus when finishing something. */
+function maybeLoot(d: AppData, sourceId: string, base: number): void {
+  if (!d.settings.gamification || !d.settings.lootDrops || Math.random() > 0.08) return
+  const gold = Math.round((base + 4) * (1 + Math.random() * 3))
+  const before = d.profile.gold
+  award(d, { xp: 0, gold, label: 'Loot drop', source: 'loot', sourceId: 'loot:' + sourceId })
+  const got = d.profile.gold - before
+  if (got > 0) effects.push(() => toast(`Loot! Found ${got} gold`, { kind: 'achievement', icon: '🍀' }))
+}
+
+// ---------- quests & items ----------
+export function ensureQuests(): void {
+  const d = getData()
+  if (!d.settings.gamification || d.quests.date === today()) return
+  act((dr) => { dr.quests = { date: today(), list: generateQuests(dr), bonusClaimed: false } }, { history: false })
+}
+
+export function claimQuest(id: string): void {
+  act((d) => {
+    const q = d.quests.list.find((x) => x.id === id)
+    if (!q || q.claimed || d.quests.date !== today() || questProgress(d, q) < q.target) return
+    q.claimed = true
+    award(d, { xp: q.xp, gold: q.gold, label: 'Quest: ' + q.title, source: 'quest', sourceId: `quest:${d.quests.date}:${q.id}` })
+    if (!d.quests.bonusClaimed && d.quests.list.every((x) => x.claimed)) {
+      d.quests.bonusClaimed = true
+      const gold = 15 + Math.floor(Math.random() * 26)
+      award(d, { xp: 40, gold, label: 'Daily quests cleared', source: 'quest-bonus', sourceId: 'quest-bonus:' + d.quests.date })
+      effects.push(() => { toast(`Bonus chest: +${gold} gold`, { kind: 'achievement', icon: '🎁' }); fireConfetti() })
+    }
+  }, { history: false })
+}
+
+export const FREEZE_COST = 60
+export const FREEZE_MAX = 5
+export function buyFreeze(): void {
+  act((d) => {
+    if (d.profile.gold < FREEZE_COST || d.inventory.freezes >= FREEZE_MAX) return
+    d.profile.gold -= FREEZE_COST
+    d.inventory.freezes++
+    d.xpLog.unshift({ id: uid(), at: Date.now(), xp: 0, gold: -FREEZE_COST, label: 'Bought a streak freeze', source: 'shop', sourceId: 'shop:' + uid() })
+  })
+  toast('Streak freeze added', { icon: '❄️' })
+}
+export function applyFreeze(habitId: string, day: string): void {
+  act((d) => {
+    const h = d.habits[habitId]
+    if (!h || d.inventory.freezes < 1 || h.frozen?.includes(day)) return
+    d.inventory.freezes--
+    h.frozen = [...(h.frozen ?? []), day]
   })
 }
 

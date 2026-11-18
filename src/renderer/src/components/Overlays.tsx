@@ -212,6 +212,7 @@ export function SettingsDialog(): JSX.Element {
             <h3>Game</h3>
             <Row label="XP, gold and levels" sub="Turn off for a plain planner"><Toggle checked={s.gamification} onChange={(v) => set((x) => { x.gamification = v })} /></Row>
             <Row label="Daily XP goal"><input id="set-xpgoal" type="number" min={10} step={10} className="input input-sm w-80" value={s.dailyXpGoal} onChange={(e) => set((x) => { x.dailyXpGoal = Math.max(10, Number(e.target.value) || 100) })} /></Row>
+            <Row label="Loot drops" sub="Random gold bonus when finishing tasks"><Toggle checked={s.lootDrops} onChange={(v) => set((x) => { x.lootDrops = v })} /></Row>
             <Row label="XP multiplier"><Segmented small value={s.xpMultiplier} onChange={(v) => set((x) => { x.xpMultiplier = v })} options={[{ value: 0.5, label: '0.5×' }, { value: 1, label: '1×' }, { value: 1.5, label: '1.5×' }, { value: 2, label: '2×' }]} /></Row>
             <Row label="Reset progress" sub="Sets XP, gold, stats and achievements to zero. Tasks are kept.">
               <ConfirmButton label="Reset" confirmLabel="Reset progress" icon="restore" onConfirm={() => act((d) => {

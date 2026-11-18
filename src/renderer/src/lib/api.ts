@@ -1,4 +1,5 @@
 import { download } from './util'
+import { migrate } from '../../../main/migrations'
 import { type AiConfig, type ChatMessage, listOpenAiModels, providerInfo, streamOllama, streamOpenAi } from '../../../shared/ai-core'
 import type { ImportResult, NotionPageInfo } from '../../../shared/import-types'
 
@@ -110,7 +111,9 @@ const browserBridge: Bridge = {
   load: async () => {
     try {
       const t = localStorage.getItem(KEY)
-      return { data: t ? JSON.parse(t) : null, migratedFrom: null, path: 'localStorage' }
+      if (!t) return { data: null, migratedFrom: null, path: 'localStorage' }
+      const m = migrate(JSON.parse(t))
+      return { data: m.data, migratedFrom: m.changed ? m.from : null, path: 'localStorage' }
     } catch {
       return { data: null, migratedFrom: null, path: 'localStorage' }
     }

@@ -24,14 +24,14 @@ const migrations: Record<number, (d: Raw) => Raw> = {
     }
     const habits: Raw = { ...(d.habits ?? {}) }
     for (const [k, h] of Object.entries(habits)) {
-      if (h && typeof h === 'object') habits[k] = { period: 'day', dayNotes: {}, ...h }
+      if (h && typeof h === 'object') habits[k] = { period: 'day', dayNotes: {}, frozen: [], ...h }
     }
     return {
       ...d,
       games,
       habits,
       quests: d.quests ?? { date: '', list: [] },
-      inventory: d.inventory ?? { freezes: 0, frozen: {} }
+      inventory: d.inventory ?? { freezes: 0 }
     }
   }
 }

@@ -66,7 +66,8 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   spellcheck: true,
   glassStrength: 60,
-  dailyXpGoal: 100
+  dailyXpGoal: 100,
+  lootDrops: true
 }
 
 export function newPage(type: PageType, title?: string, parentId: string | null = null): Page {
@@ -129,7 +130,9 @@ export function freshData(): AppData {
     settings: { ...DEFAULT_SETTINGS, lastPage: pages[0].id },
     recent: [],
     tags: {},
-    assistant: { messages: [] }
+    assistant: { messages: [] },
+    quests: { date: '', list: [] },
+    inventory: { freezes: 0 }
   }
 }
 
@@ -153,7 +156,9 @@ export function normalize(raw: any): AppData {
     xpLog: raw.xpLog ?? [],
     recent: raw.recent ?? [],
     tags: raw.tags ?? {},
-    assistant: { messages: Array.isArray(raw.assistant?.messages) ? raw.assistant.messages : [] }
+    assistant: { messages: Array.isArray(raw.assistant?.messages) ? raw.assistant.messages : [] },
+    quests: raw.quests && Array.isArray(raw.quests.list) ? { date: String(raw.quests.date ?? ''), list: raw.quests.list, bonusClaimed: !!raw.quests.bonusClaimed } : { date: '', list: [] },
+    inventory: { freezes: Math.max(0, Number(raw.inventory?.freezes) || 0) }
   }
   for (const k of ['tasks', 'habits', 'journal', 'goals', 'rewards', 'games', 'metrics'] as const) {
     ;(d as any)[k] = raw[k] ?? {}
@@ -182,6 +187,9 @@ export function normalize(raw: any): AppData {
   for (const h of Object.values(d.habits)) {
     h.log = h.log ?? {}
     h.days = h.days ?? [0, 1, 2, 3, 4, 5, 6]
+    h.period = h.period === 'week' ? 'week' : 'day'
+    h.dayNotes = h.dayNotes ?? {}
+    h.frozen = Array.isArray(h.frozen) ? h.frozen : []
   }
   for (const g of Object.values(d.games)) {
     g.sessions = g.sessions ?? []

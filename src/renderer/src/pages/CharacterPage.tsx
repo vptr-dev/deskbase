@@ -5,6 +5,7 @@ import { ACHIEVEMENTS, STAT_KEYS, levelInfo, rankTitle, statLevel, xpByDay, xpTo
 import { DAYS_SHORT, addDays, dayKey, parseDay, timeAgo, today } from '../lib/util'
 import { BarChart, Button, IconPickerButton, Progress, Ring, Segmented, Stat } from '../components/ui'
 import { Icon } from '../components/Icon'
+import { QuestsPanel, ShopPanel } from '../components/Quests'
 
 function ActivityHeatmap(): JSX.Element {
   const by = useData(xpByDay)
@@ -101,6 +102,11 @@ export function CharacterPage(): JSX.Element {
           </div>
           <BarChart data={chart} height={150} format={(v) => `${v} XP`} />
         </section>
+      </div>
+
+      <div className="two-col">
+        <QuestsPanel />
+        <ShopPanel />
       </div>
 
       <section className="panel glass">

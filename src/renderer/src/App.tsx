@@ -4,6 +4,7 @@ import { api } from './lib/api'
 import { typeInfo } from './lib/defaults'
 import { exportPageMarkdown } from './lib/exporters'
 import { MovePageDialog } from './components/MovePage'
+import { habitWeek } from './lib/game'
 import { playLevelUp } from './lib/sound'
 import { Sidebar } from './components/Sidebar'
 import { Icon } from './components/Icon'
@@ -195,6 +196,7 @@ function Confetti(): JSX.Element {
 
 function useAppearance(): void {
   const s = useData((d) => d.settings)
+  habitWeek.start = s.weekStart
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')

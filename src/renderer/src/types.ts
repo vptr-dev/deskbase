@@ -108,6 +108,11 @@ export interface Habit {
   order: number
   archived?: boolean
   notes?: string
+  /** 'week': `target` is times per week, any day counts */
+  period?: 'day' | 'week'
+  dayNotes?: Record<string, string>
+  /** days covered by a streak freeze */
+  frozen?: string[]
 }
 
 export interface JournalEntry {
@@ -257,7 +262,11 @@ export interface Settings {
   spellcheck: boolean
   glassStrength: number
   dailyXpGoal: number
+  lootDrops: boolean
 }
+
+export type QuestKind = 'tasks' | 'habits' | 'focus' | 'journal' | 'early' | 'priority' | 'tracker' | 'game' | 'xp'
+export interface Quest { id: string; kind: QuestKind; title: string; target: number; xp: number; gold: number; claimed: boolean }
 
 export interface AssistantMessage { id: string; role: 'user' | 'assistant'; content: string; at: number; applied?: number[] }
 
@@ -279,4 +288,6 @@ export interface AppData {
   recent: string[]
   tags: Record<string, string>
   assistant: { messages: AssistantMessage[] }
+  quests: { date: string; list: Quest[]; bonusClaimed?: boolean }
+  inventory: { freezes: number }
 }

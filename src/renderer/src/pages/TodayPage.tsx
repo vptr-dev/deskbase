@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { openPage, useData } from '../store'
-import { habitDoneOn, habitScheduled, habitStreak, levelInfo, xpToday } from '../lib/game'
+import { habitDayTarget, habitDoneOn, habitDueToday, habitStreak, habitWeekCount, isWeekly, levelInfo, xpToday } from '../lib/game'
+import { QuestsPanel } from '../components/Quests'
 import { addDays, longDate, today } from '../lib/util'
 import { Progress, Ring } from '../components/ui'
 import { QuickAdd, TaskRow, useTaskDrawer } from '../components/TaskItems'
@@ -38,7 +39,7 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
       doneToday: list.filter((x) => x.done && x.doneAt && new Date(x.doneAt).toDateString() === new Date().toDateString())
     }
   }, [tasks, pages, t])
-  const todaysHabits = Object.values(habits).filter((h) => !h.archived && pages[h.pageId] && !pages[h.pageId].deletedAt && (h.kind === 'bad' || habitScheduled(h, t)))
+  const todaysHabits = Object.values(habits).filter((h) => !h.archived && pages[h.pageId] && !pages[h.pageId].deletedAt && habitDueToday(h, t))
   const journalPage = Object.values(pages).find((p) => p.type === 'journal' && !p.deletedAt)
   const entry = journalPage ? Object.values(journal).find((j) => j.pageId === journalPage.id && j.date === t) : undefined
   const listPage = Object.values(pages).find((p) => p.type === 'tasks' && !p.deletedAt)
@@ -73,18 +74,21 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
           {doneToday.length > 0 && <><div className="group-label">Done today<span className="count">{doneToday.length}</span></div><div className="task-list">{doneToday.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={openTask} />)}</div></>}
         </section>
 
+        <QuestsPanel />
+
         <section className="panel glass">
           <div className="panel-head"><h3>Habits</h3><span className="muted small">{todaysHabits.filter((h) => h.kind === 'good' && habitDoneOn(h, t)).length}/{todaysHabits.filter((h) => h.kind === 'good').length}</span></div>
           {todaysHabits.length === 0 ? <div className="muted small">No habits for today.</div> : todaysHabits.map((h) => {
             const v = h.log[t] ?? 0
-            const done = h.kind === 'good' ? v >= h.target : false
+            const need = habitDayTarget(h)
+            const done = h.kind === 'good' ? v >= need : false
             return (
               <div key={h.id} className="today-habit">
                 <button className={`habit-cell ${done ? 'done' : ''} ${h.kind === 'bad' && v ? 'slip' : ''}`} style={{ ['--c' as any]: h.color }} onClick={() => logHabit(h.id, t, h.kind === 'good' && done ? -v : 1)}>
                   {done ? <Icon name="check" size={14} stroke={3} /> : h.kind === 'bad' && v ? <Icon name="x" size={14} stroke={3} /> : v ? <span className="small">{v}</span> : null}
                 </button>
-                <span className="grow">{h.icon} {h.name}{h.target > 1 && h.kind === 'good' ? <span className="muted small"> {v}/{h.target}</span> : null}</span>
-                <span className="muted small">{habitStreak(h) ? `🔥 ${habitStreak(h)}` : ''}</span>
+                <span className="grow">{h.icon} {h.name}{isWeekly(h) ? <span className="muted small"> {habitWeekCount(h, t)}/{h.target} this week</span> : h.target > 1 && h.kind === 'good' ? <span className="muted small"> {v}/{h.target}</span> : null}</span>
+                <span className="muted small">{habitStreak(h) ? `🔥 ${habitStreak(h)}${isWeekly(h) ? 'w' : ''}` : ''}</span>
               </div>
             )
           })}
