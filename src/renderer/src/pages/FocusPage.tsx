@@ -8,14 +8,14 @@ import { playChime } from '../lib/sound'
 import { type NoiseKind, setNoise, setNoiseVolume } from '../lib/noise'
 
 type Mode = 'focus' | 'break' | 'long' | 'stopwatch'
-interface FocusState { mode: Mode; running: boolean; endsAt: number; remaining: number; total: number; label: string; taskId: string | null; cycle: number; startedAt: number; pinned: boolean; noise: NoiseKind; volume: number }
+interface FocusState { mode: Mode; running: boolean; endsAt: number; remaining: number; total: number; label: string; taskId: string | null; cycle: number; startedAt: number; pinned: boolean; noise: NoiseKind; volume: number; now: number }
 
 const minutesFor = (m: Mode): number => {
   const s = getData().settings
   return m === 'stopwatch' ? 0 : m === 'focus' ? s.focusMinutes : m === 'break' ? s.breakMinutes : s.longBreakMinutes
 }
 
-export const useFocus = create<FocusState>(() => ({ mode: 'focus', running: false, endsAt: 0, remaining: 25 * 60, total: 25 * 60, label: '', taskId: null, cycle: 0, startedAt: 0, pinned: false, noise: 'off', volume: 0.4 }))
+export const useFocus = create<FocusState>(() => ({ mode: 'focus', running: false, endsAt: 0, remaining: 25 * 60, total: 25 * 60, label: '', taskId: null, cycle: 0, startedAt: 0, pinned: false, noise: 'off', volume: 0.4, now: 0 }))
 
 export const focusActions = {
   start(): void {
@@ -62,6 +62,7 @@ export const focusActions = {
   },
   tick(): void {
     const s = useFocus.getState()
+    if (s.running) useFocus.setState({ now: Date.now() })
     if (s.running && s.mode !== 'stopwatch' && Date.now() >= s.endsAt) focusActions.finish()
   }
 }
