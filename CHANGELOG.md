@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-18
+
 - Game library: "What should I play?" picks a random game from your backlog.
 - Game library insights: hours played per month, games started and finished per year, status, platform and genre breakdowns.
 - Wishlist games can have a release date (with a countdown) and price notes. New sorts: last played and release date.
