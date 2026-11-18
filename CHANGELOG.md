@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.0 — 2026-11-18
+
 ## 0.3.0 — 2026-11-18
 
 - Game library: "What should I play?" picks a random game from your backlog.
