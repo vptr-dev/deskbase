@@ -119,7 +119,7 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
             {activeGoals.map((g) => (
               <button key={g.id} className="today-goal" onClick={() => openPage(g.pageId)}>
                 <span>{g.icon}</span><span className="grow ellipsis">{g.title}</span>
-                <Progress value={goalProgress(g)} color={g.color} className="w-80" />
+                <Progress value={goalProgress(g, tasks)} color={g.color} className="w-80" />
               </button>
             ))}
           </section>

@@ -192,6 +192,10 @@ function registerIpc(): void {
     }
   })
 
+  ipcMain.handle('app:loginItem', (_e, on?: boolean) => {
+    if (typeof on === 'boolean' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: on })
+    return app.getLoginItemSettings().openAtLogin
+  })
   ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
 

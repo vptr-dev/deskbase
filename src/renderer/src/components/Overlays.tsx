@@ -159,6 +159,12 @@ function Row({ label, sub, children }: { label: string; sub?: string; children: 
   return <div className="set-row"><div className="set-label"><div>{label}</div>{sub && <div className="muted small">{sub}</div>}</div><div className="set-control">{children}</div></div>
 }
 
+function StartWithWindows(): JSX.Element {
+  const [on, setOn] = useState(false)
+  useEffect(() => { api.loginItem().then(setOn).catch(() => {}) }, [])
+  return <Row label="Start with Windows"><Toggle checked={on} onChange={(v) => { setOn(v); api.loginItem(v).then(setOn).catch(() => {}) }} /></Row>
+}
+
 export function SettingsDialog(): JSX.Element {
   const s = useData((d) => d.settings)
   const profile = useData((d) => d.profile)
@@ -194,6 +200,7 @@ export function SettingsDialog(): JSX.Element {
             <Row label="Spellcheck"><Toggle checked={s.spellcheck} onChange={(v) => set((x) => { x.spellcheck = v })} /></Row>
             <Row label="Notifications" sub="Reminders and focus timer"><Toggle checked={s.notifications} onChange={(v) => set((x) => { x.notifications = v })} /></Row>
             <Row label="Sounds"><Toggle checked={s.sounds} onChange={(v) => set((x) => { x.sounds = v })} /></Row>
+            {isDesktop && <StartWithWindows />}
           </>}
           {tab === 'appearance' && <>
             <h3>Appearance</h3>

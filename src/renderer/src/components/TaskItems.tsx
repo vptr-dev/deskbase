@@ -64,6 +64,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
   task: Task; showPage?: boolean; onOpen: (id: string) => void; draggable?: boolean; onDragStart?: () => void; onDropOn?: () => void
 }): JSX.Element {
   const pageTitle = useData((d) => (showPage ? d.pages[task.pageId]?.title : ''))
+  const goalTitle = useData((d) => (task.goalId ? d.goals[task.goalId]?.title : ''))
   const use24h = useData((d) => d.settings.use24h)
   const gamified = useData((d) => d.settings.gamification)
   const [over, setOver] = useState(false)
@@ -104,6 +105,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
           {task.notes && <span className="meta"><Icon name="note" size={12} /></span>}
           {task.estimate ? <span className="meta"><Icon name="clock" size={12} />{task.estimate}m</span> : null}
           {task.tags.map((t) => <span key={t} className="meta tag">#{t}</span>)}
+          {goalTitle && <span className="meta"><Icon name="flag" size={12} />{goalTitle}</span>}
           {showPage && pageTitle && <span className="meta">{pageTitle}</span>}
         </div>
       </div>
@@ -118,6 +120,7 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
   const pages = useData((d) => d.pages)
   const stats = useData((d) => d.profile.stats)
   const gamified = useData((d) => d.settings.gamification)
+  const goals = useData((d) => d.goals)
   const [tagInput, setTagInput] = useState('')
   const [subInput, setSubInput] = useState('')
   if (!task) return null
@@ -179,6 +182,13 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
               }
             }} />
           </div>
+          {(Object.values(goals).some((g) => !g.done) || task.goalId) && <>
+            <label>Goal</label>
+            <select id={`goal-${id}`} className="input input-sm" value={task.goalId ?? ''} onChange={(e) => set((t) => { t.goalId = e.target.value || null })}>
+              <option value="">None</option>
+              {Object.values(goals).filter((g) => !g.done || g.id === task.goalId).map((g) => <option key={g.id} value={g.id}>{g.icon} {g.title || 'Untitled goal'}</option>)}
+            </select>
+          </>}
           <label>List</label>
           <select id={`page-${id}`} className="input input-sm" value={task.pageId} onChange={(e) => set((t) => { t.pageId = e.target.value })}>
             {listPages.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}

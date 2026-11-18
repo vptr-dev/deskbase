@@ -183,6 +183,7 @@ export function normalize(raw: any): AppData {
     t.status = t.status ?? (t.done ? 'done' : 'todo')
     t.difficulty = t.difficulty ?? 'easy'
     t.priority = t.priority ?? 0
+    t.goalId = t.goalId && d.goals[t.goalId] ? t.goalId : null
   }
   for (const h of Object.values(d.habits)) {
     h.log = h.log ?? {}

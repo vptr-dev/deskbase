@@ -1,14 +1,24 @@
 import { useState } from 'react'
 import { act, award, getData as useDataSnapshot, pageItems, removeItem, revoke, toast, upsert, useData, patch, fireConfetti } from '../store'
-import type { Difficulty, Goal, Reward } from '../types'
+import type { Difficulty, Goal, Reward, Task } from '../types'
 import { DIFFICULTY } from '../lib/game'
 import { COLORS } from '../lib/defaults'
-import { diffDays, today, uid } from '../lib/util'
+import { diffDays, friendlyDay, parseQuickAdd, today, uid } from '../lib/util'
+import { addTask, setTaskDone } from '../store'
 import { Button, ColorDots, ConfirmButton, Empty, IconPickerButton, Modal, Ring, Segmented } from '../components/ui'
 import { Icon } from '../components/Icon'
 
-export const goalProgress = (g: Goal): number =>
-  g.done ? 1 : g.progressMode === 'manual' ? g.manual / 100 : g.milestones.length ? g.milestones.filter((m) => m.done).length / g.milestones.length : 0
+export const goalTasks = (g: Goal, tasks: Record<string, Task>): Task[] => Object.values(tasks).filter((t) => t.goalId === g.id)
+
+export const goalProgress = (g: Goal, tasks: Record<string, Task> = {}): number => {
+  if (g.done) return 1
+  if (g.progressMode === 'manual') return g.manual / 100
+  if (g.progressMode === 'tasks') {
+    const list = goalTasks(g, tasks)
+    return list.length ? list.filter((t) => t.done).length / list.length : 0
+  }
+  return g.milestones.length ? g.milestones.filter((m) => m.done).length / g.milestones.length : 0
+}
 
 export function setGoalDone(id: string, done: boolean): void {
   act((d) => {
@@ -41,7 +51,7 @@ function GoalEditor({ goal, onClose }: { goal: Goal; onClose: () => void }): JSX
         <label>Deadline</label>
         <input id="goal-deadline" type="date" className="input" value={g.deadline ?? ''} onChange={(e) => set({ deadline: e.target.value || null })} />
         <label>Progress</label>
-        <Segmented small value={g.progressMode} onChange={(progressMode) => set({ progressMode })} options={[{ value: 'milestones', label: 'From milestones' }, { value: 'manual', label: 'Manual %' }]} />
+        <Segmented small value={g.progressMode} onChange={(progressMode) => set({ progressMode })} options={[{ value: 'milestones', label: 'Milestones' }, { value: 'tasks', label: 'Linked tasks' }, { value: 'manual', label: 'Manual %' }]} />
         <label>Difficulty</label>
         <Segmented small value={g.difficulty} onChange={(difficulty) => set({ difficulty: difficulty as Difficulty })} options={(Object.keys(DIFFICULTY) as Difficulty[]).map((k) => ({ value: k, label: DIFFICULTY[k].label }))} />
         <label>Color</label>
@@ -57,8 +67,11 @@ function GoalEditor({ goal, onClose }: { goal: Goal; onClose: () => void }): JSX
 }
 
 function GoalCard({ g, onEdit }: { g: Goal; onEdit: () => void }): JSX.Element {
+  const listPage = useData((d) => Object.values(d.pages).find((p) => p.type === 'tasks' && !p.deletedAt)?.id)
   const [ms, setMs] = useState('')
-  const p = goalProgress(g)
+  const tasks = useData((d) => d.tasks)
+  const linked = goalTasks(g, tasks).sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? '9').localeCompare(b.due ?? '9'))
+  const p = goalProgress(g, tasks)
   const left = g.deadline ? diffDays(g.deadline, today()) : null
   return (
     <div className={`goal-card glass ${g.done ? 'done' : ''}`}>
@@ -76,7 +89,26 @@ function GoalCard({ g, onEdit }: { g: Goal; onEdit: () => void }): JSX.Element {
         <Button small kind="ghost" icon="edit" title="Edit" onClick={onEdit} />
       </div>
       {g.why && <p className="goal-why">{g.why}</p>}
-      {g.progressMode === 'manual' ? (
+      {g.progressMode === 'tasks' ? (
+        <div className="milestones">
+          {linked.length === 0 && <div className="muted small">No linked tasks</div>}
+          {linked.slice(0, 8).map((t) => (
+            <label key={t.id} className={`milestone ${t.done ? 'done' : ''}`}>
+              <input type="checkbox" checked={t.done} style={{ accentColor: g.color }} onChange={(e) => setTaskDone(t.id, e.target.checked)} />
+              <span className="grow ellipsis">{t.title}</span>
+              {t.due && <span className="muted small">{friendlyDay(t.due)}</span>}
+            </label>
+          ))}
+          {linked.length > 8 && <div className="muted small">+{linked.length - 8} more</div>}
+          {listPage && <input id={`gt-${g.id}`} className="input input-sm" placeholder="Add a task for this goal" value={ms} onChange={(e) => setMs(e.target.value)} onKeyDown={(e) => {
+            if (e.key === 'Enter' && ms.trim()) {
+              const q = parseQuickAdd(ms.trim())
+              addTask(listPage, { title: q.title || ms.trim(), due: q.due ?? null, time: q.time ?? null, priority: q.priority ?? 0, tags: q.tags, repeat: q.repeat ?? 'none', difficulty: q.difficulty ?? 'easy', goalId: g.id })
+              setMs('')
+            }
+          }} />}
+        </div>
+      ) : g.progressMode === 'manual' ? (
         <input id={`gm-${g.id}`} type="range" min={0} max={100} value={g.manual} onChange={(e) => patch('goals', g.id, (x) => { x.manual = Number(e.target.value) }, 'gm:' + g.id)} style={{ accentColor: g.color }} />
       ) : (
         <div className="milestones">

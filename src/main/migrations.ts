@@ -16,7 +16,7 @@ const migrations: Record<number, (d: Raw) => Raw> = {
   0: (d) => ({ ...d, schema: 1 }),
   // 1 -> 2: assistant chat history (0.2.0).
   1: (d) => ({ ...d, assistant: d.assistant ?? { messages: [] } }),
-  // 2 -> 3: game wishlist fields, habit weekly targets, quests, inventory (0.3.0).
+  // 2 -> 3: game wishlist fields, habit weekly targets, quests, inventory, task goal links (0.3.0).
   2: (d) => {
     const games: Raw = { ...(d.games ?? {}) }
     for (const [k, g] of Object.entries(games)) {
@@ -30,6 +30,7 @@ const migrations: Record<number, (d: Raw) => Raw> = {
       ...d,
       games,
       habits,
+      tasks: Object.fromEntries(Object.entries(d.tasks ?? {}).map(([k, t]: [string, any]) => [k, t && typeof t === 'object' ? { goalId: null, ...t } : t])),
       quests: d.quests ?? { date: '', list: [] },
       inventory: d.inventory ?? { freezes: 0 }
     }

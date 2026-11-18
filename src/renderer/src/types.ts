@@ -90,6 +90,8 @@ export interface Task {
   archived?: boolean
   remindAt?: number | null
   reminded?: boolean
+  /** goal this task counts toward */
+  goalId?: string | null
 }
 
 export interface Habit {
@@ -140,7 +142,7 @@ export interface Goal {
   icon: string
   deadline?: string | null
   milestones: Milestone[]
-  progressMode: 'milestones' | 'manual'
+  progressMode: 'milestones' | 'manual' | 'tasks'
   manual: number
   color: string
   done: boolean

@@ -15,6 +15,7 @@ const api = {
   setMaterial: (m: string) => ipcRenderer.invoke('app:setMaterial', m),
   notify: (title: string, body: string) => ipcRenderer.invoke('app:notify', title, body),
   alwaysOnTop: (on: boolean) => ipcRenderer.invoke('app:alwaysOnTop', on),
+  loginItem: (on?: boolean) => ipcRenderer.invoke('app:loginItem', on),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   ai: {
     getConfig: () => ipcRenderer.invoke('ai:getConfig'),

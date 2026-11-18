@@ -33,6 +33,7 @@ export interface Bridge {
   setMaterial(m: string): Promise<boolean>
   notify(title: string, body: string): Promise<void>
   alwaysOnTop(on: boolean): Promise<boolean>
+  loginItem(on?: boolean): Promise<boolean>
   openExternal(url: string): Promise<void>
   ai: {
     getConfig(): Promise<AiConfig>
@@ -151,6 +152,7 @@ const browserBridge: Bridge = {
     } catch { /* ignore */ }
   },
   alwaysOnTop: async (on) => on,
+  loginItem: async () => false,
   openExternal: async (url) => { window.open(url, '_blank') },
   ai: webAi,
   notion: {
