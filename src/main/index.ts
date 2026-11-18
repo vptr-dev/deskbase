@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, shell, Tray, type WebContents } from 'electron'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -6,6 +6,7 @@ import { createBackup, dataDir, listBackups, loadData, parseImport, readBackup, 
 import { checkForUpdates, getStatus, initUpdater, installUpdate } from './updater'
 import { registerAi } from './ai'
 import { importNotionExport, importNotionPages, listNotionPages, notionDbPath } from './notion'
+import { applyWidget, closeWidget, DEFAULT_WIDGET, listDisplays, setWidgetInteractive, widgetWindow, type WidgetPrefs } from './widget'
 
 type Material = 'mica' | 'acrylic' | 'none'
 
@@ -18,6 +19,8 @@ let tray: Tray | null = null
 let quitting = false
 let hiddenBeforeQuickAdd = false
 const QUICK_ADD_KEY = 'CommandOrControl+Shift+Space'
+/** Started by Windows at sign-in: stay in the tray and only show the desktop widget. */
+const startHidden = process.argv.includes('--hidden')
 
 // Development runs keep their own data so they never touch a real install.
 if (!app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'Planner-dev'))
@@ -48,8 +51,8 @@ function saveWinState(w: BrowserWindow): void {
 
 // ---------- preferences needed before the renderer loads ----------
 const prefsFile = (): string => path.join(app.getPath('userData'), 'shell-prefs.json')
-interface ShellPrefs { material: Material; theme: 'system' | 'light' | 'dark'; closeToTray: boolean; quickAddHotkey: boolean }
-const DEFAULT_PREFS: ShellPrefs = { material: 'mica', theme: 'system', closeToTray: false, quickAddHotkey: true }
+interface ShellPrefs { material: Material; theme: 'system' | 'light' | 'dark'; closeToTray: boolean; quickAddHotkey: boolean; widget: WidgetPrefs }
+const DEFAULT_PREFS: ShellPrefs = { material: 'mica', theme: 'system', closeToTray: false, quickAddHotkey: true, widget: DEFAULT_WIDGET }
 function readPrefs(): ShellPrefs {
   try {
     return { ...DEFAULT_PREFS, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) }
@@ -60,6 +63,15 @@ function readPrefs(): ShellPrefs {
 function writePrefs(p: Partial<ReturnType<typeof readPrefs>>): void {
   try { fs.writeFileSync(prefsFile(), JSON.stringify({ ...readPrefs(), ...p })) } catch { /* ignore */ }
 }
+
+/** Keep running in the tray when the window closes. */
+const keepRunning = (): boolean => { const p = readPrefs(); return p.closeToTray || (p.widget?.enabled && !!p.widget.pageId) }
+
+function loadRenderer(w: BrowserWindow, hash?: string): void {
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) w.loadURL(process.env['ELECTRON_RENDERER_URL'] + (hash ? '#' + hash : ''))
+  else w.loadFile(path.join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
+}
+const loadWidget = (w: BrowserWindow): void => loadRenderer(w, 'widget')
 
 function overlayColors(): { color: string; symbolColor: string; height: number } {
   return {
@@ -102,14 +114,15 @@ function createWindow(): void {
   })
 
   if (st.maximized) mainWindow.maximize()
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  mainWindow.once('ready-to-show', () => { if (!(startHidden && keepRunning())) mainWindow?.show() })
   mainWindow.on('close', (e) => {
     if (mainWindow) saveWinState(mainWindow)
-    if (!quitting && tray && readPrefs().closeToTray) {
+    if (!quitting && tray && keepRunning()) {
       e.preventDefault()
       mainWindow?.hide()
     }
   })
+  mainWindow.on('closed', () => { mainWindow = null; closeWidget() })
 
   // Links open in the default browser, never inside the app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -127,11 +140,7 @@ function createWindow(): void {
     if (isWin && mainWindow) mainWindow.setTitleBarOverlay(overlayColors())
   })
 
-  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
-  }
+  loadRenderer(mainWindow)
 
   initUpdater(mainWindow)
   if (app.isPackaged) setTimeout(() => checkForUpdates(), 4000)
@@ -158,19 +167,23 @@ async function trayIcon(): Promise<Electron.NativeImage> {
 
 async function applyTray(): Promise<void> {
   const p = readPrefs()
-  if (p.closeToTray && !tray) {
+  const want = keepRunning()
+  if (want && !tray) {
     tray = new Tray(await trayIcon())
     tray.setToolTip('Planner')
+    tray.on('click', showWindow)
+  } else if (!want && tray) {
+    tray.destroy()
+    tray = null
+  }
+  if (tray) {
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: 'Open Planner', click: showWindow },
       { label: 'Quick add task…', click: openQuickAdd },
+      ...(p.widget?.pageId ? [{ label: 'Desktop widget', type: 'checkbox' as const, checked: !!p.widget.enabled, click: () => mainWindow?.webContents.send('widget:toggle') }] : []),
       { type: 'separator' },
       { label: 'Quit', click: () => { quitting = true; app.quit() } }
     ]))
-    tray.on('click', showWindow)
-  } else if (!p.closeToTray && tray) {
-    tray.destroy()
-    tray = null
   }
   globalShortcut.unregister(QUICK_ADD_KEY)
   if (p.quickAddHotkey) {
@@ -179,6 +192,13 @@ async function applyTray(): Promise<void> {
 }
 
 // ---------- IPC ----------
+/** Tell the other windows (desktop widget / main window) that data changed. */
+function broadcast(from: WebContents, data: unknown): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed() && w.webContents !== from) w.webContents.send('data:changed', data)
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
@@ -190,9 +210,9 @@ function registerIpc(): void {
   }))
 
   ipcMain.handle('data:load', () => loadData())
-  ipcMain.handle('data:save', (_e, data) => { saveData(data); return true })
+  ipcMain.handle('data:save', (e, data) => { saveData(data); broadcast(e.sender, data); return true })
   ipcMain.on('data:saveSync', (e, data) => {
-    try { saveData(data); e.returnValue = true } catch { e.returnValue = false }
+    try { saveData(data); e.returnValue = true; broadcast(e.sender, data) } catch { e.returnValue = false }
   })
 
   ipcMain.handle('data:export', async (_e, text: string, defaultName: string) => {
@@ -246,7 +266,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('app:loginItem', (_e, on?: boolean) => {
-    if (typeof on === 'boolean' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: on })
+    if (typeof on === 'boolean' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] })
     return app.getLoginItemSettings().openAtLogin
   })
   ipcMain.handle('app:setShell', async (_e, p: { closeToTray?: boolean; quickAddHotkey?: boolean }) => {
@@ -261,6 +281,19 @@ function registerIpc(): void {
     if (hiddenBeforeQuickAdd && added && tray) mainWindow?.hide()
     hiddenBeforeQuickAdd = false
   })
+  ipcMain.handle('app:displays', () => listDisplays())
+  ipcMain.handle('widget:set', async (_e, w: Partial<WidgetPrefs>) => {
+    const widget = { ...DEFAULT_WIDGET, ...(w ?? {}) }
+    writePrefs({ widget })
+    applyWidget(widget, loadWidget)
+    await applyTray()
+    return Boolean(widgetWindow())
+  })
+  ipcMain.handle('widget:openMain', (_e, pageId?: string) => {
+    showWindow()
+    if (pageId) mainWindow?.webContents.send('app:openPage', pageId)
+  })
+  ipcMain.on('widget:interactive', (_e, on: boolean) => setWidgetInteractive(on))
   ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
 
@@ -291,6 +324,7 @@ if (!app.requestSingleInstanceLock()) {
     registerAi()
     createWindow()
     applyTray()
+    applyWidget(readPrefs().widget, loadWidget)
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
   })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

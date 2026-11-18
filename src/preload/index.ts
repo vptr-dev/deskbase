@@ -17,6 +17,27 @@ const api = {
   alwaysOnTop: (on: boolean) => ipcRenderer.invoke('app:alwaysOnTop', on),
   loginItem: (on?: boolean) => ipcRenderer.invoke('app:loginItem', on),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  displays: () => ipcRenderer.invoke('app:displays'),
+  onDataChanged: (cb: (data: unknown) => void) => {
+    const fn = (_e: unknown, data: unknown): void => cb(data)
+    ipcRenderer.on('data:changed', fn)
+    return () => ipcRenderer.removeListener('data:changed', fn)
+  },
+  onOpenPage: (cb: (id: string) => void) => {
+    const fn = (_e: unknown, id: string): void => cb(id)
+    ipcRenderer.on('app:openPage', fn)
+    return () => ipcRenderer.removeListener('app:openPage', fn)
+  },
+  onWidgetToggle: (cb: () => void) => {
+    const fn = (_e: unknown): void => cb()
+    ipcRenderer.on('widget:toggle', fn)
+    return () => ipcRenderer.removeListener('widget:toggle', fn)
+  },
+  widget: {
+    set: (w: unknown) => ipcRenderer.invoke('widget:set', w),
+    openMain: (pageId?: string) => ipcRenderer.invoke('widget:openMain', pageId),
+    interactive: (on: boolean) => ipcRenderer.send('widget:interactive', on)
+  },
   setShell: (p: { closeToTray?: boolean; quickAddHotkey?: boolean }) => ipcRenderer.invoke('app:setShell', p),
   quickAddDone: (added: boolean) => ipcRenderer.invoke('app:quickAddDone', added),
   onQuickAdd: (cb: () => void) => {

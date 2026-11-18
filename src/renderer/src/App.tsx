@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { act, boot, duplicatePage, flushSave, getData, onConfetti, openPage, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
+import { act, boot, duplicatePage, flushSave, getData, onConfetti, openPage, receiveRemote, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
 import { api } from './lib/api'
 import { COVERS, typeInfo } from './lib/defaults'
 import { exportPageMarkdown } from './lib/exporters'
@@ -21,13 +21,13 @@ import { TrackerPage } from './pages/TrackerPage'
 import { TodayPage } from './pages/TodayPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { DatabasePage, RowProps } from './pages/DatabasePage'
-import { DashboardPage } from './pages/DashboardPage'
+import { DashboardGrid, DashboardPage } from './pages/DashboardPage'
 import type { Page } from './types'
 import { AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
 import { NotionImportDialog } from './components/NotionImport'
 import { ValuesDialog } from './components/Values'
 import { applyImport } from './lib/importer'
-import { isDesktop } from './lib/api'
+import { isDesktop, isWidgetWindow } from './lib/api'
 
 // Browser preview only: lets an import result be applied from the dev console for testing.
 if (!isDesktop) (window as any).__plannerApplyImport = applyImport
@@ -224,7 +224,7 @@ function Confetti(): JSX.Element {
   return <canvas ref={ref} className="confetti" />
 }
 
-function useAppearance(): void {
+function useAppearance(widget = false): void {
   const s = useData((d) => d.settings)
   habitWeek.start = s.weekStart
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -234,25 +234,31 @@ function useAppearance(): void {
     mq.addEventListener('change', fn)
     return () => mq.removeEventListener('change', fn)
   }, [])
-  useEffect(() => { api.setTheme(s.theme) }, [s.theme])
-  useEffect(() => { api.setShell({ closeToTray: s.closeToTray, quickAddHotkey: s.quickAddHotkey }).catch(() => {}) }, [s.closeToTray, s.quickAddHotkey])
-  useEffect(() => api.onQuickAdd(() => setOverlay('quickAdd')), [])
-  useEffect(() => { api.info().then((i) => { if (i.micaSupported && i.material !== s.material) api.setMaterial(s.material) }) }, [])
+  useEffect(() => { if (!widget) api.setTheme(s.theme) }, [s.theme])
+  useEffect(() => { if (!widget) api.setShell({ closeToTray: s.closeToTray, quickAddHotkey: s.quickAddHotkey }).catch(() => {}) }, [s.closeToTray, s.quickAddHotkey])
+  useEffect(() => (widget ? undefined : api.onQuickAdd(() => setOverlay('quickAdd'))), [])
+  useEffect(() => { if (!widget) api.info().then((i) => { if (i.micaSupported && i.material !== s.material) api.setMaterial(s.material) }) }, [])
+  // The desktop widget follows the saved settings; both windows share data through the main process.
+  const widgetKey = JSON.stringify(s.widget)
+  useEffect(() => { if (!widget) api.widget.set(s.widget).catch(() => {}) }, [widgetKey])
+  useEffect(() => api.onDataChanged(receiveRemote), [])
+  useEffect(() => (widget ? undefined : api.onOpenPage((id) => openPage(id))), [])
+  useEffect(() => (widget ? undefined : api.onWidgetToggle(() => setSettings((x) => { x.widget = { ...x.widget, enabled: !x.widget.enabled } }))), [])
   const dark = s.theme === 'dark' || (s.theme === 'system' && systemDark)
   useEffect(() => {
     const r = document.documentElement
     r.dataset.theme = dark ? 'dark' : 'light'
     r.dataset.density = s.density
     r.dataset.font = s.font
-    r.dataset.backdrop = s.backdrop || 'sky'
+    if (widget) { r.classList.add('widget-mode'); delete r.dataset.backdrop; r.dataset.widgetBg = s.widget.background } else r.dataset.backdrop = s.backdrop || 'sky'
     r.classList.toggle('reduce-motion', s.reduceMotion)
     r.style.setProperty('--accent', s.accent)
     r.style.setProperty('--fs', s.fontSize + 'px')
     r.style.setProperty('--sidebar-w', s.sidebarWidth + 'px')
     r.style.setProperty('--glass', String(s.glassStrength / 100))
-  }, [dark, s.accent, s.fontSize, s.sidebarWidth, s.density, s.font, s.reduceMotion, s.glassStrength, s.backdrop])
+  }, [dark, s.accent, s.fontSize, s.sidebarWidth, s.density, s.font, s.reduceMotion, s.glassStrength, s.backdrop, s.widget.background])
   useEffect(() => {
-    api.info().then((i) => document.documentElement.classList.toggle('mica', i.micaSupported && s.material !== 'none'))
+    if (!widget) api.info().then((i) => document.documentElement.classList.toggle('mica', i.micaSupported && s.material !== 'none'))
   }, [s.material])
 }
 
@@ -312,6 +318,58 @@ function useTicker(): void {
 }
 
 export function App(): JSX.Element {
+  return isWidgetWindow ? <WidgetApp /> : <MainApp />
+}
+
+/** Clicks on empty space fall through to the desktop; widgets stay clickable. */
+function usePassThrough(): void {
+  useEffect(() => {
+    let last: boolean | null = null
+    const empty = (el: Element | null): boolean => !el || el === document.documentElement || el === document.body || el.id === 'root' || el.matches('.widget-shell, .dash, .dash-grid')
+    const onMove = (e: MouseEvent): void => {
+      const on = !empty(e.target as Element)
+      if (on !== last) { last = on; api.widget.interactive(on) }
+    }
+    const onLeave = (): void => { if (last !== false) { last = false; api.widget.interactive(false) } }
+    window.addEventListener('mousemove', onMove)
+    document.documentElement.addEventListener('mouseleave', onLeave)
+    api.widget.interactive(false)
+    return () => { window.removeEventListener('mousemove', onMove); document.documentElement.removeEventListener('mouseleave', onLeave) }
+  }, [])
+}
+
+/** The desktop widget window: one dashboard, full screen, no app chrome. */
+function WidgetApp(): JSX.Element {
+  const ready = useApp((s) => s.ready)
+  const overlay = useApp((s) => s.overlay)
+  const pageId = useData((d) => d.settings.widget.pageId)
+  const page = useData((d) => (pageId ? d.pages[pageId] : undefined))
+  useEffect(() => { boot() }, [])
+  useEffect(() => { const id = setInterval(() => focusActions.tick(), 1000); return () => clearInterval(id) }, [])
+  useAppearance(true)
+  usePassThrough()
+  if (!ready) return <div className="boot" />
+  const ok = page && !page.deletedAt && page.type === 'dashboard'
+  return (
+    <div className="widget-shell">
+      {ok ? <DashboardGrid pageId={page.id} bare /> : (
+        <div className="widget-missing glass">
+          <Icon name="monitor" size={22} />
+          <div className="strong">No dashboard picked</div>
+          <div className="muted small">Choose one in Planner → Settings → Desktop widget.</div>
+          <Button small onClick={() => api.widget.openMain()}>Open Planner</Button>
+        </div>
+      )}
+      <div className="widget-bar glass">
+        <button className="icon-btn" title="Open in Planner" onClick={() => api.widget.openMain(ok ? page.id : undefined)}><Icon name="layout" size={15} /></button>
+      </div>
+      {overlay === 'values' && <ValuesDialog />}
+      <Toasts />
+    </div>
+  )
+}
+
+function MainApp(): JSX.Element {
   const ready = useApp((s) => s.ready)
   const current = useApp((s) => s.current)
   const overlay = useApp((s) => s.overlay)

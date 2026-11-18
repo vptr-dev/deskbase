@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPage, getData, openPage, purgePage, replaceData, restorePage, setOverlay, setSettings, toast, useApp, useData, act, undo, redo } from '../store'
 import { ACCENTS, BACKDROPS, PAGE_TYPES, typeInfo } from '../lib/defaults'
-import { api, isDesktop, type AppInfo, type UpdateStatus } from '../lib/api'
+import { api, isDesktop, type AppInfo, type DisplayInfo, type UpdateStatus } from '../lib/api'
+import type { Settings } from '../types'
 import { exportAll, tasksToCsv } from '../lib/exporters'
 import { timeAgo, today } from '../lib/util'
 import { Button, ConfirmButton, Empty, Modal, Segmented, Toggle } from './ui'
@@ -189,10 +190,71 @@ function Row({ label, sub, children }: { label: string; sub?: string; children: 
   return <div className="set-row"><div className="set-label"><div>{label}</div>{sub && <div className="muted small">{sub}</div>}</div><div className="set-control">{children}</div></div>
 }
 
-function StartWithWindows(): JSX.Element {
+type WidgetPrefs = Settings['widget']
+
+function DesktopWidgetSettings(): JSX.Element {
+  const w = useData((d) => d.settings.widget)
+  const pages = useData((d) => d.pages)
+  const [displays, setDisplays] = useState<DisplayInfo[]>([])
+  useEffect(() => { api.displays().then(setDisplays).catch(() => {}) }, [])
+  const dashboards = Object.values(pages).filter((p) => p.type === 'dashboard' && !p.deletedAt)
+  const set = (fn: (x: WidgetPrefs) => void): void => setSettings((s) => { const n = { ...s.widget }; fn(n); s.widget = n })
+  const others = displays.filter((d) => !d.primary)
+  const target = displays.find((d) => d.id === w.displayId) ?? others.find((d) => d.bounds.width >= d.bounds.height) ?? others[0] ?? displays.find((d) => d.primary)
+  const minX = Math.min(...displays.map((d) => d.bounds.x))
+  const minY = Math.min(...displays.map((d) => d.bounds.y))
+  const spanX = Math.max(1, Math.max(...displays.map((d) => d.bounds.x + d.bounds.width)) - minX)
+  const spanY = Math.max(1, Math.max(...displays.map((d) => d.bounds.y + d.bounds.height)) - minY)
+  const newDashboard = (): void => {
+    const id = createPage('dashboard', null, 'Desktop')
+    set((x) => { x.pageId = id })
+  }
+  return <>
+    <h3>Desktop widget</h3>
+    <p className="muted small set-intro">Pin a dashboard to a monitor. It covers that screen and stays on the desktop behind your windows, so it is always there when you look over.</p>
+    <Row label="Show desktop widget" sub={w.enabled && !w.pageId ? 'Pick a dashboard below' : undefined}>
+      <Toggle checked={w.enabled} onChange={(v) => set((x) => { x.enabled = v; if (v && !x.pageId) x.pageId = dashboards[0]?.id ?? null })} />
+    </Row>
+    <Row label="Dashboard" sub="Edit its widgets on the dashboard page">
+      {dashboards.length ? (
+        <div className="row gap-sm">
+          <select id="widget-page" className="input input-sm" value={w.pageId ?? ''} onChange={(e) => { const v = e.target.value; set((x) => { x.pageId = v || null }) }}>
+            {!w.pageId && <option value="">Choose…</option>}
+            {dashboards.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
+          </select>
+          {w.pageId && pages[w.pageId] && <Button small kind="ghost" onClick={() => openPage(w.pageId!)}>Open</Button>}
+        </div>
+      ) : <Button small icon="plus" onClick={newDashboard}>Create a dashboard</Button>}
+    </Row>
+    {displays.length > 0 && (
+      <div className="set-block">
+        <div className="set-label"><div>Monitor</div><div className="muted small">{displays.length > 1 ? 'Click the screen the widget should cover' : 'Only one screen is connected'}</div></div>
+        <div className="display-map">
+          <div className="display-map-inner" style={{ aspectRatio: `${spanX} / ${spanY}` }}>
+            {displays.map((d, i) => (
+              <button key={d.id} className={`display-tile ${target?.id === d.id ? 'active' : ''}`}
+                style={{ left: `${((d.bounds.x - minX) / spanX) * 100}%`, top: `${((d.bounds.y - minY) / spanY) * 100}%`, width: `${(d.bounds.width / spanX) * 100}%`, height: `${(d.bounds.height / spanY) * 100}%` }}
+                onClick={() => set((x) => { x.displayId = d.id })}>
+                <span className="strong">{i + 1}{d.primary ? ' · main' : ''}</span>
+                <span className="muted tiny">{d.width}×{d.height}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+    <Row label="Layer"><Segmented small value={w.layer} onChange={(v) => set((x) => { x.layer = v })} options={[{ value: 'desktop', label: 'Behind windows' }, { value: 'top', label: 'Always on top' }]} /></Row>
+    <Row label="Background" sub="See-through shows your wallpaper. Blurred uses Windows acrylic."><Segmented small value={w.background} onChange={(v) => set((x) => { x.background = v })} options={[{ value: 'clear', label: 'See-through' }, { value: 'acrylic', label: 'Blurred' }]} /></Row>
+    <Row label="Opacity"><input id="widget-opacity" type="range" min={20} max={100} value={w.opacity} onChange={(e) => { const v = Number(e.target.value); set((x) => { x.opacity = v }) }} /><span className="muted small w-40">{w.opacity}%</span></Row>
+    <StartWithWindows sub="Starts in the tray with just the widget showing" />
+    <p className="muted small">Clicks on empty space go through to the desktop. While the widget is on, closing the Planner window keeps it running in the tray.</p>
+  </>
+}
+
+function StartWithWindows({ sub }: { sub?: string }): JSX.Element {
   const [on, setOn] = useState(false)
   useEffect(() => { api.loginItem().then(setOn).catch(() => {}) }, [])
-  return <Row label="Start with Windows"><Toggle checked={on} onChange={(v) => { setOn(v); api.loginItem(v).then(setOn).catch(() => {}) }} /></Row>
+  return <Row label="Start with Windows" sub={sub}><Toggle checked={on} onChange={(v) => { setOn(v); api.loginItem(v).then(setOn).catch(() => {}) }} /></Row>
 }
 
 export function SettingsDialog(): JSX.Element {
@@ -200,7 +262,9 @@ export function SettingsDialog(): JSX.Element {
   const profile = useData((d) => d.profile)
   const pages = useData((d) => d.pages)
   const initialTab = useApp((st) => st.overlayArg)
-  const [tab, setTab] = useState<'general' | 'appearance' | 'assistant' | 'data' | 'about'>(['general', 'appearance', 'assistant', 'data', 'about'].includes(initialTab) ? initialTab : 'general')
+  const TABS = ['general', 'appearance', ...(isDesktop ? ['widget' as const] : []), 'assistant', 'data', 'about'] as const
+  type Tab = 'general' | 'appearance' | 'widget' | 'assistant' | 'data' | 'about'
+  const [tab, setTab] = useState<Tab>((TABS as readonly string[]).includes(initialTab) ? initialTab : 'general')
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [backups, setBackups] = useState<{ name: string; date: string; size: number }[]>([])
   const [upd, setUpd] = useState<UpdateStatus>({ state: 'idle' })
@@ -212,8 +276,8 @@ export function SettingsDialog(): JSX.Element {
     <Modal onClose={() => setOverlay(null)} width={720} className="settings">
       <div className="settings-layout">
         <nav className="settings-nav">
-          {(['general', 'appearance', 'assistant', 'data', 'about'] as const).map((t) => (
-            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', assistant: 'Assistant', data: 'Data & backups', about: 'About & updates' }[t]}</button>
+          {TABS.map((t) => (
+            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', widget: 'Desktop widget', assistant: 'Assistant', data: 'Data & backups', about: 'About & updates' }[t]}</button>
           ))}
         </nav>
         <div className="settings-body">
@@ -258,6 +322,7 @@ export function SettingsDialog(): JSX.Element {
             <Row label="Density"><Segmented small value={s.density} onChange={(v) => set((x) => { x.density = v })} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} /></Row>
             <Row label="Reduce motion"><Toggle checked={s.reduceMotion} onChange={(v) => set((x) => { x.reduceMotion = v })} /></Row>
           </>}
+          {tab === 'widget' && <DesktopWidgetSettings />}
           {tab === 'assistant' && <AssistantSettings />}
           {tab === 'data' && <>
             <h3>Data & backups</h3>

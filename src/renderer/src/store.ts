@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { applyPatches, enablePatches, type Patch, produceWithPatches } from 'immer'
 import type { AppData, Page, PageType, Task } from './types'
-import { api } from './lib/api'
+import { api, isWidgetWindow } from './lib/api'
 import { freshData, newPage, normalize } from './lib/defaults'
 import { applyRules, revertRules, type ValueEvent } from './lib/values'
 import { addDays, addMonths, friendlyDay, parseDay, today, uid } from './lib/util'
@@ -79,6 +79,15 @@ export async function boot(): Promise<void> {
   if (res.error) toast(res.error, { kind: 'error' })
 }
 
+/** Another window (main app / desktop widget) saved: take its data unless we have unsaved edits. */
+export function receiveRemote(raw: any): void {
+  if (saveTimer || !raw) return
+  const data = normalize(raw)
+  undoStack.length = 0
+  redoStack.length = 0
+  useApp.setState({ data, canUndo: false, canRedo: false })
+}
+
 export function replaceData(raw: any, message: string): void {
   const data = normalize(raw)
   undoStack.length = 0
@@ -152,6 +161,7 @@ export const fireConfetti = (): void => { if (!getData().settings.reduceMotion) 
 export function openPage(id: string): void {
   const d = getData()
   if (!d.pages[id]) return
+  if (isWidgetWindow) { api.widget.openMain(id); return }
   useApp.setState({ current: id, overlay: null })
   act((dr) => {
     dr.settings.lastPage = id

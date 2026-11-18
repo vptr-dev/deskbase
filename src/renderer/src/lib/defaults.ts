@@ -78,7 +78,7 @@ export const DEFAULT_SETTINGS: Settings = {
   spellcheck: true,
   glassStrength: 55,
   backdrop: 'sky',
-  widget: { enabled: false, displayId: null, pageId: null, opacity: 100 },
+  widget: { enabled: false, displayId: null, pageId: null, opacity: 100, background: 'clear', layer: 'desktop' },
   closeToTray: false,
   quickAddHotkey: true
 }

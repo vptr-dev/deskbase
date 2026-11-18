@@ -42,6 +42,7 @@
   --shadow-lg: 0 18px 50px rgba(30, 40, 80, 0.18), 0 2px 8px rgba(30, 40, 80, 0.08);
   --panel-shadow: 0 1px 1px rgba(30, 40, 80, 0.03), 0 12px 40px rgba(30, 40, 80, 0.08);
   --glass-text: linear-gradient(180deg, #14161c 30%, rgba(20, 22, 28, 0.7) 100%);
+  --widget-card: rgba(255, 255, 255, calc(0.2 + var(--glass) * 0.6));
   --danger: #ff3b30;
   --success: #34c759;
   --warning: #ff9500;
@@ -81,6 +82,7 @@
   --shadow-lg: 0 18px 60px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
   --panel-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
   --glass-text: linear-gradient(180deg, #ffffff 30%, rgba(235, 238, 255, 0.66) 100%);
+  --widget-card: rgba(16, 18, 26, calc(var(--glass) * 0.5));
   --fallback-bg: var(--backdrop-sky);
   --backdrop-sky: radial-gradient(900px 600px at 8% 10%, #1b3560 0%, transparent 60%), radial-gradient(800px 700px at 95% 0%, #32255e 0%, transparent 55%), radial-gradient(900px 700px at 70% 100%, #4a2340 0%, transparent 60%), #0d111c;
   --backdrop-peach: radial-gradient(900px 600px at 10% 0%, #5a3020 0%, transparent 60%), radial-gradient(800px 700px at 100% 30%, #5a2232 0%, transparent 55%), #17110f;
@@ -1009,3 +1011,22 @@ button.db-add-col:hover { background: var(--hover); color: var(--fg); }
 .w-page-icon { font-size: 1.4em; }
 .w-quickadd .widget-body { justify-content: center; padding-top: 6px; padding-bottom: 6px; }
 .w-quickadd .quickadd { margin: 0; border: 0; box-shadow: none; background: none; }
+
+/* ---------- desktop widget window ---------- */
+html.widget-mode, html.widget-mode body { background: transparent; }
+/* No blur behind a see-through window, so cards get a tint to stay readable on any wallpaper. */
+html.widget-mode[data-widget-bg='clear'] .widget.glass { background: var(--widget-card); }
+.widget-shell { position: relative; height: 100%; padding: 16px; overflow: hidden; }
+.widget-shell .dash { height: 100%; }
+.widget-shell .dash-grid { flex: 1; min-height: 0; overflow-y: auto; align-content: start; }
+.widget-missing { position: absolute; inset: 0; margin: auto; width: 320px; height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 20px; }
+.widget-bar { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; padding: 3px; border-radius: 12px; opacity: 0; transition: opacity 0.15s; }
+.widget-shell:hover .widget-bar { opacity: 0.6; }
+.widget-bar:hover { opacity: 1 !important; }
+.set-intro { margin: -4px 0 8px; line-height: 1.5; }
+.set-block { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; }
+.display-map { height: 160px; border-radius: 12px; background: var(--hover); padding: 12px; display: flex; justify-content: center; }
+.display-map-inner { position: relative; height: 100%; max-width: 100%; }
+.display-tile { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 8px; font-size: 12px; text-align: center; padding: 4px; background: var(--card-strong); border: 1.5px solid var(--card-border); box-shadow: var(--highlight); overflow: hidden; }
+.display-tile:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.display-tile.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--card-strong)); }

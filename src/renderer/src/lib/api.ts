@@ -1,4 +1,5 @@
 import { download } from './util'
+import type { AppData } from '../types'
 import { migrate } from '../../../main/migrations'
 import { type AiConfig, type ChatMessage, listOpenAiModels, providerInfo, streamOllama, streamOpenAi } from '../../../shared/ai-core'
 import type { ImportResult, NotionPageInfo } from '../../../shared/import-types'
@@ -38,6 +39,15 @@ export interface Bridge {
   quickAddDone(added: boolean): Promise<void>
   onQuickAdd(cb: () => void): () => void
   openExternal(url: string): Promise<void>
+  displays(): Promise<DisplayInfo[]>
+  onDataChanged(cb: (data: any) => void): () => void
+  onOpenPage(cb: (id: string) => void): () => void
+  onWidgetToggle(cb: () => void): () => void
+  widget: {
+    set(w: AppData['settings']['widget']): Promise<boolean>
+    openMain(pageId?: string): Promise<void>
+    interactive(on: boolean): void
+  }
   ai: {
     getConfig(): Promise<AiConfig>
     setConfig(patch: Partial<AiConfig> & { key?: string | null }): Promise<AiConfig>
@@ -160,6 +170,11 @@ const browserBridge: Bridge = {
   quickAddDone: async () => {},
   onQuickAdd: () => () => {},
   openExternal: async (url) => { window.open(url, '_blank') },
+  displays: async () => [],
+  onDataChanged: () => () => {},
+  onOpenPage: () => () => {},
+  onWidgetToggle: () => () => {},
+  widget: { set: async () => false, openMain: async () => {}, interactive: () => {} },
   ai: webAi,
   notion: {
     available: async () => false,
@@ -177,3 +192,7 @@ const browserBridge: Bridge = {
 
 export const api: Bridge = (window as any).api ?? browserBridge
 export const isDesktop = Boolean((window as any).api)
+/** True inside the desktop widget window. */
+export const isWidgetWindow = location.hash === '#widget'
+
+export interface DisplayInfo { id: number; label: string; primary: boolean; width: number; height: number; bounds: { x: number; y: number; width: number; height: number } }

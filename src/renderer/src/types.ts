@@ -304,7 +304,16 @@ export interface Settings {
   /** backdrop behind the glass: 'mica' shows the desktop tint, others are gradients from styles.css */
   backdrop: string
   /** desktop widget window on another monitor */
-  widget: { enabled: boolean; displayId: number | null; pageId: string | null; opacity: number }
+  widget: {
+    enabled: boolean
+    displayId: number | null
+    pageId: string | null
+    opacity: number
+    /** 'clear' = see-through window, 'acrylic' = blurred Windows material */
+    background: 'clear' | 'acrylic'
+    /** 'desktop' = behind other windows, 'top' = above them */
+    layer: 'desktop' | 'top'
+  }
   closeToTray: boolean
   quickAddHotkey: boolean
 }
