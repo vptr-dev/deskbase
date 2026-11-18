@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 — 2026-11-18
+
 - Assistant panel (Ctrl+J) that works with a local model through Ollama or LM Studio, or with an OpenAI, Anthropic or custom API key.
 - The assistant sees your tasks, habits, goals and the open page, and suggests tasks, pages, habits, goals and journal entries you can add with one click.
 - API keys are stored encrypted on this computer.

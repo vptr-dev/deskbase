@@ -1,7 +1,7 @@
 {
   "name": "planner",
   "productName": "Planner",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A clean local planner and life tracker.",
   "main": "./out/main/index.js",
   "author": "vptr-dev",
