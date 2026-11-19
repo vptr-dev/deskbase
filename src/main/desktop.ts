@@ -5,7 +5,7 @@ import { BrowserWindow, Menu, type MenuItemConstructorOptions, screen, shell, ty
  * main window's renderer with window.open, so they share its JavaScript, store and React tree;
  * this module only creates, places and styles the native windows.
  */
-export type DeskMaterial = 'blur' | 'acrylic' | 'tint' | 'clear'
+export type DeskMaterial = 'glass' | 'blur' | 'acrylic' | 'tint' | 'clear'
 export type DeskLayer = 'desktop' | 'normal' | 'top'
 export interface DeskSpec {
   id: string
@@ -378,13 +378,14 @@ export function deskBounds(id: string): Electron.Rectangle | null {
 }
 
 /** Native right-click menu on a widget. Resolves with the chosen command. */
-export function deskMenu(id: string, items: { id: string; label: string; checked?: boolean; type?: 'separator'; submenu?: { id: string; label: string; checked?: boolean }[] }[]): Promise<string | null> {
+export function deskMenu(id: string, items: { id: string; label: string; checked?: boolean; type?: 'separator'; role?: 'cut' | 'copy' | 'paste'; submenu?: { id: string; label: string; checked?: boolean }[] }[]): Promise<string | null> {
   const e = wins.get(id)
   if (!e || e.win.isDestroyed()) return Promise.resolve(null)
   return new Promise((resolve) => {
     let picked: string | null = null
     const build = (list: typeof items): MenuItemConstructorOptions[] => list.map((it) => {
       if (it.type === 'separator') return { type: 'separator' }
+      if (it.role && ['cut', 'copy', 'paste'].includes(it.role)) return { role: it.role, label: it.label }
       if (it.submenu) return { label: it.label, submenu: it.submenu.map((s) => ({ label: s.label, type: 'radio' as const, checked: !!s.checked, click: () => { picked = s.id } })) }
       return { label: it.label, ...(it.checked !== undefined ? { type: 'checkbox' as const, checked: it.checked } : {}), click: () => { picked = it.id } }
     })

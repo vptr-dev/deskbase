@@ -219,5 +219,5 @@ export const isDesktop = Boolean((window as any).api)
 
 export interface Rect { x: number; y: number; width: number; height: number }
 export interface DisplayInfo { id: number; label: string; primary: boolean; width: number; height: number; scale: number; bounds: Rect; workArea: Rect }
-export interface DeskSpec { id: string; x: number; y: number; w: number; h: number; displayId?: number | null; material: 'blur' | 'acrylic' | 'tint' | 'clear'; layer: 'desktop' | 'normal' | 'top'; radius: number; clickThrough: boolean; title: string }
-export interface DeskMenuItem { id: string; label: string; checked?: boolean; type?: 'separator'; submenu?: { id: string; label: string; checked?: boolean }[] }
+export interface DeskSpec { id: string; x: number; y: number; w: number; h: number; displayId?: number | null; material: 'glass' | 'blur' | 'acrylic' | 'tint' | 'clear'; layer: 'desktop' | 'normal' | 'top'; radius: number; clickThrough: boolean; title: string }
+export interface DeskMenuItem { id: string; label: string; checked?: boolean; type?: 'separator'; role?: 'cut' | 'copy' | 'paste'; submenu?: { id: string; label: string; checked?: boolean }[] }

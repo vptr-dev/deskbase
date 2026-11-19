@@ -15,7 +15,6 @@ import { goalProgress } from '../pages/GoalsPage'
 import { nextDate } from './Countdowns'
 import { DatabaseView } from '../pages/DatabasePage'
 import { DashboardGrid } from '../pages/DashboardPage'
-import { refreshFromNotion } from '../lib/importer'
 import { pickImageData } from '../lib/image'
 
 /** Partial widget used by both dashboards and desktop widgets. */
@@ -431,17 +430,6 @@ export function sectionBlocks(blocks: Block[], section?: string | null): Block[]
   return out
 }
 
-function NotionRefresh({ page }: { page: Page }): JSX.Element | null {
-  const [busy, setBusy] = useState(false)
-  if (page.source?.kind !== 'notion') return null
-  const ago = Math.round((Date.now() - page.source.syncedAt) / 60000)
-  return (
-    <button className={`w-refresh ${busy ? 'spin' : ''}`} title={`From Notion, updated ${ago < 1 ? 'just now' : ago < 60 ? ago + ' min ago' : Math.round(ago / 60) + ' h ago'}. Click to refresh.`}
-      onClick={async () => { setBusy(true); try { await refreshFromNotion([page.id]) } finally { setBusy(false) } }}>
-      <Icon name="refresh" size={12} />
-    </button>
-  )
-}
 
 function MiniBlock({ b, pageId, n }: { b: Block; pageId: string; n: number }): JSX.Element | null {
   const ind = { paddingLeft: (b.indent ?? 0) * 16 }
@@ -496,7 +484,6 @@ function PageViewWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   let n = 0
   return (
     <div className="w-pageview">
-      <NotionRefresh page={page} />
       <div className="w-scroll">
         {blocks.map((b) => { n = b.type === 'number' ? n + 1 : 0; return <MiniBlock key={b.id} b={b} pageId={page.id} n={n} /> })}
         {blocks.length === 0 && <div className="muted small pad">Nothing here.</div>}
@@ -522,7 +509,6 @@ function ChecklistWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const list = cfg.hideChecked ? all.filter((x) => !x.b.checked) : all
   return (
     <div className="w-checklist">
-      <NotionRefresh page={page} />
       <div className="w-check-top">
         <Progress value={all.length ? done / all.length : 0} height={4} />
         <span className="muted small">{done}/{all.length}</span>

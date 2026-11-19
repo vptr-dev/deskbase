@@ -61,6 +61,8 @@ export const BACKDROPS: { id: string; name: string }[] = [
 
 export const DEFAULT_LOOK: Look = {
   preset: 'glass',
+  surface: 'glass',
+  panelSurface: 'same',
   radius: 16,
   blur: 28,
   shine: 70,
@@ -83,16 +85,16 @@ export const DEFAULT_LOOK: Look = {
 }
 
 export const DEFAULT_WIDGET_STYLE: WidgetStyle = {
-  material: 'blur',
+  material: 'auto',
   tint: '',
-  opacity: 42,
+  opacity: 50,
   radius: 18,
   text: '',
   accent: '',
   font: '',
   scale: 100,
   padding: 14,
-  border: 40,
+  border: 60,
   shadow: false,
   header: true,
   align: 'start',
@@ -287,12 +289,15 @@ const num = (v: any, lo: number, hi: number, dflt: number): number => {
 }
 const color = (v: any, dflt: string): string => (typeof v === 'string' && /^(#[0-9a-fA-F]{3,8})?$/.test(v) ? v : dflt)
 
+const SURFACES = ['glass', 'blur', 'frosted', 'solid']
 export function normalizeLook(raw: any): Look {
   const l = { ...DEFAULT_LOOK, ...obj(raw) }
   const g = obj(raw?.gradient)
   const D = DEFAULT_LOOK
   return {
     preset: typeof l.preset === 'string' ? l.preset : D.preset,
+    surface: SURFACES.includes(l.surface) ? l.surface : D.surface,
+    panelSurface: l.panelSurface === 'same' || SURFACES.includes(l.panelSurface) ? l.panelSurface : 'same',
     radius: num(l.radius, 0, 32, D.radius),
     blur: num(l.blur, 0, 80, D.blur),
     shine: num(l.shine, 0, 100, D.shine),
@@ -324,7 +329,7 @@ function normalizeSettings(raw: any): Settings {
   return s
 }
 
-const MATERIALS = ['blur', 'acrylic', 'tint', 'clear']
+const MATERIALS = ['auto', 'glass', 'blur', 'acrylic', 'tint', 'clear']
 
 /** Cleans a widget style. With `partial`, only keys that are present are kept (overrides). */
 export function normalizeStyle(raw: any, partial: true): Partial<WidgetStyle>

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- One look everywhere: windows, cards and desktop panels share the same surface. The new default is clear glass with a light edge (the 0.5 desktop look), in light and dark.
+- Surface setting in Appearance (and Settings): Glass, Blur, Frosted or Solid for the whole app, with an option to give the desktop panels their own surface, for example blur only on the panels.
+- Panels follow the app's surface unless you pick one for a panel ("Match app" is the new default). Glass is also available per panel.
+- Right-click a desktop panel for its options: lock or unlock movement, edit, refresh from Notion, where it stays, click-through, arrange, lock all panels, duplicate, hide, remove. Cut, copy and paste when you right-click text. Locked panels hide their resize handle.
+- Removed the refresh button in the top-right corner of Notion panels; it is in the right-click menu now.
+
 ## 0.6.0 — 2026-11-19
 
 The app is now **Deskbase**: your pages, tasks and notes as glass panels on the Windows desktop.

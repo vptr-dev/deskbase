@@ -99,7 +99,8 @@ export function CommandPalette(): JSX.Element {
     const cmds: Result[] = [
       { id: 'c-new', icon: 'plus', title: 'New page', sub: 'Ctrl N', run: () => setOverlay('newPage', { parentId: null }) },
       { id: 'c-desktop', icon: 'monitor', title: 'Desktop', sub: 'Panels and workspaces', run: () => openView('@desktop') },
-      { id: 'c-look', icon: 'palette', title: 'Appearance', sub: 'Themes, glass, fonts', run: () => openView('@appearance') },
+      { id: 'c-look', icon: 'palette', title: 'Appearance', sub: 'Themes, surface, fonts', run: () => openView('@appearance') },
+      ...(['glass', 'blur', 'frosted', 'solid'] as const).map((v) => ({ id: 'c-surface-' + v, icon: 'layers', title: 'Surface: ' + v[0].toUpperCase() + v.slice(1), run: () => setSettings((x) => { x.look = { ...x.look, surface: v } }) })),
       { id: 'c-values', icon: 'gem', title: 'Values and rules', sub: 'Your own numbers', run: () => setOverlay('values') },
       { id: 'c-quickadd', icon: 'square-check-big', title: 'Quick add task', sub: 'Ctrl Shift Space', run: () => setOverlay('quickAdd') },
       { id: 'c-settings', icon: 'settings', title: 'Open settings', sub: 'Ctrl ,', run: () => setOverlay('settings') },
@@ -252,6 +253,7 @@ export function SettingsDialog(): JSX.Element {
             <h3>Appearance</h3>
             <Row label="Theme"><Segmented small value={s.theme} onChange={(v) => set((x) => { x.theme = v })} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} /></Row>
             <Row label="Accent color"><div className="color-dots">{ACCENTS.map((a) => <button key={a.value} title={a.name} className={`color-dot ${s.accent === a.value ? 'active' : ''}`} style={{ background: a.value }} onClick={() => set((x) => { x.accent = a.value })} />)}</div></Row>
+            <Row label="Surface" sub="Windows, cards and desktop panels"><Segmented small value={s.look.surface} onChange={(v) => set((x) => { x.look = { ...x.look, surface: v } })} options={[{ value: 'glass', label: 'Glass' }, { value: 'blur', label: 'Blur' }, { value: 'frosted', label: 'Frosted' }, { value: 'solid', label: 'Solid' }]} /></Row>
             <Row label="Window material" sub={info && !info.micaSupported ? 'Mica needs Windows 11' : 'Used with the Desktop background'}>
               <Segmented small value={s.material} onChange={(v) => { set((x) => { x.material = v }); api.setMaterial(v) }} options={[{ value: 'mica', label: 'Mica' }, { value: 'acrylic', label: 'Acrylic' }, { value: 'none', label: 'Solid' }]} />
             </Row>

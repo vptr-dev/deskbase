@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from 'react'
 import { setSettings, toast, useData } from '../store'
-import type { Look, Settings } from '../types'
+import type { Look, Settings, Surface } from '../types'
 import { ACCENTS, BACKDROPS, DEFAULT_LOOK, normalizeLook } from '../lib/defaults'
 import { FONT_CHOICES, PRESETS, exportTheme, parseTheme, type ThemePreset } from '../lib/look'
 import { api } from '../lib/api'
@@ -44,7 +44,7 @@ function applyPreset(p: ThemePreset): void {
     s.backdrop = p.backdrop
     s.glassStrength = p.glassStrength
     s.font = p.font
-    s.look = { ...DEFAULT_LOOK, backdropImage: s.look.backdropImage, customCss: s.look.customCss, fontFamily: '', headingFamily: '', ...p.look, preset: p.id }
+    s.look = { ...DEFAULT_LOOK, surface: s.look.surface, panelSurface: s.look.panelSurface, backdropImage: s.look.backdropImage, customCss: s.look.customCss, fontFamily: '', headingFamily: '', ...p.look, preset: p.id }
   })
 }
 
@@ -87,9 +87,31 @@ function FontInput({ value, onChange, placeholder }: { value: string; onChange: 
   )
 }
 
+const SURFACES: { value: Surface; name: string; sub: string }[] = [
+  { value: 'glass', name: 'Glass', sub: 'Clear, with a light edge' },
+  { value: 'blur', name: 'Blur', sub: 'Softens what is behind' },
+  { value: 'frosted', name: 'Frosted', sub: 'Heavy blur' },
+  { value: 'solid', name: 'Solid', sub: 'No see-through' }
+]
+
+function SurfacePick({ value, onChange }: { value: Surface; onChange: (v: Surface) => void }): JSX.Element {
+  return (
+    <div className="surface-pick">
+      {SURFACES.map((o) => (
+        <button key={o.value} className={`surface-opt ${value === o.value ? 'active' : ''}`} onClick={() => onChange(o.value)}>
+          <span className="surface-demo"><span className={`surface-demo-card s-${o.value}`}><i /><i /></span></span>
+          <span className="surface-name">{o.name}</span>
+          <span className="surface-sub">{o.sub}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function AppearancePage(): JSX.Element {
   const s = useData((d) => d.settings)
   const l = s.look
+  const blurs = [l.surface, l.panelSurface].some((x) => x === 'blur' || x === 'frosted')
   const set = (fn: (x: Settings) => void, key?: string): void => setSettings(fn, key)
   const [cssDraft, setCssDraft] = useState<string | null>(null)
 
@@ -119,6 +141,13 @@ export function AppearancePage(): JSX.Element {
         <div className="preset-grid">
           {PRESETS.map((p) => <PresetCard key={p.id} p={p} active={l.preset === p.id} />)}
         </div>
+      </Section>
+
+      <Section title="Surface" icon="layers">
+        <SurfacePick value={l.surface} onChange={(v) => setLook({ surface: v })} />
+        <Row label="Desktop panels" sub="Give the panels on your desktop their own surface">
+          <Segmented small value={l.panelSurface} onChange={(v) => setLook({ panelSurface: v })} options={[{ value: 'same', label: 'Same' }, ...SURFACES.map((o) => ({ value: o.value, label: o.name }))]} />
+        </Row>
       </Section>
 
       <Section title="Color" icon="droplet">
@@ -177,10 +206,12 @@ export function AppearancePage(): JSX.Element {
         </>}
       </Section>
 
-      <Section title="Glass" icon="layers">
-        <Row label="Panel opacity"><Slider value={s.glassStrength} min={10} max={100} unit="%" onChange={(v) => set((x) => { x.glassStrength = v }, 'glass')} /></Row>
-        <Row label="Blur"><Slider value={l.blur} min={0} max={80} unit="px" onChange={(v) => setLook({ blur: v }, 'blur')} /></Row>
-        <Row label="Color through glass"><Slider value={l.saturation} min={100} max={220} unit="%" onChange={(v) => setLook({ saturation: v }, 'sat')} /></Row>
+      <Section title="Glass" icon="sliders-horizontal">
+        <Row label="Opacity"><Slider value={s.glassStrength} min={10} max={100} unit="%" onChange={(v) => set((x) => { x.glassStrength = v }, 'glass')} /></Row>
+        {blurs && <>
+          <Row label="Blur"><Slider value={l.blur} min={0} max={80} unit="px" onChange={(v) => setLook({ blur: v }, 'blur')} /></Row>
+          <Row label="Color through glass"><Slider value={l.saturation} min={100} max={220} unit="%" onChange={(v) => setLook({ saturation: v }, 'sat')} /></Row>
+        </>}
         <Row label="Edge shine"><Slider value={l.shine} min={0} max={100} unit="%" onChange={(v) => setLook({ shine: v }, 'shine')} /></Row>
         <Row label="Shadow depth"><Slider value={l.shadow} min={0} max={100} unit="%" onChange={(v) => setLook({ shadow: v }, 'shadow')} /></Row>
       </Section>

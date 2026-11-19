@@ -4,7 +4,8 @@ import { act, getData, openView, toast, useApp, useData } from '../store'
 import type { DeskWidget, WidgetStyle, WidgetType } from '../types'
 import { api, type DeskMenuItem, type DeskSpec, isDesktop } from './api'
 import { uid } from './util'
-import { fullStyle, widgetClass, widgetVars } from './widgetStyle'
+import { refreshFromNotion } from './importer'
+import { fullStyle, surfaceMaterial, widgetClass, widgetVars } from './widgetStyle'
 import { WidgetBody, widgetDef, widgetTitle } from '../components/Widgets'
 import { DocContext } from '../components/ui'
 import { Icon } from '../components/Icon'
@@ -102,26 +103,38 @@ export async function addDesktopWidget(type: WidgetType, init: Partial<DeskWidge
 }
 
 // ---------- context menu ----------
-async function showMenu(id: string): Promise<void> {
+async function showMenu(id: string, editable: boolean): Promise<void> {
   const w = findDesk(id)
   if (!w) return
   const editing = useDesk.getState().editing
+  const d = getData()
+  const page = typeof w.config.pageId === 'string' ? d.pages[w.config.pageId] : undefined
+  const allLocked = activePanels(d.desktop).every((x) => x.locked)
   const items: DeskMenuItem[] = [
+    ...(editable ? [
+      { id: 'cut', label: 'Cut', role: 'cut' },
+      { id: 'copy', label: 'Copy', role: 'copy' },
+      { id: 'paste', label: 'Paste', role: 'paste' },
+      { id: 'sep0', label: '', type: 'separator' }
+    ] as DeskMenuItem[] : []),
+    { id: 'lock', label: w.locked ? 'Unlock movement' : 'Lock movement' },
     { id: 'edit', label: 'Edit panel…' },
-    { id: 'arrange', label: editing ? 'Done arranging' : 'Arrange panels' },
+    ...(page?.source?.kind === 'notion' ? [{ id: 'refresh', label: 'Refresh from Notion' }] : []),
     { id: 'sep1', label: '', type: 'separator' },
-    { id: 'lock', label: 'Lock position', checked: !!w.locked },
-    { id: 'click', label: 'Click-through', checked: !!(w.config.clickThrough) },
     { id: 'layer', label: 'Stay', submenu: [
       { id: 'layer:desktop', label: 'On the desktop', checked: w.layer === 'desktop' },
       { id: 'layer:normal', label: 'Like a window', checked: w.layer === 'normal' },
       { id: 'layer:top', label: 'Always on top', checked: w.layer === 'top' }
     ] },
+    { id: 'click', label: 'Click-through', checked: !!(w.config.clickThrough) },
     { id: 'sep2', label: '', type: 'separator' },
+    { id: 'arrange', label: editing ? 'Done arranging' : 'Arrange panels' },
+    { id: 'lock-all', label: allLocked ? 'Unlock all panels' : 'Lock all panels' },
+    { id: 'sep3', label: '', type: 'separator' },
     { id: 'duplicate', label: 'Duplicate' },
     { id: 'hide', label: 'Hide' },
     { id: 'remove', label: 'Remove' },
-    { id: 'sep3', label: '', type: 'separator' },
+    { id: 'sep4', label: '', type: 'separator' },
     { id: 'open', label: 'Open app' }
   ]
   const cmd = await api.desk.menu(id, items)
@@ -135,10 +148,17 @@ export function runCommand(id: string, cmd: string): void {
   if (cmd === 'open') { openView('@desktop'); return }
   if (cmd.startsWith('space:')) { switchSpace(cmd.slice(6)); return }
   if (cmd === 'next-space') { cycleSpace(1); return }
+  if (cmd === 'lock-all') {
+    act((d) => { const list = activePanels(d.desktop); const lock = !list.every((x) => x.locked); for (const x of list) x.locked = lock })
+    return
+  }
   if (!w) return
   switch (cmd) {
     case 'edit': useDesk.setState({ selected: id }); openView('@desktop'); break
     case 'lock': patchDesk(id, (x) => { x.locked = !x.locked }); break
+    case 'refresh':
+      if (typeof w.config.pageId === 'string') refreshFromNotion([w.config.pageId]).catch(() => toast('Could not refresh from Notion'))
+      break
     case 'click':
       patchDesk(id, (x) => { x.config.clickThrough = !x.config.clickThrough })
       if (!w.config.clickThrough) toast('Clicks now pass through. Use Arrange panels or the Desktop page to change it.')
@@ -163,12 +183,13 @@ export function runCommand(id: string, cmd: string): void {
 function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element | null {
   const w = useData((d) => d.desktop.widgets.find((x) => x.id === id))
   const base = useData((d) => d.desktop.style)
+  const auto = useData((d) => surfaceMaterial(d.settings.look, true))
   const grid = useData((d) => (d.desktop.snap ? d.desktop.grid : 1))
   const data = useData((d) => d)
   const editing = useDesk((s) => s.editing)
   const selected = useDesk((s) => s.selected === id)
   if (!w) return null
-  const st = fullStyle(base, w.style)
+  const st = fullStyle(base, w.style, auto)
   const title = widgetTitle(w, data)
   const movable = editing || !w.locked
 
@@ -202,7 +223,7 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
         className={`dw wt-${w.type} ${widgetClass(st)} ${editing ? 'editing' : ''} ${selected && editing ? 'selected' : ''} ${w.locked ? 'locked' : ''}`}
         data-theme={st.theme === 'auto' ? undefined : st.theme}
         style={widgetVars(st)}
-        onContextMenu={(e) => { e.preventDefault(); showMenu(id) }}
+        onContextMenu={(e) => { e.preventDefault(); showMenu(id, !!(e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) }}
         onPointerDown={(e) => { if (editing) useDesk.setState({ selected: id }) ; if (!st.header || editing) drag(e, 'move') }}
       >
         {st.header && title && (
@@ -228,10 +249,10 @@ interface Open { win: Window; root: Root; spec: DeskSpec }
 const open = new Map<string, Open>()
 
 function specOf(w: DeskWidget, base: WidgetStyle): DeskSpec {
-  const st = fullStyle(base, w.style)
+  const st = fullStyle(base, w.style, surfaceMaterial(getData().settings.look, true))
   return {
     id: w.id, x: w.x, y: w.y, w: w.w, h: w.h, displayId: w.config.displayId ?? null,
-    material: st.material, layer: w.layer, radius: st.radius, clickThrough: !!w.config.clickThrough,
+    material: st.material === 'auto' ? 'glass' : st.material, layer: w.layer, radius: st.radius, clickThrough: !!w.config.clickThrough,
     title: widgetTitle(w, getData()) || widgetDef(w.type).name
   }
 }
@@ -360,8 +381,10 @@ export function startDesktop(): () => void {
   watchHost()
   reconcile()
   let last = getData().desktop
+  let lastSurface = surfaceMaterial(getData().settings.look, true)
   const unsub = useApp.subscribe((s) => {
-    if (s.data.desktop !== last) { last = s.data.desktop; reconcile() }
+    const surface = surfaceMaterial(s.data.settings.look, true)
+    if (s.data.desktop !== last || surface !== lastSurface) { last = s.data.desktop; lastSurface = surface; reconcile() }
   })
   // Titles and contents follow the data on their own; specs only change with the desktop settings.
   const offClosed = api.desk.onClosed((id) => {

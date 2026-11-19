@@ -3,7 +3,7 @@ import { act, getData, useData } from '../store'
 import type { DeskWidget, WidgetStyle, WidgetType } from '../types'
 import { api, type DisplayInfo, isDesktop } from '../lib/api'
 import { addDesktopWidget, addSpace, patchDesk, runCommand, setDeskEditing, switchSpace, useDesk } from '../lib/desktop'
-import { fullStyle, widgetClass, widgetVars } from '../lib/widgetStyle'
+import { fullStyle, surfaceMaterial, widgetClass, widgetVars } from '../lib/widgetStyle'
 import { DEFAULT_WIDGET_STYLE } from '../lib/defaults'
 import { WidgetBody, widgetDef, widgetTitle } from '../components/Widgets'
 import { StyleFields, TitleField, WidgetConfigFields, Field } from '../components/WidgetConfig'
@@ -119,7 +119,7 @@ function Inspector({ w, displays }: { w: DeskWidget; displays: DisplayInfo[] }):
   const [tab, setTab] = useState<'content' | 'style' | 'place'>('content')
   const base = useData((d) => d.desktop.style)
   const data = useData((d) => d)
-  const st = fullStyle(base, w.style)
+  const st = fullStyle(base, w.style, 'auto')
   const set = (k: string, v: any): void => patchDesk(w.id, (x) => { x.config[k] = v }, 'dcfg:' + w.id + k)
   const r = rectOf(w, displays)
   const num = (k: 'x' | 'y' | 'w' | 'h', v: number): void => patchDesk(w.id, (x) => {
@@ -132,7 +132,7 @@ function Inspector({ w, displays }: { w: DeskWidget; displays: DisplayInfo[] }):
         <div className="row gap-sm min0"><span className="widget-pick-icon sm"><Icon name={widgetDef(w.type).icon} size={15} /></span><span className="strong ellipsis">{widgetTitle(w, data) || widgetDef(w.type).name}</span></div>
         <Segmented small value={tab} onChange={setTab} options={[{ value: 'content', label: 'Content' }, { value: 'style', label: 'Style' }, { value: 'place', label: 'Place' }]} />
       </div>
-      <Preview w={w} st={st} />
+      <Preview w={w} st={fullStyle(base, w.style, surfaceMaterial(data.settings.look, true))} />
       {tab === 'content' && <>
         <TitleField w={w} setTitle={(t) => patchDesk(w.id, (x) => { x.title = t }, 'dtitle:' + w.id)} />
         <WidgetConfigFields w={w} set={set} patch={(fn) => patchDesk(w.id, fn as (x: DeskWidget) => void)} />

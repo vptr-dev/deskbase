@@ -14,7 +14,7 @@ Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com
 
 - **Desktop panels**: tasks, checklists, any page, a scratchpad, quick add, focus timer, agenda, week and month views, goals, habits, numbers, charts, deadlines, clock, headings and pictures, each in its own window on the desktop. Drag, resize, snap, lock, click-through, and keep them on the desktop, like a window or always on top.
 - **Workspaces**: each one keeps its own panel layout. Switch from the sidebar, the Desktop page or the tray.
-- **Glass you control**: blurred, frosted, tinted or see-through panels with your own corners, tint, border, padding, size, font, text color and accent.
+- **One surface everywhere**: clear glass, blur, frosted or solid for the whole app, or only for the desktop panels, in light and dark. Each panel can also have its own corners, tint, border, padding, size, font, text color and accent. Right-click a panel to lock it in place.
 - **Appearance**: themes, accent, gradient or picture backgrounds, glass strength, blur, shadows, corner roundness, fonts, spacing, motion, page transitions and custom CSS. Export and share themes.
 - **Pages** in a nested sidebar with a block editor: headings, to-dos, lists, toggles, quotes, callouts, code, tables and `/` commands.
 - **Notion import** from the Notion app on your computer or an export, with pages that keep refreshing.

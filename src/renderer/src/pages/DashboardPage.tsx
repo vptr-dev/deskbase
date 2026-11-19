@@ -3,11 +3,11 @@ import { act, toast, updatePage, useData } from '../store'
 import type { Widget, WidgetStyle, WidgetType } from '../types'
 import { type AnyWidget, WIDGETS, WidgetBody, widgetDef, widgetTitle } from '../components/Widgets'
 import { StyleFields, TitleField, WidgetConfigFields } from '../components/WidgetConfig'
-import { Button, Modal, Segmented } from '../components/ui'
+import { Button, Modal, Segmented, useDoc } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { isDesktop } from '../lib/api'
 import { uid } from '../lib/util'
-import { fullStyle, widgetClass, widgetVars } from '../lib/widgetStyle'
+import { fullStyle, surfaceMaterial, widgetClass, widgetVars } from '../lib/widgetStyle'
 import { addDesktopWidget } from '../lib/desktop'
 
 const overlap = (a: Widget, b: Widget): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
@@ -104,7 +104,7 @@ function AddWidgetDialog({ pageId, onClose }: { pageId: string; onClose: () => v
 function WidgetSettings({ pageId, w, onClose }: { pageId: string; w: Widget; onClose: () => void }): JSX.Element {
   const [tab, setTab] = useState<'content' | 'style'>('content')
   const patch = (fn: (x: AnyWidget & { style?: Partial<WidgetStyle> }) => void, key?: string): void => patchWidget(pageId, w.id, fn as (x: Widget) => void, key)
-  const st = fullStyle(DASH_STYLE, w.style)
+  const st = fullStyle(DASH_STYLE, w.style, 'auto')
   return (
     <Modal onClose={onClose} width={560}>
       <div className="modal-head row between">
@@ -131,11 +131,13 @@ function WidgetSettings({ pageId, w, onClose }: { pageId: string; w: Widget; onC
 }
 
 /** Dashboard cards default to in-app glass. */
-const DASH_STYLE: Partial<WidgetStyle> = { material: 'blur', opacity: 60, radius: 20, padding: 14, header: true }
+const DASH_STYLE: Partial<WidgetStyle> = { material: 'auto', opacity: 60, radius: 20, padding: 14, header: true }
 /** The widget grid. `bare` hides editing chrome (desktop widget window). */
 export function DashboardGrid({ pageId, bare }: { pageId: string; bare?: boolean }): JSX.Element {
   const page = useData((d) => d.pages[pageId])
   const d = useData((x) => x)
+  // A dashboard pinned to the desktop follows the panels' surface, inside the app the app's.
+  const auto = surfaceMaterial(d.settings.look, useDoc() !== document)
   const editing = !bare && !!page?.view?.editing
   const cols: number = page?.view?.cols ?? 12
   const rowH: number = page?.view?.rowH ?? 76
@@ -210,7 +212,7 @@ export function DashboardGrid({ pageId, bare }: { pageId: string; bare?: boolean
           {widgets.map((w) => {
             const g = drag?.id === w.id ? drag : w
             const title = widgetTitle(w, d)
-            const st = fullStyle(DASH_STYLE, w.style)
+            const st = fullStyle(DASH_STYLE, w.style, auto)
             return (
               <div key={w.id} className={`widget wt-${w.type} ${widgetClass(st)} ${drag?.id === w.id ? 'dragging' : ''}`} style={{ ...widgetVars(st), gridColumn: `${g.x + 1} / span ${g.w}`, gridRow: `${g.y + 1} / span ${g.h}` }}>
                 {((title && st.header) || editing) && (

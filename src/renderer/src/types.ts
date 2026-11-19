@@ -126,8 +126,10 @@ export interface Widget {
 }
 
 // ---------- desktop widgets ----------
-/** blur / acrylic: real blur of the desktop behind; tint: colored card; clear: no card at all */
-export type DeskMaterial = 'blur' | 'acrylic' | 'tint' | 'clear'
+/** auto: follows the surface picked in Appearance; glass: clear tinted card; blur / acrylic: real blur of what is behind; tint: solid card; clear: no card at all */
+export type DeskMaterial = 'auto' | 'glass' | 'blur' | 'acrylic' | 'tint' | 'clear'
+/** The look of every window, card and panel: clear glass, blurred glass, heavily frosted glass or solid. */
+export type Surface = 'glass' | 'blur' | 'frosted' | 'solid'
 export interface WidgetStyle {
   material: DeskMaterial
   /** card color; '' follows the theme */
@@ -195,6 +197,9 @@ export type Motion = 'off' | 'subtle' | 'normal' | 'lively'
 export interface Look {
   /** id of the theme preset this look started from */
   preset: string
+  /** surface of the app and, unless panelSurface says otherwise, the desktop panels */
+  surface: Surface
+  panelSurface: 'same' | Surface
   radius: number
   /** blur of glass panels in px */
   blur: number

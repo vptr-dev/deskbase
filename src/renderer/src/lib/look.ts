@@ -25,8 +25,8 @@ export const PRESETS: ThemePreset[] = [
   { id: 'midnight', name: 'Midnight', theme: 'dark', accent: '#7a7cff', backdrop: 'midnight', glassStrength: 55, font: 'system', look: { radius: 16, blur: 32, shine: 40, shadow: 70, saturation: 150 }, swatch: ['#1d2a52', '#34204a', '#7a7cff'] },
   { id: 'aurora', name: 'Aurora', theme: 'dark', accent: '#30d1a0', backdrop: 'aurora', glassStrength: 50, font: 'system', look: { radius: 18, blur: 34, shine: 50, shadow: 60, saturation: 190 }, swatch: ['#0f5248', '#2c2470', '#30d1a0'] },
   { id: 'graphite', name: 'Graphite', theme: 'dark', accent: '#a1a1aa', backdrop: 'graphite', glassStrength: 60, font: 'system', look: { radius: 10, blur: 20, shine: 30, shadow: 55, saturation: 100, sidebar: 'attached', headingWeight: 600 }, swatch: ['#26272b', '#3a3b40', '#a1a1aa'] },
-  { id: 'paper', name: 'Paper', theme: 'light', accent: '#c2410c', backdrop: 'paper', glassStrength: 90, font: 'serif', look: { radius: 8, blur: 0, shine: 20, shadow: 20, saturation: 100, sidebar: 'attached', headingWeight: 700, lineHeight: 1.6 }, swatch: ['#f6f1e7', '#ebe3d3', '#c2410c'] },
-  { id: 'mono', name: 'Mono', theme: 'light', accent: '#111111', backdrop: 'paper', glassStrength: 95, font: 'mono', look: { radius: 4, blur: 0, shine: 0, shadow: 10, saturation: 100, sidebar: 'attached', headingWeight: 700, motion: 'subtle' }, swatch: ['#ffffff', '#e5e5e5', '#111111'] },
+  { id: 'paper', name: 'Paper', theme: 'light', accent: '#c2410c', backdrop: 'paper', glassStrength: 90, font: 'serif', look: { surface: 'solid', radius: 8, blur: 0, shine: 20, shadow: 20, saturation: 100, sidebar: 'attached', headingWeight: 700, lineHeight: 1.6 }, swatch: ['#f6f1e7', '#ebe3d3', '#c2410c'] },
+  { id: 'mono', name: 'Mono', theme: 'light', accent: '#111111', backdrop: 'paper', glassStrength: 95, font: 'mono', look: { surface: 'solid', radius: 4, blur: 0, shine: 0, shadow: 10, saturation: 100, sidebar: 'attached', headingWeight: 700, motion: 'subtle' }, swatch: ['#ffffff', '#e5e5e5', '#111111'] },
   { id: 'neon', name: 'Neon', theme: 'dark', accent: '#ff2fd6', backdrop: 'custom', glassStrength: 45, font: 'system', look: { radius: 18, blur: 40, shine: 60, shadow: 80, saturation: 220, motion: 'lively', gradient: { a: '#2b0a3d', b: '#0b1e4f', c: '#ff2fd6', angle: 140 } }, swatch: ['#2b0a3d', '#0b1e4f', '#ff2fd6'] }
 ]
 
@@ -84,9 +84,16 @@ export function applyLook(root: HTMLElement, s: Settings, dark: boolean): void {
   set('--radius', l.radius + 'px')
   set('--radius-sm', Math.round(l.radius * 0.62) + 'px')
   set('--radius-panel', Math.round(l.radius + 4) + 'px')
-  set('--blur', l.blur + 'px')
-  set('--blur-strong', Math.round(l.blur * 1.4) + 'px')
-  set('--sat', (l.saturation / 100).toFixed(2))
+  // Surface: glass and solid have no blur, frosted doubles it. Cards that pick blur themselves use the -base values.
+  const surface = l.surface || 'glass'
+  const k = surface === 'blur' ? 1 : surface === 'frosted' ? 1.8 : 0
+  root.dataset.surface = surface
+  set('--solid', surface === 'solid' ? '1' : '0')
+  set('--blur-base', l.blur + 'px')
+  set('--sat-base', (l.saturation / 100).toFixed(2))
+  set('--blur', Math.round(l.blur * k) + 'px')
+  set('--blur-strong', Math.round(l.blur * 1.4 * k) + 'px')
+  set('--sat', k ? (l.saturation / 100).toFixed(2) : '1')
   set('--shine', (l.shine / 100).toFixed(2))
   set('--depth', (l.shadow / 100).toFixed(2))
   set('--h-weight', String(l.headingWeight))

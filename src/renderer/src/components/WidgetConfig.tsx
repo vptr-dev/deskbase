@@ -216,7 +216,9 @@ export function ColorField({ value, onChange, auto = 'Auto' }: { value: string; 
 }
 
 const MATERIALS: { value: DeskMaterial; label: string; icon: string }[] = [
-  { value: 'blur', label: 'Glass', icon: 'droplet' },
+  { value: 'auto', label: 'Match app', icon: 'blend' },
+  { value: 'glass', label: 'Glass', icon: 'droplet' },
+  { value: 'blur', label: 'Blur', icon: 'aperture' },
   { value: 'acrylic', label: 'Frosted', icon: 'snowflake' },
   { value: 'tint', label: 'Solid', icon: 'square' },
   { value: 'clear', label: 'None', icon: 'eye-off' }

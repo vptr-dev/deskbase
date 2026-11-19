@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 6
+export const CURRENT_SCHEMA = 7
 
 type Raw = Record<string, any>
 
@@ -127,6 +127,16 @@ const migrations: Record<number, (d: Raw) => Raw> = {
       desktop: { enabled: true, snap: true, grid: 8, spaces: [{ id: 'main', name: 'Main', icon: 'monitor' }], active: 'main', widgets: widgets.map((w) => ({ ...w, space: 'main' })) },
       legacy: { ...legacy, profile: { ...(legacy.profile ?? {}), name: profile.name, avatar: profile.avatar } }
     }
+  },
+  // 6 -> 7: one surface (glass, blur, frosted, solid) for the whole app. The shared panel style
+  // follows it ('auto') instead of always blurring, with the clearer 0.5 glass values (0.7.0).
+  6: (d) => {
+    const desktop: Raw = d.desktop && typeof d.desktop === 'object' ? { ...d.desktop } : {}
+    const style: Raw = desktop.style && typeof desktop.style === 'object' ? { ...desktop.style } : {}
+    if (style.material === undefined || style.material === 'blur') style.material = 'auto'
+    if (style.opacity === undefined || style.opacity === 42) style.opacity = 50
+    if (style.border === undefined || style.border === 40) style.border = 60
+    return { ...d, desktop: { ...desktop, style } }
   }
 }
 
