@@ -5,7 +5,9 @@ import { addDays, diffDays, longDate, parseDay, today, uid } from '../lib/util'
 import { AutoText, Button, ConfirmButton, Empty, MenuButton, Ring } from '../components/ui'
 import { Icon } from '../components/Icon'
 
-export const MOODS = ['', '😞', '😕', '😐', '🙂', '😄']
+/** Mood 1-5 as icon names. */
+export const MOODS = ['', 'angry', 'frown', 'meh', 'smile', 'laugh']
+export const MOOD_NAMES = ['', 'Awful', 'Bad', 'Okay', 'Good', 'Great']
 const ENERGY = ['', 'Drained', 'Low', 'Okay', 'Good', 'Charged']
 
 const PROMPTS = [
@@ -44,7 +46,7 @@ function MoodChart({ entries }: { entries: JournalEntry[] }): JSX.Element | null
         {[1, 3, 5].map((v) => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeWidth={1} />)}
         <path d={line('en')} fill="none" stroke="var(--warning)" strokeWidth={1.4} strokeDasharray="3 3" opacity={0.8} />
         <path d={line('m')} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        {pts.filter((p) => p.m).map((p) => <circle key={p.k} cx={p.x} cy={y(p.m)} r={2.4} fill="var(--accent)"><title>{`${p.k}: ${MOODS[p.m]}`}</title></circle>)}
+        {pts.filter((p) => p.m).map((p) => <circle key={p.k} cx={p.x} cy={y(p.m)} r={2.4} fill="var(--accent)"><title>{`${p.k}: ${MOOD_NAMES[p.m]}`}</title></circle>)}
       </svg>
     </div>
   )
@@ -78,7 +80,7 @@ function Entry({ entry, wordGoal }: { entry: JournalEntry; wordGoal: number }): 
           <div className="muted small">{wordGoal ? `${words} / ${wordGoal} words` : `${words} words`}</div>
         </div>
         <div className="spacer" />
-        {wordGoal > 0 && <Ring value={words / wordGoal} size={26} stroke={3} color={words >= wordGoal ? 'var(--success)' : undefined}>{words >= wordGoal ? <span className="tiny">✓</span> : null}</Ring>}
+        {wordGoal > 0 && <Ring value={words / wordGoal} size={26} stroke={3} color={words >= wordGoal ? 'var(--success)' : undefined}>{words >= wordGoal ? <Icon name="check" size={12} stroke={3} /> : null}</Ring>}
         {!entry.text.trim() && <button className="icon-btn" title="Another prompt" onClick={() => setShift(shift + 1)}><Icon name="restore" size={14} /></button>}
         <button className={`icon-btn ${entry.pinned ? 'accent' : ''}`} title="Pin" onClick={() => set((j) => { j.pinned = !j.pinned })}><Icon name="pin" size={14} /></button>
         <ConfirmButton label="" onConfirm={() => removeItem('journal', entry.id, 'entry')} />
@@ -87,7 +89,7 @@ function Entry({ entry, wordGoal }: { entry: JournalEntry; wordGoal: number }): 
       <div className="mood-row">
         <span className="muted small">Mood</span>
         {MOODS.slice(1).map((m, i) => (
-          <button key={m} className={`mood ${entry.mood === i + 1 ? 'active' : ''}`} onClick={() => set((j) => { j.mood = j.mood === i + 1 ? 0 : i + 1 })}>{m}</button>
+          <button key={m} title={MOOD_NAMES[i + 1]} className={`mood ${entry.mood === i + 1 ? 'active' : ''}`} onClick={() => set((j) => { j.mood = j.mood === i + 1 ? 0 : i + 1 })}><Icon name={m} size={19} /></button>
         ))}
         <span className="muted small ml">Energy</span>
         {ENERGY.slice(1).map((e, i) => (
@@ -132,7 +134,7 @@ export function JournalPage({ pageId }: { pageId: string }): JSX.Element {
         <Button small kind="ghost" icon="right" title="Next day" onClick={() => setSelected(addDays(selected, 1))} />
         {selected !== today() && <Button small kind="ghost" onClick={() => setSelected(today())}>Today</Button>}
         <div className="spacer" />
-        <span className="muted small">{entries.length} entries · {streak}-day streak{avgMood ? ` · avg mood ${MOODS[Math.round(avgMood)]}` : ''}</span>
+        <span className="muted small">{entries.length} entries · {streak}-day streak{avgMood ? ` · avg mood ${MOOD_NAMES[Math.round(avgMood)].toLowerCase()}` : ''}</span>
         <MenuButton icon="edit" title="Word goal" items={[0, 100, 250, 500, 750].map((n) => ({ label: n ? `Word goal: ${n}` : 'No word goal', checked: wordGoal === n, onClick: () => updatePage(pageId, (p) => { p.view = { ...(p.view ?? {}), wordGoal: n } }) }))} />
         <div className="search-mini"><Icon name="search" size={14} /><input id={`jsearch-${pageId}`} placeholder="Search entries" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
@@ -140,7 +142,7 @@ export function JournalPage({ pageId }: { pageId: string }): JSX.Element {
       <div className="journal-layout">
         <div className="journal-main">
           {q ? (
-            shown.length ? shown.map((e) => <Entry key={e.id} entry={e} wordGoal={wordGoal} />) : <Empty icon="🔍" title="No matching entries" />
+            shown.length ? shown.map((e) => <Entry key={e.id} entry={e} wordGoal={wordGoal} />) : <Empty icon="search" title="No matching entries" />
           ) : current ? <Entry entry={current} wordGoal={wordGoal} /> : (
             <div className="journal-empty glass">
               <div className="strong">{longDate(selected)}</div>
@@ -152,7 +154,7 @@ export function JournalPage({ pageId }: { pageId: string }): JSX.Element {
               <div className="section-label">On this day</div>
               {onThisDay.map((e) => (
                 <button key={e.id} className="otd glass" onClick={() => setSelected(e.date)}>
-                  <span className="strong">{parseDay(e.date).getFullYear()}</span> {MOODS[e.mood]} <span className="muted">{(e.title || e.text).slice(0, 90)}</span>
+                  <span className="strong">{parseDay(e.date).getFullYear()}</span> {e.mood ? <Icon name={MOODS[e.mood]} size={13} /> : null} <span className="muted">{(e.title || e.text).slice(0, 90)}</span>
                 </button>
               ))}
             </div>
@@ -163,7 +165,7 @@ export function JournalPage({ pageId }: { pageId: string }): JSX.Element {
           <div className="section-label">Recent</div>
           {entries.slice(0, 40).map((e) => (
             <button key={e.id} className={`journal-li ${e.date === selected && !q ? 'active' : ''}`} onClick={() => { setQ(''); setSelected(e.date) }}>
-              <span className="journal-li-mood">{MOODS[e.mood] || '·'}</span>
+              <span className="journal-li-mood">{e.mood ? <Icon name={MOODS[e.mood]} size={16} /> : <span className="faint-dot" />}</span>
               <span className="journal-li-text"><span className="strong small">{e.date}</span><span className="muted small ellipsis">{e.title || e.text.slice(0, 40) || 'Empty'}</span></span>
               {e.pinned && <Icon name="pin" size={12} />}
             </button>

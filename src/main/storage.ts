@@ -4,7 +4,7 @@ import path from 'path'
 import { CURRENT_SCHEMA, migrate } from './migrations'
 
 /**
- * All user data lives in %APPDATA%/Planner/data, outside the install folder,
+ * All user data lives in %APPDATA%/Deskbase/data, outside the install folder,
  * so installing an update never touches it. Writes are atomic (temp file +
  * rename) and a rolling daily backup is kept.
  */
@@ -23,7 +23,15 @@ export function backupDir(): string {
   return dir
 }
 
-export const dataFile = (): string => path.join(dataDir(), 'planner.json')
+export function dataFile(): string {
+  const file = path.join(dataDir(), 'deskbase.json')
+  // Files from before the rename
+  const old = path.join(dataDir(), 'planner.json')
+  if (!fs.existsSync(file) && fs.existsSync(old)) {
+    try { fs.renameSync(old, file) } catch { return old }
+  }
+  return file
+}
 
 function stamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -65,7 +73,7 @@ export function loadData(): LoadResult {
     return { data, migratedFrom: changed ? from : null, path: file }
   } catch (e: any) {
     // Corrupt file: move it aside and try the newest backup.
-    const bad = path.join(dataDir(), `planner-corrupt-${stamp()}.json`)
+    const bad = path.join(dataDir(), `deskbase-corrupt-${stamp()}.json`)
     try { fs.copyFileSync(file, bad) } catch { /* ignore */ }
     const latest = listBackups()[0]
     if (latest) {
@@ -87,7 +95,7 @@ export function saveData(data: unknown): void {
 export function createBackup(label = 'manual'): string | null {
   const file = dataFile()
   if (!fs.existsSync(file)) return null
-  const name = `planner-${stamp()}-${label}.json`
+  const name = `deskbase-${stamp()}-${label}.json`
   fs.copyFileSync(file, path.join(backupDir(), name))
   pruneBackups()
   return name
@@ -125,6 +133,6 @@ export function readBackup(name: string): Record<string, any> {
 
 export function parseImport(text: string): Record<string, any> {
   const raw = JSON.parse(text)
-  if (!raw || typeof raw !== 'object' || !raw.pages) throw new Error('This file is not a Planner export.')
+  if (!raw || typeof raw !== 'object' || !raw.pages) throw new Error('This file is not a backup or export from this app.')
   return migrate(raw).data
 }

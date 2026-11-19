@@ -178,7 +178,7 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
       </div>
 
       {visible.length === 0 ? (
-        <Empty icon={filter === 'done' ? '🏁' : '✨'} title={filter === 'all' ? 'No tasks yet' : 'Nothing here'} />
+        <Empty icon={filter === 'done' ? 'flag' : 'sparkles'} title={filter === 'all' ? 'No tasks yet' : 'Nothing here'} />
       ) : (
         groups.map((g) => (
           <div key={g.key} className="task-group">
@@ -275,7 +275,7 @@ export function BulkBar({ ids, onClear }: { ids: string[]; onClear: () => void }
         { label: 'Remove date', icon: 'x', onClick: () => each((t) => { t.due = null; t.time = null }) }
       ]} />
       <MenuButton icon="flag" title="Priority" label="Priority" items={PRIORITY.map((p) => ({ label: p.label, onClick: () => each((t) => { t.priority = p.v as Task['priority'] }) }))} />
-      <MenuButton icon="folder" title="Move to list" label="Move" items={lists.map((p) => ({ label: `${p.icon} ${p.title || 'Untitled'}`, onClick: () => { each((t) => { t.pageId = p.id }); onClear(); toast(`Moved ${n} task${n === 1 ? '' : 's'}`, { undo: true }) } }))} />
+      <MenuButton icon="folder" title="Move to list" label="Move" items={lists.map((p) => ({ label: p.title || 'Untitled', onClick: () => { each((t) => { t.pageId = p.id }); onClear(); toast(`Moved ${n} task${n === 1 ? '' : 's'}`, { undo: true }) } }))} />
       <Button small icon="trash" onClick={() => { act((d) => { for (const id of ids) delete d.tasks[id] }); onClear(); toast(`Deleted ${n} task${n === 1 ? '' : 's'}`, { undo: true }) }}>Delete</Button>
       <button className="icon-btn" title="Clear selection (Esc)" onClick={onClear}><Icon name="x" size={14} /></button>
     </div>

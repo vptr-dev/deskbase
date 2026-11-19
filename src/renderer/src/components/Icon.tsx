@@ -1,78 +1,41 @@
-const P: Record<string, string> = {
-  plus: 'M12 5v14M5 12h14',
-  chevron: 'M9 6l6 6-6 6',
-  down: 'M6 9l6 6 6-6',
-  left: 'M15 6l-6 6 6 6',
-  right: 'M9 6l6 6-6 6',
-  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
-  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
-  trash: 'M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3',
-  star: 'M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z',
-  more: 'M5 12h.01M12 12h.01M19 12h.01',
-  check: 'M5 12l5 5 9-10',
-  x: 'M6 6l12 12M18 6L6 18',
-  grip: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01',
-  sidebar: 'M4 5h16v14H4zM9 5v14',
-  undo: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
-  redo: 'M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3',
-  calendar: 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4',
-  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
-  flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
-  tag: 'M3 12V4h8l10 10-8 8zM7.5 7.5h.01',
-  repeat: 'M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3',
-  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
-  edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
-  play: 'M7 4l13 8-13 8z',
-  pause: 'M7 4h4v16H7zM13 4h4v16h-4z',
-  stop: 'M6 6h12v12H6z',
-  skip: 'M5 4l10 8-10 8zM19 5v14',
-  pin: 'M12 17v5M8 3h8l-1 6 3 3H6l3-3z',
-  download: 'M12 4v12M7 11l5 5 5-5M4 20h16',
-  upload: 'M12 20V8M7 13l5-5 5 5M4 4h16',
-  folder: 'M3 6h6l2 2h10v11H3z',
-  external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
-  restore: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5',
-  bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
-  coin: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v10M9 9.5c0-1 1.3-1.8 3-1.8s3 .8 3 1.8-1.3 1.7-3 2-3 1-3 2 1.3 1.8 3 1.8 3-.8 3-1.8',
-  heart: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
-  list: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
-  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
-  filter: 'M4 5h16l-6 8v6l-4-2v-4z',
-  sort: 'M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4',
-  eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
-  eyeOff: 'M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3 3.6M6.6 6.6C4 8.3 2 12 2 12s4 7 10 7a9 9 0 0 0 4.4-1.1',
-  home: 'M3 11l9-7 9 7M5 9v11h14V9',
-  sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
-  moon: 'M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z',
-  minus: 'M5 12h14',
-  link: 'M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1',
-  keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
-  trophy: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4',
-  expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
-  note: 'M5 3h10l4 4v14H5zM14 3v5h5M8 13h8M8 17h5',
-  sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z',
-  table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
-  dice: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM8.5 8.5h.01M15.5 8.5h.01M12 12h.01M8.5 15.5h.01M15.5 15.5h.01',
-  chart: 'M4 20V10M10 20V4M16 20v-8M22 20H2',
-  snooze: 'M4 4h6l-6 7h6M14 10h6l-6 8h6',
-  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
-  scroll: 'M8 4h11v13a3 3 0 0 1-3 3H6a2 2 0 0 1-2-2v-2h12M8 4a2 2 0 0 0-2 2v10M11 8h5M11 12h5',
-  diamond: 'M12 3l8 9-8 9-8-9z',
-  gauge: 'M4 18a8 8 0 1 1 16 0M12 18l4-6',
-  layout: 'M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z',
-  monitor: 'M3 5h18v11H3zM8 20h8M12 16v4',
-  database: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
-  board: 'M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z',
-  gallery: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
-  zap: 'M13 2L4 14h7l-1 8 9-12h-7z',
-  move: 'M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3',
-  resize: 'M14 20h6v-6M20 20l-7-7M10 4H4v6M4 4l7 7'
+import { createElement } from 'react'
+import { ICON_DATA, UI_ICONS } from '../lib/icon-data'
+import { emojiToIcon } from '../../../shared/emoji-icons'
+
+/** Resolves an interface name ("trash") or icon name ("trash-2") to drawable data. */
+export function iconNode(name: string): (typeof ICON_DATA)[string] | null {
+  return ICON_DATA[UI_ICONS[name] ?? name] ?? null
 }
 
-export function Icon({ name, size = 16, stroke = 1.8, className, fill }: { name: keyof typeof P | string; size?: number; stroke?: number; className?: string; fill?: boolean }): JSX.Element {
+export const hasIcon = (name: string): boolean => Boolean(iconNode(name))
+
+/** Line icon. Stroke width follows the appearance setting unless `stroke` is given. */
+export function Icon({ name, size = 16, stroke, className = '', fill, color, title }: {
+  name: string; size?: number; stroke?: number; className?: string; fill?: boolean; color?: string; title?: string
+}): JSX.Element {
+  const node = iconNode(name) ?? iconNode('file-text')!
   return (
-    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={P[name] ?? P.note} />
+    <svg
+      className={`ic ${className}`}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={fill ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ ...(stroke ? { strokeWidth: stroke } : {}), ...(color ? { color } : {}) }}
+      aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
+    >
+      {title && <title>{title}</title>}
+      {node.map(([tag, attrs], i) => createElement(tag, { key: i, ...attrs }))}
     </svg>
   )
+}
+
+/** A user-chosen icon (page, habit, goal…). Old emoji values are shown as the closest line icon. */
+export function Glyph({ value, fallback = 'file-text', size = 16, color, className = '' }: { value?: string | null; fallback?: string; size?: number; color?: string; className?: string }): JSX.Element {
+  const name = emojiToIcon(value, fallback)
+  return <Icon name={hasIcon(name) ? name : fallback} size={size} color={color} className={`glyph ${className}`} />
 }

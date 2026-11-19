@@ -5,7 +5,7 @@ import { COLORS } from '../lib/defaults'
 import { diffDays, friendlyDay, parseQuickAdd, today, uid } from '../lib/util'
 import { addTask, setTaskDone } from '../store'
 import { Button, ColorDots, ConfirmButton, Empty, IconPickerButton, Modal, Ring, Segmented } from '../components/ui'
-import { Icon } from '../components/Icon'
+import { Glyph, Icon } from '../components/Icon'
 
 export const goalTasks = (g: Goal, tasks: Record<string, Task>): Task[] => Object.values(tasks).filter((t) => t.goalId === g.id)
 
@@ -39,7 +39,7 @@ function GoalEditor({ goal, onClose }: { goal: Goal; onClose: () => void }): JSX
       <div className="modal-head"><h3>{goal.title ? 'Edit goal' : 'New goal'}</h3></div>
       <div className="modal-body form">
         <div className="row gap-sm">
-          <IconPickerButton value={g.icon} onChange={(icon) => set({ icon })} />
+          <IconPickerButton value={g.icon} placeholder="target" color={g.color} onChange={(icon) => set({ icon: icon || 'target' })} />
           <input id="goal-title" autoFocus className="input grow" placeholder="What do you want to achieve?" value={g.title} onChange={(e) => set({ title: e.target.value })} />
         </div>
         <label>Why it matters</label>
@@ -72,7 +72,7 @@ function GoalCard({ g, onEdit }: { g: Goal; onEdit: () => void }): JSX.Element {
   return (
     <div className={`goal-card glass ${g.done ? 'done' : ''}`}>
       <div className="goal-head">
-        <Ring value={p} color={g.color} size={52} stroke={5}><span className="goal-icon">{g.icon || '🎯'}</span></Ring>
+        <Ring value={p} color={g.color} size={52} stroke={5}><span className="goal-icon"><Glyph value={g.icon} fallback="target" size={20} color={g.color} /></span></Ring>
         <div className="grow min0">
           <div className="goal-title">{g.title}</div>
           <div className="muted small">
@@ -140,7 +140,7 @@ export function GoalsPage({ pageId }: { pageId: string }): JSX.Element {
   const [tab, setTab] = useState<'active' | 'done'>('active')
   const goals = pageItems(all, pageId)
   const list = goals.filter((g) => (tab === 'done' ? g.done : !g.done))
-  const blank = (): Goal => ({ id: uid(), pageId, title: '', why: '', icon: '🎯', deadline: null, milestones: [], progressMode: 'milestones', manual: 0, color: COLORS[goals.length % COLORS.length], done: false, createdAt: Date.now(), category: '', difficulty: 'hard', order: goals.length })
+  const blank = (): Goal => ({ id: uid(), pageId, title: '', why: '', icon: 'target', deadline: null, milestones: [], progressMode: 'milestones', manual: 0, color: COLORS[goals.length % COLORS.length], done: false, createdAt: Date.now(), category: '', difficulty: 'hard', order: goals.length })
   return (
     <div className="goals-page">
       <div className="toolbar">
@@ -148,7 +148,7 @@ export function GoalsPage({ pageId }: { pageId: string }): JSX.Element {
         <div className="spacer" />
         <Button kind="primary" small icon="plus" onClick={() => setEditing(blank())}>New goal</Button>
       </div>
-      {list.length === 0 ? <Empty icon="🎯" title={tab === 'done' ? 'No completed goals yet' : 'No active goals'} /> : (
+      {list.length === 0 ? <Empty icon="target" title={tab === 'done' ? 'No completed goals yet' : 'No active goals'} /> : (
         <div className="card-grid">{list.map((g) => <GoalCard key={g.id} g={g} onEdit={() => setEditing(g)} />)}</div>
       )}
       {editing && <GoalEditor goal={editing} onClose={() => setEditing(null)} />}

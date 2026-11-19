@@ -4,17 +4,17 @@ import type { Metric } from '../types'
 import { COLORS } from '../lib/defaults'
 import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid, weekStartOf } from '../lib/util'
 import { BarChart, Button, ColorDots, ConfirmButton, Empty, IconPickerButton, Modal, Progress, Segmented, Sparkline } from '../components/ui'
-import { Icon } from '../components/Icon'
+import { Glyph, Icon } from '../components/Icon'
 
 const PRESETS: Partial<Metric>[] = [
-  { name: 'Water', icon: '💧', unit: 'glasses', goal: 8, direction: 'up', aggregate: 'sum' },
-  { name: 'Sleep', icon: '😴', unit: 'hours', goal: 8, direction: 'up', aggregate: 'last' },
-  { name: 'Weight', icon: '⚖️', unit: 'kg', goal: null, direction: 'down', aggregate: 'last' },
-  { name: 'Steps', icon: '🚶', unit: 'steps', goal: 8000, direction: 'up', aggregate: 'sum' },
-  { name: 'Reading', icon: '📖', unit: 'pages', goal: 20, direction: 'up', aggregate: 'sum' },
-  { name: 'Screen time', icon: '📱', unit: 'hours', goal: 3, direction: 'down', aggregate: 'last' },
-  { name: 'Workout', icon: '🏋️', unit: 'minutes', goal: 30, direction: 'up', aggregate: 'sum' },
-  { name: 'Spending', icon: '💸', unit: '$', goal: null, direction: 'down', aggregate: 'sum' }
+  { name: 'Water', icon: 'glass-water', unit: 'glasses', goal: 8, direction: 'up', aggregate: 'sum' },
+  { name: 'Sleep', icon: 'bed-double', unit: 'hours', goal: 8, direction: 'up', aggregate: 'last' },
+  { name: 'Weight', icon: 'scale', unit: 'kg', goal: null, direction: 'down', aggregate: 'last' },
+  { name: 'Steps', icon: 'footprints', unit: 'steps', goal: 8000, direction: 'up', aggregate: 'sum' },
+  { name: 'Reading', icon: 'book-open', unit: 'pages', goal: 20, direction: 'up', aggregate: 'sum' },
+  { name: 'Screen time', icon: 'smartphone', unit: 'hours', goal: 3, direction: 'down', aggregate: 'last' },
+  { name: 'Workout', icon: 'dumbbell', unit: 'minutes', goal: 30, direction: 'up', aggregate: 'sum' },
+  { name: 'Spending', icon: 'banknote', unit: '$', goal: null, direction: 'down', aggregate: 'sum' }
 ]
 
 export function metricValue(m: Metric, day: string): number | null {
@@ -64,11 +64,11 @@ function MetricEditor({ metric, onClose }: { metric: Metric; onClose: () => void
       <div className="modal-body form">
         {!metric.name && (
           <div className="row wrap gap-xs">
-            {PRESETS.map((p) => <button key={p.name} className="chip-btn" onClick={() => set(p)}>{p.icon} {p.name}</button>)}
+            {PRESETS.map((p) => <button key={p.name} className="chip-btn" onClick={() => set(p)}><Icon name={p.icon ?? "activity"} size={13} /> {p.name}</button>)}
           </div>
         )}
         <div className="row gap-sm">
-          <IconPickerButton value={m.icon} onChange={(icon) => set({ icon })} />
+          <IconPickerButton value={m.icon} placeholder="activity" color={m.color} onChange={(icon) => set({ icon: icon || 'activity' })} />
           <input id="metric-name" autoFocus className="input grow" placeholder="Name" value={m.name} onChange={(e) => set({ name: e.target.value })} />
         </div>
         <div className="form-2">
@@ -117,7 +117,7 @@ function MetricCard({ m, onEdit }: { m: Metric; onEdit: () => void }): JSX.Eleme
   return (
     <div className="metric-card glass">
       <div className="row between">
-        <div className="row gap-sm"><span className="metric-icon" style={{ background: m.color + '22' }}>{m.icon}</span><div><div className="strong">{m.name}</div><div className="muted small">{m.goal ? `Goal ${m.goal} ${m.unit}` : m.unit}</div></div></div>
+        <div className="row gap-sm"><span className="metric-icon" style={{ background: m.color + '22', color: m.color }}><Glyph value={m.icon} fallback="activity" size={16} /></span><div><div className="strong">{m.name}</div><div className="muted small">{m.goal ? `Goal ${m.goal} ${m.unit}` : m.unit}</div></div></div>
         <Button small kind="ghost" icon="edit" title="Edit" onClick={onEdit} />
       </div>
       <div className="metric-value"><span className="big">{v ?? '–'}</span> <span className="muted">{m.unit}</span></div>
@@ -156,11 +156,11 @@ export function TrackerPage({ pageId }: { pageId: string }): JSX.Element {
   const all = useData((d) => d.metrics)
   const [editing, setEditing] = useState<Metric | null>(null)
   const metrics = pageItems(all, pageId)
-  const blank = (): Metric => ({ id: uid(), pageId, name: '', icon: '📈', unit: '', goal: null, direction: 'up', color: COLORS[metrics.length % COLORS.length], entries: [], aggregate: 'sum', order: metrics.length })
+  const blank = (): Metric => ({ id: uid(), pageId, name: '', icon: 'chart-line', unit: '', goal: null, direction: 'up', color: COLORS[metrics.length % COLORS.length], entries: [], aggregate: 'sum', order: metrics.length })
   return (
     <div className="tracker-page">
       <div className="toolbar"><div className="spacer" /><Button kind="primary" small icon="plus" onClick={() => setEditing(blank())}>New tracker</Button></div>
-      {metrics.length === 0 ? <Empty icon="📈" title="Nothing tracked yet" /> : (
+      {metrics.length === 0 ? <Empty icon="chart-line" title="Nothing tracked yet" /> : (
         <div className="card-grid">{metrics.map((m) => <MetricCard key={m.id} m={m} onEdit={() => setEditing(m)} />)}</div>
       )}
       {editing && <MetricEditor metric={editing} onClose={() => setEditing(null)} />}

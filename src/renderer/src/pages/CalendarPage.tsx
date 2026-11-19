@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Glyph, Icon } from '../components/Icon'
 import { useData, getData, updateTask, updatePage } from '../store'
 import type { Task } from '../types'
 import { DAYS_SHORT, MONTHS_LONG, addDays, dayKey, friendlyDay, longDate, parseDay, plural, today, weekStartOf } from '../lib/util'
@@ -26,7 +27,7 @@ function Agenda({ byDay, onOpen }: { byDay: Record<string, Task[]>; onOpen: (id:
           <div className="task-list glass">{overdue.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={onOpen} />)}</div>
         </section>
       )}
-      {keys.length === 0 && overdue.length === 0 && <Empty icon="📅" title={`Nothing scheduled in the next ${days} days`} />}
+      {keys.length === 0 && overdue.length === 0 && <Empty icon="calendar" title={`Nothing scheduled in the next ${days} days`} />}
       {keys.map((k) => (
         <section key={k} className="agenda-day">
           <div className={`agenda-head ${k === t ? 'accent' : ''}`}><span className="strong">{friendlyDay(k)}</span><span className="muted small">{longDate(k)}</span></div>
@@ -107,7 +108,7 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
             const inMonth = mode === 'week' || parseDay(k).getMonth() === d.getMonth()
             return (
               <div key={k} role="button" tabIndex={0} className={`cal-cell ${inMonth ? '' : 'other'} ${k === today() ? 'today' : ''} ${k === selected ? 'selected' : ''} ${dropOn === k ? 'drop' : ''}`} onClick={() => setSelected(k)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(k) } }} {...dropProps(k)}>
-                <div className="cal-num">{parseDay(k).getDate()}{moodBy[k] ? <span className="cal-mood">{MOODS[moodBy[k]]}</span> : null}</div>
+                <div className="cal-num">{parseDay(k).getDate()}{moodBy[k] ? <span className="cal-mood"><Icon name={MOODS[moodBy[k]]} size={12} /></span> : null}</div>
                 <div className="cal-items">
                   {items.slice(0, mode === 'week' ? 12 : 3).map((t) => <div key={t.id} draggable title={t.title} onDragStart={(e) => { e.dataTransfer.setData('text/task', t.id); e.dataTransfer.effectAllowed = 'move' }} onDoubleClick={(e) => { e.stopPropagation(); openTask(t.id) }} className={`cal-item ${t.done ? 'done' : ''} ${!t.done && k < today() ? 'over' : ''}`}>{t.time ? t.time + ' ' : ''}{t.title}</div>)}
                   {items.length > (mode === 'week' ? 12 : 3) && <div className="cal-more">+{items.length - (mode === 'week' ? 12 : 3)} more</div>}
@@ -125,7 +126,7 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
           {habitsDone.length > 0 && (
             <div>
               <div className="section-label">Habits done</div>
-              <div className="row wrap gap-xs">{habitsDone.map((h) => <span key={h.id} className="chip">{h.icon} {h.name}</span>)}</div>
+              <div className="row wrap gap-xs">{habitsDone.map((h) => <span key={h.id} className="chip"><Glyph value={h.icon} size={12} color={h.color} /> {h.name}</span>)}</div>
             </div>
           )}
         </div>

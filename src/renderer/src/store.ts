@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { applyPatches, enablePatches, type Patch, produceWithPatches } from 'immer'
 import type { AppData, Page, PageType, Task } from './types'
-import { api, isWidgetWindow } from './lib/api'
+import { api } from './lib/api'
 import { freshData, newPage, normalize } from './lib/defaults'
 import { applyRules, revertRules, type ValueEvent } from './lib/values'
 import { addDays, addMonths, friendlyDay, parseDay, today, uid } from './lib/util'
@@ -79,15 +79,6 @@ export async function boot(): Promise<void> {
   if (res.error) toast(res.error, { kind: 'error' })
 }
 
-/** Another window (main app / desktop widget) saved: take its data unless we have unsaved edits. */
-export function receiveRemote(raw: any): void {
-  if (saveTimer || !raw) return
-  const data = normalize(raw)
-  undoStack.length = 0
-  redoStack.length = 0
-  useApp.setState({ data, canUndo: false, canRedo: false })
-}
-
 export function replaceData(raw: any, message: string): void {
   const data = normalize(raw)
   undoStack.length = 0
@@ -148,7 +139,7 @@ export function redo(): void {
 /** Run the user's value rules for something that happened. Call inside an act() recipe. */
 export function emit(d: AppData, ev: ValueEvent): void {
   const fired = applyRules(d, ev)
-  if (fired.length) effects.push(() => toast(fired.join('  ·  '), { kind: 'xp', icon: '◆' }))
+  if (fired.length) effects.push(() => toast(fired.join('  ·  '), { kind: 'xp', icon: 'gem' }))
 }
 /** Undo what rules did for an event source (e.g. a task was un-checked). */
 export const unemit = (d: AppData, src: string): void => revertRules(d, src)
@@ -158,10 +149,24 @@ export const onConfetti = (fn: () => void): void => { confettiHandler = fn }
 export const fireConfetti = (): void => { if (!getData().settings.reduceMotion) confettiHandler?.() }
 
 // ---------- navigation ----------
+/** Views that aren't pages. */
+export type View = '@desktop' | '@appearance'
+export const isView = (id: string | null): id is View => id === '@desktop' || id === '@appearance'
+
+/** Bring the main window forward when something is opened from a desktop widget. */
+function reveal(): void {
+  if (!document.hasFocus()) api.showMain().catch(() => {})
+}
+
+export function openView(view: View): void {
+  reveal()
+  useApp.setState({ current: view, overlay: null })
+}
+
 export function openPage(id: string): void {
   const d = getData()
   if (!d.pages[id]) return
-  if (isWidgetWindow) { api.widget.openMain(id); return }
+  reveal()
   useApp.setState({ current: id, overlay: null })
   act((dr) => {
     dr.settings.lastPage = id
@@ -439,7 +444,7 @@ export function removeItem(coll: Coll, id: string, label = 'item'): void {
   toast(`Deleted ${label}`, { undo: true })
 }
 
-export function setSettings(fn: (s: AppData['settings']) => void): void {
+export function setSettings(fn: (s: AppData['settings']) => void, _key?: string): void {
   act((d) => fn(d.settings), { history: false })
 }
 

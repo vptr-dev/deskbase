@@ -1,5 +1,4 @@
 import { download } from './util'
-import type { AppData } from '../types'
 import { migrate } from '../../../main/migrations'
 import { type AiConfig, type ChatMessage, listOpenAiModels, providerInfo, streamOllama, streamOpenAi } from '../../../shared/ai-core'
 import type { ImportResult, NotionPageInfo } from '../../../shared/import-types'
@@ -40,13 +39,21 @@ export interface Bridge {
   onQuickAdd(cb: () => void): () => void
   openExternal(url: string): Promise<void>
   displays(): Promise<DisplayInfo[]>
-  onDataChanged(cb: (data: any) => void): () => void
   onOpenPage(cb: (id: string) => void): () => void
-  onWidgetToggle(cb: () => void): () => void
-  widget: {
-    set(w: AppData['settings']['widget']): Promise<boolean>
-    openMain(pageId?: string): Promise<void>
-    interactive(on: boolean): void
+  showMain(): Promise<void>
+  desk: {
+    active(on: boolean, spaces?: { id: string; name: string }[], current?: string): Promise<void>
+    prepare(spec: DeskSpec): Promise<Rect>
+    show(id: string): Promise<void>
+    update(spec: DeskSpec): Promise<void>
+    close(id: string): Promise<void>
+    edit(on: boolean): Promise<void>
+    drag(id: string, phase: 'start' | 'move', x: number, y: number, mode: 'move' | 'resize', free: boolean, grid: number): void
+    dragEnd(id: string): Promise<Rect | null>
+    bounds(id: string): Promise<Rect | null>
+    menu(id: string, items: DeskMenuItem[]): Promise<string | null>
+    onClosed(cb: (id: string) => void): () => void
+    onCommand(cb: (id: string, cmd: string) => void): () => void
   }
   ai: {
     getConfig(): Promise<AiConfig>
@@ -71,8 +78,9 @@ export interface Bridge {
   }
 }
 
-const KEY = 'planner:data'
-const AI_KEY = 'planner:ai'
+const KEY = 'deskbase:data'
+const AI_KEY = 'deskbase:ai'
+const OLD_KEY = 'planner:data'
 
 // Browser preview: talks to local OpenAI-compatible servers directly (Ollama allows localhost origins).
 const webAi = (() => {
@@ -124,7 +132,7 @@ const browserBridge: Bridge = {
   info: async () => ({ version: 'dev', platform: 'web', micaSupported: false, material: 'none', dataPath: 'localStorage', packaged: false }),
   load: async () => {
     try {
-      const t = localStorage.getItem(KEY)
+      const t = localStorage.getItem(KEY) ?? localStorage.getItem(OLD_KEY)
       if (!t) return { data: null, migratedFrom: null, path: 'localStorage' }
       const m = migrate(JSON.parse(t))
       return { data: m.data, migratedFrom: m.changed ? m.from : null, path: 'localStorage' }
@@ -170,11 +178,27 @@ const browserBridge: Bridge = {
   quickAddDone: async () => {},
   onQuickAdd: () => () => {},
   openExternal: async (url) => { window.open(url, '_blank') },
-  displays: async () => [],
-  onDataChanged: () => () => {},
+  displays: async () => {
+    const w = window.screen.width
+    const h = window.screen.height
+    return [{ id: 1, label: 'This screen', primary: true, width: w, height: h, scale: 1, bounds: { x: 0, y: 0, width: w, height: h }, workArea: { x: 0, y: 0, width: w, height: h - 48 } }]
+  },
   onOpenPage: () => () => {},
-  onWidgetToggle: () => () => {},
-  widget: { set: async () => false, openMain: async () => {}, interactive: () => {} },
+  showMain: async () => {},
+  desk: {
+    active: async () => {},
+    prepare: async (s) => ({ x: s.x, y: s.y, width: s.w, height: s.h }),
+    show: async () => {},
+    update: async () => {},
+    close: async () => {},
+    edit: async () => {},
+    drag: () => {},
+    dragEnd: async () => null,
+    bounds: async () => null,
+    menu: async () => null,
+    onClosed: () => () => {},
+    onCommand: () => () => {}
+  },
   ai: webAi,
   notion: {
     available: async () => false,
@@ -192,7 +216,8 @@ const browserBridge: Bridge = {
 
 export const api: Bridge = (window as any).api ?? browserBridge
 export const isDesktop = Boolean((window as any).api)
-/** True inside the desktop widget window. */
-export const isWidgetWindow = location.hash === '#widget'
 
-export interface DisplayInfo { id: number; label: string; primary: boolean; width: number; height: number; bounds: { x: number; y: number; width: number; height: number } }
+export interface Rect { x: number; y: number; width: number; height: number }
+export interface DisplayInfo { id: number; label: string; primary: boolean; width: number; height: number; scale: number; bounds: Rect; workArea: Rect }
+export interface DeskSpec { id: string; x: number; y: number; w: number; h: number; displayId?: number | null; material: 'blur' | 'acrylic' | 'tint' | 'clear'; layer: 'desktop' | 'normal' | 'top'; radius: number; clickThrough: boolean; title: string }
+export interface DeskMenuItem { id: string; label: string; checked?: boolean; type?: 'separator'; submenu?: { id: string; label: string; checked?: boolean }[] }

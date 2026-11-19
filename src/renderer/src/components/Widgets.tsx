@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { act, openPage, setOverlay, useData } from '../store'
-import type { AppData, Page, Widget, WidgetType } from '../types'
+import { openPage, setOverlay, updatePage, useData } from '../store'
+import type { AppData, Block, Page, Task, Widget, WidgetType } from '../types'
 import { formatValue, valueNow, valueSeries } from '../lib/values'
 import { habitDayTarget, habitDoneOn, habitDueToday } from '../lib/habits'
 import { DAYS_SHORT, MONTHS_LONG, addDays, dayKey, diffDays, friendlyDay, parseDay, today, weekStartOf } from '../lib/util'
 import { countRows, rowsOf } from '../lib/db'
-import { BarChart, Progress, Ring, Sparkline } from './ui'
-import { Icon } from './Icon'
+import { BarChart, Checkbox, Progress, Ring, Sparkline, useDoc } from './ui'
+import { Glyph, Icon } from './Icon'
 import { QuickAdd, TaskRow, useTaskDrawer } from './TaskItems'
 import { adjustValue } from './Values'
 import { logHabit } from '../pages/HabitsPage'
@@ -14,25 +14,42 @@ import { focusActions, fmtClock, remainingSecs, useFocus } from '../pages/FocusP
 import { goalProgress } from '../pages/GoalsPage'
 import { nextDate } from './Countdowns'
 import { DatabaseView } from '../pages/DatabasePage'
+import { DashboardGrid } from '../pages/DashboardPage'
+import { refreshFromNotion } from '../lib/importer'
+import { pickImageData } from '../lib/image'
 
-export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: string; w: number; h: number; config?: Record<string, any> }[] = [
-  { type: 'value', name: 'Value', icon: 'diamond', desc: 'One of your values with + and −', w: 3, h: 2, config: { showChart: true, step: 1 } },
-  { type: 'chart', name: 'Chart', icon: 'chart', desc: 'A value, tasks, focus or habits over time', w: 4, h: 3, config: { source: 'tasks', days: 14, kind: 'bar' } },
-  { type: 'progress', name: 'Progress ring', icon: 'gauge', desc: 'Value toward its goal, or database rows done', w: 2, h: 2, config: { source: 'value' } },
-  { type: 'stat', name: 'Number', icon: 'zap', desc: 'Tasks done, overdue, focus time, rows…', w: 2, h: 2, config: { stat: 'tasksToday' } },
-  { type: 'tasks', name: 'Tasks', icon: 'check', desc: 'Today, overdue or upcoming tasks', w: 4, h: 4, config: { filter: 'today', quickAdd: true } },
-  { type: 'habits', name: 'Habits', icon: 'repeat', desc: "Today's habits to check off", w: 3, h: 3, config: {} },
-  { type: 'database', name: 'Database', icon: 'database', desc: 'A database view: table, board, gallery…', w: 6, h: 5, config: {} },
-  { type: 'calendar', name: 'Calendar', icon: 'calendar', desc: 'This month with your tasks', w: 3, h: 4, config: {} },
-  { type: 'clock', name: 'Clock', icon: 'clock', desc: 'Time and date', w: 3, h: 2, config: { seconds: false } },
-  { type: 'note', name: 'Note', icon: 'note', desc: 'Free text you can edit in place', w: 3, h: 3, config: { text: '' } },
-  { type: 'countdown', name: 'Countdown', icon: 'snooze', desc: 'Days until something', w: 2, h: 2, config: { title: '', date: '' } },
-  { type: 'focus', name: 'Focus timer', icon: 'play', desc: 'Start and pause the focus timer', w: 3, h: 2, config: {} },
-  { type: 'quickadd', name: 'Quick add', icon: 'plus', desc: 'Add a task to a list', w: 4, h: 1, config: {} },
-  { type: 'goals', name: 'Goals', icon: 'flag', desc: 'Active goals with progress', w: 3, h: 3, config: {} },
-  { type: 'page', name: 'Page link', icon: 'note', desc: 'A shortcut to one of your pages', w: 2, h: 1, config: {} }
+/** Partial widget used by both dashboards and desktop widgets. */
+export type AnyWidget = Pick<Widget, 'id' | 'type' | 'config' | 'title'>
+export type SetConfig = (key: string, value: any) => void
+
+export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: string; w: number; h: number; config?: Record<string, any>; group: 'Work' | 'Plan' | 'Track' | 'More' }[] = [
+  { type: 'tasks', name: 'Tasks', icon: 'square-check-big', desc: 'What is due today, overdue or next, with quick add', w: 4, h: 4, group: 'Work', config: { filter: 'today', quickAdd: true } },
+  { type: 'checklist', name: 'Checklist', icon: 'list-todo', desc: 'Check off the to-dos of any page or section, Notion included', w: 3, h: 4, group: 'Work', config: { hideChecked: true, subpages: false } },
+  { type: 'pageview', name: 'Page', icon: 'file-text', desc: 'Keep a page open on screen and work in it', w: 4, h: 5, group: 'Work', config: { hideChecked: false } },
+  { type: 'note', name: 'Scratchpad', icon: 'notebook-pen', desc: 'Jot things down; saved as you type', w: 3, h: 3, group: 'Work', config: { text: '' } },
+  { type: 'quickadd', name: 'Quick add', icon: 'plus', desc: 'Capture a task without opening the app', w: 4, h: 1, group: 'Work', config: {} },
+  { type: 'focus', name: 'Focus timer', icon: 'timer', desc: 'Start a focus session from the desktop', w: 3, h: 2, group: 'Work', config: {} },
+  { type: 'database', name: 'Database', icon: 'database', desc: 'A table, board or gallery you can edit', w: 6, h: 5, group: 'Work', config: {} },
+  { type: 'agenda', name: 'Agenda', icon: 'calendar-days', desc: 'The next days with tasks and times', w: 3, h: 4, group: 'Plan', config: { days: 5 } },
+  { type: 'week', name: 'Week', icon: 'columns-3', desc: 'Seven days: what is due and what got done', w: 6, h: 2, group: 'Plan', config: {} },
+  { type: 'calendar', name: 'Month', icon: 'calendar', desc: 'This month with your due dates', w: 3, h: 4, group: 'Plan', config: {} },
+  { type: 'goals', name: 'Goals', icon: 'target', desc: 'Active goals and how far along they are', w: 3, h: 3, group: 'Plan', config: {} },
+  { type: 'habits', name: 'Habits', icon: 'repeat', desc: "Today's habits to check off", w: 3, h: 3, group: 'Plan', config: {} },
+  { type: 'countdown', name: 'Deadline', icon: 'hourglass', desc: 'Days left until a date', w: 2, h: 2, group: 'Plan', config: { title: '', date: '' } },
+  { type: 'stat', name: 'Number', icon: 'hash', desc: 'Tasks done, overdue, focus time, rows…', w: 2, h: 2, group: 'Track', config: { stat: 'tasksToday' } },
+  { type: 'chart', name: 'Chart', icon: 'chart-column', desc: 'Tasks, focus, habits or a value over time', w: 4, h: 3, group: 'Track', config: { source: 'tasks', days: 14, kind: 'bar' } },
+  { type: 'progress', name: 'Progress', icon: 'gauge', desc: 'A value toward its goal, or database rows done', w: 2, h: 2, group: 'Track', config: { source: 'value' } },
+  { type: 'value', name: 'Counter', icon: 'gem', desc: 'One of your values with + and −', w: 3, h: 2, group: 'Track', config: { showChart: true, step: 1 } },
+  { type: 'dashboard', name: 'Dashboard', icon: 'layout-dashboard', desc: 'A whole dashboard page in one panel', w: 8, h: 6, group: 'More', config: {} },
+  { type: 'page', name: 'Shortcut', icon: 'link', desc: 'Opens one of your pages', w: 2, h: 1, group: 'More', config: {} },
+  { type: 'clock', name: 'Clock', icon: 'clock', desc: 'Time and date', w: 3, h: 2, group: 'More', config: { seconds: false, style: 'digital' } },
+  { type: 'text', name: 'Heading', icon: 'type', desc: 'A title, rule or reminder in big type', w: 4, h: 2, group: 'More', config: { text: '', size: 28, weight: 650 } },
+  { type: 'image', name: 'Picture', icon: 'image', desc: 'A reference image or photo', w: 3, h: 3, group: 'More', config: { src: null, fit: 'cover' } }
 ]
 export const widgetDef = (t: WidgetType): (typeof WIDGETS)[number] => WIDGETS.find((w) => w.type === t) ?? WIDGETS[0]
+
+/** True when rendered inside a desktop widget window. */
+const useInDesk = (): boolean => useDoc() !== document
 
 const livePage = (d: AppData, id: string): boolean => !!d.pages[id] && !d.pages[id].deletedAt
 const isToday = (ts?: number | null): boolean => !!ts && dayKey(new Date(ts)) === today()
@@ -82,13 +99,13 @@ function series(d: AppData, cfg: Record<string, any>): { label: string; value: n
 function ValueWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const v = useData((d) => d.values[cfg.valueId])
   const weekStart = useData((d) => d.settings.weekStart)
-  if (!v) return <Missing text="Choose a value in the widget settings." action={() => setOverlay('values')} actionLabel="Open values" />
+  if (!v) return <Missing text="Choose a value in the panel settings." action={() => setOverlay('values')} actionLabel="Open values" />
   const n = valueNow(v, weekStart)
   const step = Number(cfg.step) || 1
   return (
     <div className="w-value">
       <div className="w-value-top">
-        <span className="w-value-icon" style={{ background: v.color }}>{v.icon}</span>
+        <span className="w-value-icon" style={{ background: v.color }}><Glyph value={v.icon} fallback="gem" size={13} /></span>
         <span className="w-label ellipsis">{v.name}</span>
       </div>
       <div className="w-value-num glass-text">{formatValue(v, n, false)}<span className="w-unit">{v.unit}</span></div>
@@ -139,7 +156,7 @@ function ProgressWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
     label = v.name
     sub = v.goal ? `${formatValue(v, n)} / ${formatValue(v, v.goal)}` : 'No goal set'
     color = v.color
-  } else return <Missing text="Choose what to track in the widget settings." />
+  } else return <Missing text="Choose what to track in the panel settings." />
   return (
     <div className="w-progress">
       <Ring value={pct} size={86} stroke={8} color={color}><span className="strong glass-text">{Math.round(pct * 100)}%</span></Ring>
@@ -164,7 +181,10 @@ function StatWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
 function TasksWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const tasks = useData((d) => d.tasks)
   const pages = useData((d) => d.pages)
-  const [, openTask, drawer] = useTaskDrawer()
+  const inDesk = useInDesk()
+  const [, setOpen, drawerEl] = useTaskDrawer()
+  const openTask = (id: string): void => { if (inDesk) { const t = tasks[id]; if (t) openPage(t.pageId) } else setOpen(id) }
+  const drawer = inDesk ? null : drawerEl
   const t = today()
   const list = useMemo(() => {
     const all = Object.values(tasks).filter((x) => !x.archived && pages[x.pageId] && !pages[x.pageId].deletedAt && (!cfg.pageId || x.pageId === cfg.pageId))
@@ -203,7 +223,8 @@ function HabitsWidget(): JSX.Element {
             <button className={`habit-cell ${done ? 'done' : ''} ${h.kind === 'bad' && v ? 'slip' : ''}`} style={{ ['--c' as any]: h.color }} onClick={() => logHabit(h.id, t, h.kind === 'good' && done ? -v : 1)}>
               {done ? <Icon name="check" size={14} stroke={3} /> : h.kind === 'bad' && v ? <Icon name="x" size={14} stroke={3} /> : v ? <span className="small">{v}</span> : null}
             </button>
-            <span className="grow ellipsis">{h.icon} {h.name}</span>
+            <Glyph value={h.icon} fallback="circle-check" size={14} color={h.color} />
+            <span className="grow ellipsis">{h.name}</span>
           </div>
         )
       })}
@@ -231,10 +252,43 @@ function CalendarWidget(): JSX.Element {
   )
 }
 
+function AnalogClock({ now, seconds }: { now: Date; seconds: boolean }): JSX.Element {
+  const s = now.getSeconds()
+  const m = now.getMinutes() + s / 60
+  const h = (now.getHours() % 12) + m / 60
+  const hand = (deg: number, len: number, w: number, cls: string): JSX.Element => (
+    <line className={cls} x1="50" y1="50" x2={50 + len * Math.sin((deg * Math.PI) / 180)} y2={50 - len * Math.cos((deg * Math.PI) / 180)} strokeWidth={w} strokeLinecap="round" />
+  )
+  return (
+    <svg className="w-analog" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="47" className="face" />
+      {Array.from({ length: 12 }, (_, i) => {
+        const a = (i * 30 * Math.PI) / 180
+        return <line key={i} className="tick" x1={50 + 40 * Math.sin(a)} y1={50 - 40 * Math.cos(a)} x2={50 + 44 * Math.sin(a)} y2={50 - 44 * Math.cos(a)} strokeWidth={i % 3 ? 1.2 : 2.4} strokeLinecap="round" />
+      })}
+      {hand(h * 30, 24, 4, 'hand')}
+      {hand(m * 6, 34, 3, 'hand')}
+      {seconds && hand(s * 6, 38, 1.4, 'hand sec')}
+      <circle cx="50" cy="50" r="2.6" className="pin" />
+    </svg>
+  )
+}
+
 function ClockWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const now = new Date(useTick(1000))
   const use24h = useData((d) => d.settings.use24h)
   const time = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: cfg.seconds ? '2-digit' : undefined, hour12: !use24h })
+  if (cfg.style === 'analog') return <div className="w-clock analog"><AnalogClock now={now} seconds={!!cfg.seconds} /></div>
+  if (cfg.style === 'big') {
+    const [hh, mm] = [now.getHours(), now.getMinutes()]
+    const h12 = use24h ? hh : hh % 12 || 12
+    return (
+      <div className="w-clock big">
+        <div className="w-clock-stack glass-text"><span>{String(h12).padStart(2, '0')}</span><span>{String(mm).padStart(2, '0')}</span></div>
+        <div className="w-label">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}</div>
+      </div>
+    )
+  }
   return (
     <div className="w-clock">
       <div className="w-clock-time glass-text">{time}</div>
@@ -243,16 +297,13 @@ function ClockWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   )
 }
 
-function NoteWidget({ w, pageId }: { w: Widget; pageId: string }): JSX.Element {
-  return (
-    <textarea className="w-note" placeholder="Write something…" value={w.config.text ?? ''}
-      onChange={(e) => { const v = e.target.value; act((d) => { const x = d.pages[pageId]?.widgets?.find((y) => y.id === w.id); if (x) x.config.text = v }, { key: 'wnote:' + w.id }) }} />
-  )
+function NoteWidget({ w, setConfig }: { w: AnyWidget; setConfig: SetConfig }): JSX.Element {
+  return <textarea className="w-note" placeholder="Write something…" value={w.config.text ?? ''} onChange={(e) => setConfig('text', e.target.value)} />
 }
 
 function CountdownWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   useTick(60_000)
-  if (!cfg.date) return <Missing text="Set a date in the widget settings." />
+  if (!cfg.date) return <Missing text="Set a date in the panel settings." />
   const date = nextDate({ date: cfg.date, yearly: !!cfg.yearly })
   const n = diffDays(date, today())
   return (
@@ -295,7 +346,7 @@ function GoalsWidget(): JSX.Element {
     <div className="w-scroll">
       {list.map((g) => (
         <button key={g.id} className="today-goal" onClick={() => openPage(g.pageId)}>
-          <span>{g.icon}</span><span className="grow ellipsis">{g.title}</span>
+          <Glyph value={g.icon} fallback="target" size={15} color={g.color} /><span className="grow ellipsis">{g.title}</span>
           <Progress value={goalProgress(g, tasks)} color={g.color} className="w-80" />
         </button>
       ))}
@@ -305,10 +356,10 @@ function GoalsWidget(): JSX.Element {
 
 function PageWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const p: Page | undefined = useData((d) => d.pages[cfg.pageId])
-  if (!p || p.deletedAt) return <Missing text="Choose a page in the widget settings." />
+  if (!p || p.deletedAt) return <Missing text="Choose a page in the panel settings." />
   return (
     <button className="w-page" onClick={() => openPage(p.id)}>
-      <span className="w-page-icon">{p.icon || '📄'}</span>
+      <span className="w-page-icon"><Glyph value={p.icon} fallback="file-text" size={20} /></span>
       <span className="ellipsis strong">{p.title || 'Untitled'}</span>
       <Icon name="right" size={14} />
     </button>
@@ -319,7 +370,7 @@ function Missing({ text, action, actionLabel }: { text: string; action?: () => v
   return <div className="w-missing"><span>{text}</span>{action && <button className="link small" onClick={action}>{actionLabel}</button>}</div>
 }
 
-export function WidgetBody({ w, pageId }: { w: Widget; pageId: string }): JSX.Element {
+export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfig }): JSX.Element {
   const c = w.config
   switch (w.type) {
     case 'value': return <ValueWidget cfg={c} />
@@ -328,27 +379,253 @@ export function WidgetBody({ w, pageId }: { w: Widget; pageId: string }): JSX.El
     case 'stat': return <StatWidget cfg={c} />
     case 'tasks': return <TasksWidget cfg={c} />
     case 'habits': return <HabitsWidget />
-    case 'database': return c.dbId ? <div className="w-scroll"><DatabaseView dbId={c.dbId} viewId={c.viewId || undefined} embedded /></div> : <Missing text="Choose a database in the widget settings." />
+    case 'database': return c.dbId ? <div className="w-scroll"><DatabaseView dbId={c.dbId} viewId={c.viewId || undefined} embedded /></div> : <Missing text="Choose a database in the panel settings." />
     case 'calendar': return <CalendarWidget />
     case 'clock': return <ClockWidget cfg={c} />
-    case 'note': return <NoteWidget w={w} pageId={pageId} />
+    case 'note': return <NoteWidget w={w} setConfig={setConfig} />
     case 'countdown': return <CountdownWidget cfg={c} />
     case 'focus': return <FocusWidget />
     case 'quickadd': return <QuickAddWidget cfg={c} />
     case 'goals': return <GoalsWidget />
     case 'page': return <PageWidget cfg={c} />
-    default: return <Missing text="Unknown widget" />
+    case 'pageview': return <PageViewWidget cfg={c} />
+    case 'checklist': return <ChecklistWidget cfg={c} />
+    case 'dashboard': return <DashboardWidget cfg={c} />
+    case 'image': return <ImageWidget cfg={c} setConfig={setConfig} />
+    case 'text': return <TextWidget cfg={c} />
+    case 'agenda': return <AgendaWidget cfg={c} />
+    case 'week': return <WeekWidget />
+    default: return <Missing text="This panel is not available." />
   }
 }
-
 /** Title shown in the widget header (empty = no header). */
-export function widgetTitle(w: Widget, d: AppData): string {
+export function widgetTitle(w: AnyWidget, d: AppData): string {
   if (w.title !== undefined && w.title !== null) return w.title
   switch (w.type) {
-    case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': return ''
+    case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': case 'image': case 'text': case 'dashboard': case 'week': return ''
     case 'chart': return w.config.source === 'value' ? d.values[w.config.valueId]?.name ?? 'Chart' : w.config.source === 'focus' ? 'Focus minutes' : w.config.source === 'habits' ? 'Habits done' : w.config.source === 'metric' ? d.metrics[w.config.metricId]?.name ?? 'Tracker' : 'Tasks done'
     case 'tasks': return { today: 'Today', overdue: 'Overdue', upcoming: 'Next 7 days', all: 'Open tasks' }[w.config.filter as string] ?? 'Tasks'
     case 'database': return d.pages[w.config.dbId]?.title || 'Database'
+    case 'pageview': return d.pages[w.config.pageId]?.title || 'Page'
+    case 'checklist': return w.config.section || d.pages[w.config.pageId]?.title || 'Checklist'
+    case 'agenda': return 'Agenda'
     default: return widgetDef(w.type).name
   }
+}
+
+// ---------- page widgets ----------
+const setBlock = (pageId: string, blockId: string, fn: (b: Block) => void): void =>
+  updatePage(pageId, (p) => { const b = p.blocks.find((x) => x.id === blockId); if (b) fn(b) }, 'wblock:' + blockId)
+
+/** Blocks under a heading, up to the next heading of the same or higher level. */
+export function sectionBlocks(blocks: Block[], section?: string | null): Block[] {
+  if (!section) return blocks
+  const lvl = (b: Block): number => (b.type === 'h1' ? 1 : b.type === 'h2' ? 2 : b.type === 'h3' ? 3 : 0)
+  const i = blocks.findIndex((b) => lvl(b) && b.text.trim() === section)
+  if (i < 0) return []
+  const out: Block[] = []
+  for (let j = i + 1; j < blocks.length; j++) {
+    if (lvl(blocks[j]) && lvl(blocks[j]) <= lvl(blocks[i]) && (blocks[j].indent ?? 0) <= (blocks[i].indent ?? 0)) break
+    out.push(blocks[j])
+  }
+  return out
+}
+
+function NotionRefresh({ page }: { page: Page }): JSX.Element | null {
+  const [busy, setBusy] = useState(false)
+  if (page.source?.kind !== 'notion') return null
+  const ago = Math.round((Date.now() - page.source.syncedAt) / 60000)
+  return (
+    <button className={`w-refresh ${busy ? 'spin' : ''}`} title={`From Notion, updated ${ago < 1 ? 'just now' : ago < 60 ? ago + ' min ago' : Math.round(ago / 60) + ' h ago'}. Click to refresh.`}
+      onClick={async () => { setBusy(true); try { await refreshFromNotion([page.id]) } finally { setBusy(false) } }}>
+      <Icon name="refresh" size={12} />
+    </button>
+  )
+}
+
+function MiniBlock({ b, pageId, n }: { b: Block; pageId: string; n: number }): JSX.Element | null {
+  const ind = { paddingLeft: (b.indent ?? 0) * 16 }
+  switch (b.type) {
+    case 'h1': return <div className="mb-h1" style={ind}>{b.text}</div>
+    case 'h2': return <div className="mb-h2" style={ind}>{b.text}</div>
+    case 'h3': return <div className="mb-h3" style={ind}>{b.text}</div>
+    case 'todo': return (
+      <label className={`mb-todo ${b.checked ? 'done' : ''}`} style={ind}>
+        <Checkbox checked={!!b.checked} size={16} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
+        <span>{b.text}</span>
+      </label>
+    )
+    case 'bullet': return <div className="mb-li" style={ind}><span className="mb-dot" />{b.text}</div>
+    case 'number': return <div className="mb-li" style={ind}><span className="mb-num">{n}.</span>{b.text}</div>
+    case 'quote': return <div className="mb-quote" style={ind}>{b.text}</div>
+    case 'callout': return <div className="mb-callout" style={ind}><Icon name="lightbulb" size={14} />{b.text}</div>
+    case 'code': return <pre className="mb-code" style={ind}>{b.text}</pre>
+    case 'divider': return <hr className="mb-hr" />
+    case 'toggle': return (
+      <button className="mb-toggle" style={ind} onClick={() => setBlock(pageId, b.id, (x) => { x.open = !x.open })}>
+        <Icon name="chevron" size={12} className={b.open ? 'open' : ''} />{b.text}
+      </button>
+    )
+    case 'table': return (
+      <div className="mb-table" style={ind}>
+        <table><tbody>{(b.rows ?? []).slice(0, 30).map((r, i) => <tr key={i} className={i === 0 ? 'head' : ''}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody></table>
+      </div>
+    )
+    default: return b.text ? <div className="mb-p" style={ind}>{b.text}</div> : <div className="mb-gap" />
+  }
+}
+
+/** Hides blocks inside closed toggles (deeper indent right after the toggle). */
+function visibleBlocks(blocks: Block[]): Block[] {
+  const out: Block[] = []
+  let hideBelow: number | null = null
+  for (const b of blocks) {
+    const ind = b.indent ?? 0
+    if (hideBelow !== null) { if (ind > hideBelow) continue; hideBelow = null }
+    out.push(b)
+    if (b.type === 'toggle' && !b.open) hideBelow = ind
+  }
+  return out
+}
+
+function PageViewWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
+  const page = useData((d) => (cfg.pageId ? d.pages[cfg.pageId] : undefined))
+  if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
+  let blocks = visibleBlocks(sectionBlocks(page.blocks, cfg.section))
+  if (cfg.hideChecked) blocks = blocks.filter((b) => !(b.type === 'todo' && b.checked))
+  let n = 0
+  return (
+    <div className="w-pageview">
+      <NotionRefresh page={page} />
+      <div className="w-scroll">
+        {blocks.map((b) => { n = b.type === 'number' ? n + 1 : 0; return <MiniBlock key={b.id} b={b} pageId={page.id} n={n} /> })}
+        {blocks.length === 0 && <div className="muted small pad">Nothing here.</div>}
+      </div>
+    </div>
+  )
+}
+
+function collectTodos(d: AppData, pageId: string, subpages: boolean, section?: string | null): { b: Block; pageId: string }[] {
+  const p = d.pages[pageId]
+  if (!p || p.deletedAt) return []
+  const own = sectionBlocks(p.blocks, section).filter((b) => b.type === 'todo' && b.text.trim()).map((b) => ({ b, pageId }))
+  if (!subpages) return own
+  return [...own, ...p.children.flatMap((c) => collectTodos(d, c, true))]
+}
+
+function ChecklistWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
+  const d = useData((x) => x)
+  const page = cfg.pageId ? d.pages[cfg.pageId] : undefined
+  if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
+  const all = collectTodos(d, page.id, !!cfg.subpages, cfg.section)
+  const done = all.filter((x) => x.b.checked).length
+  const list = cfg.hideChecked ? all.filter((x) => !x.b.checked) : all
+  return (
+    <div className="w-checklist">
+      <NotionRefresh page={page} />
+      <div className="w-check-top">
+        <Progress value={all.length ? done / all.length : 0} height={4} />
+        <span className="muted small">{done}/{all.length}</span>
+      </div>
+      <div className="w-scroll">
+        {list.slice(0, 300).map(({ b, pageId }) => (
+          <label key={b.id} className={`mb-todo ${b.checked ? 'done' : ''}`}>
+            <Checkbox checked={!!b.checked} size={16} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
+            <span>{b.text}</span>
+          </label>
+        ))}
+        {list.length === 0 && <div className="w-missing"><Icon name="circle-check" size={22} /><span>All done</span></div>}
+      </div>
+    </div>
+  )
+}
+
+function DashboardWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
+  const page = useData((d) => (cfg.pageId ? d.pages[cfg.pageId] : undefined))
+  if (!page || page.deletedAt || page.type !== 'dashboard') return <Missing text="Choose a dashboard in the panel settings." />
+  return <div className="w-scroll w-dash"><DashboardGrid pageId={page.id} bare /></div>
+}
+
+function ImageWidget({ cfg, setConfig }: { cfg: Record<string, any>; setConfig: SetConfig }): JSX.Element {
+  if (!cfg.src) {
+    return (
+      <button className="w-missing w-image-pick" onClick={async () => { const src = await pickImageData(); if (src) setConfig('src', src) }}>
+        <Icon name="image" size={24} /><span>Choose a picture</span>
+      </button>
+    )
+  }
+  return <div className="w-image" style={{ backgroundImage: `url("${cfg.src}")`, backgroundSize: cfg.fit === 'contain' ? 'contain' : 'cover' }} />
+}
+
+function TextWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
+  return (
+    <div className="w-text" style={{ fontSize: Number(cfg.size) || 28, fontWeight: Number(cfg.weight) || 650, textAlign: cfg.align === 'center' ? 'center' : cfg.align === 'end' ? 'right' : 'left' }}>
+      {cfg.text ? <span className={cfg.glass === false ? '' : 'glass-text'}>{cfg.text}</span> : <span className="muted small">Write the text in the panel settings.</span>}
+      {cfg.sub && <div className="w-label">{cfg.sub}</div>}
+    </div>
+  )
+}
+
+function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
+  const tasks = useData((d) => d.tasks)
+  const pages = useData((d) => d.pages)
+  const use24h = useData((d) => d.settings.use24h)
+  const t = today()
+  const days = Math.max(1, Math.min(14, Number(cfg.days) || 5))
+  const live = (x: Task): boolean => !x.archived && !x.done && !!pages[x.pageId] && !pages[x.pageId].deletedAt
+  const overdue = Object.values(tasks).filter((x) => live(x) && x.due && x.due < t)
+  const keys = Array.from({ length: days }, (_, i) => addDays(t, i))
+  const fmtTime = (s?: string | null): string => {
+    if (!s) return ''
+    if (use24h) return s
+    const [h, m] = s.split(':').map(Number)
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+  }
+  const row = (x: Task): JSX.Element => (
+    <button key={x.id} className="ag-row" onClick={() => openPage(x.pageId)}>
+      <span className="ag-time">{fmtTime(x.time)}</span>
+      <span className="ellipsis">{x.title}</span>
+    </button>
+  )
+  return (
+    <div className="w-scroll w-agenda">
+      {overdue.length > 0 && <div className="ag-day"><div className="ag-head danger">Overdue · {overdue.length}</div>{overdue.slice(0, 5).map(row)}</div>}
+      {keys.map((k) => {
+        const list = Object.values(tasks).filter((x) => live(x) && x.due === k).sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'))
+        return (
+          <div key={k} className="ag-day">
+            <div className={`ag-head ${k === t ? 'today' : ''}`}>{k === t ? 'Today' : friendlyDay(k)}</div>
+            {list.length ? list.map(row) : <div className="ag-empty">Nothing planned</div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function WeekWidget(): JSX.Element {
+  const tasks = useData((d) => d.tasks)
+  const habits = useData((d) => d.habits)
+  const weekStart = useData((d) => d.settings.weekStart)
+  const t = today()
+  const start = weekStartOf(t, weekStart)
+  const keys = Array.from({ length: 7 }, (_, i) => addDays(start, i))
+  const hs = Object.values(habits).filter((h) => !h.archived && h.kind === 'good')
+  return (
+    <div className="w-week">
+      {keys.map((k) => {
+        const due = Object.values(tasks).filter((x) => !x.done && x.due === k).length
+        const done = Object.values(tasks).filter((x) => x.done && x.doneAt && dayKey(new Date(x.doneAt)) === k).length
+        const hab = hs.length ? hs.filter((h) => habitDoneOn(h, k)).length / hs.length : 0
+        return (
+          <div key={k} className={`wk-day ${k === t ? 'today' : ''} ${k < t ? 'past' : ''}`}>
+            <span className="wk-dow">{DAYS_SHORT[parseDay(k).getDay()]}</span>
+            <span className="wk-num">{parseDay(k).getDate()}</span>
+            <span className="wk-meta">{due ? `${due} due` : done ? `${done} done` : ''}</span>
+            {hs.length > 0 && <span className="wk-bar"><span style={{ width: `${Math.round(hab * 100)}%` }} /></span>}
+          </div>
+        )
+      })}
+    </div>
+  )
 }

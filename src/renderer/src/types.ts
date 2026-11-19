@@ -44,6 +44,8 @@ export interface Page {
   id: string
   title: string
   icon: string
+  /** icon color; empty = default */
+  iconColor?: string
   type: PageType
   parentId: string | null
   children: string[]
@@ -68,7 +70,11 @@ export interface Page {
   rowOrder?: number
   /** dashboard pages: widgets on the grid */
   widgets?: Widget[]
+  /** where the page was imported from, for refreshing it later */
+  source?: PageSource | null
 }
+
+export interface PageSource { kind: 'notion'; id: string; syncedAt: number }
 
 // ---------- databases ----------
 export type PropType = 'text' | 'number' | 'select' | 'multi' | 'status' | 'date' | 'checkbox' | 'url' | 'progress'
@@ -104,6 +110,7 @@ export interface DbSchema { props: DbProp[]; views: DbView[] }
 export type WidgetType =
   | 'value' | 'chart' | 'progress' | 'tasks' | 'habits' | 'database' | 'calendar' | 'clock'
   | 'note' | 'countdown' | 'focus' | 'quickadd' | 'stat' | 'page' | 'goals'
+  | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
 export interface Widget {
   id: string
   type: WidgetType
@@ -114,6 +121,108 @@ export interface Widget {
   h: number
   title?: string
   config: Record<string, any>
+  /** look overrides for this widget */
+  style?: Partial<WidgetStyle>
+}
+
+// ---------- desktop widgets ----------
+/** blur / acrylic: real blur of the desktop behind; tint: colored card; clear: no card at all */
+export type DeskMaterial = 'blur' | 'acrylic' | 'tint' | 'clear'
+export interface WidgetStyle {
+  material: DeskMaterial
+  /** card color; '' follows the theme */
+  tint: string
+  /** card opacity 0-100 */
+  opacity: number
+  radius: number
+  /** text color; '' follows the theme */
+  text: string
+  /** accent color; '' uses the app accent */
+  accent: string
+  /** font family; '' uses the app font */
+  font: string
+  /** content size in percent */
+  scale: number
+  padding: number
+  /** border strength 0-100 */
+  border: number
+  shadow: boolean
+  header: boolean
+  align: 'start' | 'center'
+  theme: 'auto' | 'light' | 'dark'
+}
+export type DeskLayer = 'desktop' | 'normal' | 'top'
+export interface DeskWidget {
+  id: string
+  type: WidgetType
+  title?: string
+  config: Record<string, any>
+  /** screen position and size in device-independent pixels; w <= 0 fills the display in config.displayId */
+  x: number
+  y: number
+  w: number
+  h: number
+  style: Partial<WidgetStyle>
+  layer: DeskLayer
+  locked?: boolean
+  hidden?: boolean
+  /** workspace this panel belongs to */
+  space: string
+  createdAt: number
+}
+/** A workspace: its own set of panels on the screen. Pages are shared by all workspaces. */
+export interface DeskSpace {
+  id: string
+  name: string
+  icon: string
+}
+export interface Desktop {
+  enabled: boolean
+  spaces: DeskSpace[]
+  /** id of the workspace on screen */
+  active: string
+  /** style every widget starts from */
+  style: WidgetStyle
+  widgets: DeskWidget[]
+  /** snap to edges and other widgets while moving */
+  snap: boolean
+  /** grid step in px when snapping */
+  grid: number
+}
+
+// ---------- appearance ----------
+export type Motion = 'off' | 'subtle' | 'normal' | 'lively'
+export interface Look {
+  /** id of the theme preset this look started from */
+  preset: string
+  radius: number
+  /** blur of glass panels in px */
+  blur: number
+  /** border highlight 0-100 */
+  shine: number
+  /** shadow depth 0-100 */
+  shadow: number
+  /** saturation boost behind glass, percent */
+  saturation: number
+  /** custom font family names; '' = the choice in settings.font */
+  fontFamily: string
+  headingFamily: string
+  headingWeight: number
+  lineHeight: number
+  /** letter spacing in hundredths of an em */
+  letterSpacing: number
+  motion: Motion
+  pageTransition: 'fade' | 'slide' | 'rise' | 'none'
+  sidebar: 'floating' | 'attached'
+  iconStroke: number
+  /** picture behind the glass (data URL) */
+  backdropImage: string | null
+  backdropBlur: number
+  /** -60 (lighter) to 60 (darker) */
+  backdropDim: number
+  gradient: { a: string; b: string; c: string; angle: number }
+  /** extra CSS applied to the app and widgets */
+  customCss: string
 }
 
 // ---------- custom values ----------
@@ -269,12 +378,6 @@ export interface FocusSession {
   kind: 'focus' | 'break'
 }
 
-export interface Profile {
-  /** workspace / greeting name */
-  name: string
-  /** workspace icon */
-  avatar: string
-}
 
 export interface Settings {
   theme: 'system' | 'light' | 'dark'
@@ -303,17 +406,9 @@ export interface Settings {
   glassStrength: number
   /** backdrop behind the glass: 'mica' shows the desktop tint, others are gradients from styles.css */
   backdrop: string
-  /** desktop widget window on another monitor */
-  widget: {
-    enabled: boolean
-    displayId: number | null
-    pageId: string | null
-    opacity: number
-    /** 'clear' = see-through window, 'acrylic' = blurred Windows material */
-    background: 'clear' | 'acrylic'
-    /** 'desktop' = behind other windows, 'top' = above them */
-    layer: 'desktop' | 'top'
-  }
+  look: Look
+  /** refresh pages imported from the Notion app when the app starts and every 30 minutes */
+  notionSync: boolean
   closeToTray: boolean
   quickAddHotkey: boolean
 }
@@ -332,7 +427,6 @@ export interface AppData {
   goals: Record<string, Goal>
   metrics: Record<string, Metric>
   focus: FocusSession[]
-  profile: Profile
   settings: Settings
   recent: string[]
   tags: Record<string, string>
@@ -340,6 +434,7 @@ export interface AppData {
   countdowns: Countdown[]
   values: Record<string, TrackedValue>
   rules: ValueRule[]
+  desktop: Desktop
   /** data from removed features, kept so nothing is ever lost */
   legacy?: Record<string, any>
 }

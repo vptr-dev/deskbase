@@ -4,6 +4,8 @@ import type { Block, PageType } from '../renderer/src/types'
 export interface ImportTask { title: string; done: boolean; due?: string | null; tags: string[]; notes?: string }
 
 export interface ImportPage {
+  /** id in the Notion app, when imported from it (used to refresh the page later) */
+  notionId?: string
   title: string
   icon: string
   type: PageType

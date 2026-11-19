@@ -1,35 +1,32 @@
 <p align="center"><img src="build/icon.png" width="96" alt=""></p>
 
-<h1 align="center">Planner</h1>
+<h1 align="center">Deskbase</h1>
 
-<p align="center">A clean, local-first planner and life tracker for Windows.<br>Pages in a sidebar, to-dos, habits, journal, goals, a game library, and an RPG layer that turns your day into XP.</p>
+<p align="center">Your pages, tasks and notes as glass panels on the Windows desktop.<br>Local-first, fully styleable, with Notion import.</p>
 
 ## Install
 
-Download `Planner-Setup-x.y.z.exe` from the [latest release](https://github.com/vptr-dev/planner/releases/latest) and run it. Planner updates itself: new versions download in the background and install the next time you restart the app.
+Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest) and run it. The app updates itself: new versions download in the background and install the next time you restart it.
 
 > Windows may show a SmartScreen notice the first time because the installer is not code-signed. Choose **More info → Run anyway**.
 
 ## What's inside
 
-- **Pages** in a collapsible, nested sidebar. Drag to reorder or nest, favorites, trash with restore, duplicate, Markdown export.
-- **Notes** with a block editor: headings, to-dos, bullets, numbers, toggles, quotes, callouts, code, dividers, `/` menu and Markdown shortcuts.
-- **To-do lists and boards** with natural-language quick add (`Pay rent tomorrow 5pm !high #home every month`), due dates, repeats, priorities, subtasks, tags, reminders, filters, sorting and grouping.
-- **Today** view that pulls together what's due, your habits, focus timer and journal.
-- **Calendar** with month and week views.
-- **Habits** with a weekly grid, streaks, success rate and a 6-month heatmap. Build good habits or track days clean from bad ones.
-- **Journal** with mood, energy, gratitude, search and "on this day".
-- **Goals** with milestones or manual progress and deadlines.
-- **Character**: levels, XP, gold, six attributes, 30+ achievements and an activity heatmap. Spend gold in your own **Rewards** shop.
-- **Focus** timer (Pomodoro) that keeps running while you switch pages.
-- **Game library**: status, platform, hours, completion, rating, play sessions and per-game goals.
-- **Trackers** for anything: water, sleep, weight, steps, spending.
-- Mica window, glass panels, light and dark themes, accent colors, text size, compact mode.
+- **Desktop panels**: tasks, checklists, any page, a scratchpad, quick add, focus timer, agenda, week and month views, goals, habits, numbers, charts, deadlines, clock, headings and pictures, each in its own window on the desktop. Drag, resize, snap, lock, click-through, and keep them on the desktop, like a window or always on top.
+- **Workspaces**: each one keeps its own panel layout. Switch from the sidebar, the Desktop page or the tray.
+- **Glass you control**: blurred, frosted, tinted or see-through panels with your own corners, tint, border, padding, size, font, text color and accent.
+- **Appearance**: themes, accent, gradient or picture backgrounds, glass strength, blur, shadows, corner roundness, fonts, spacing, motion, page transitions and custom CSS. Export and share themes.
+- **Pages** in a nested sidebar with a block editor: headings, to-dos, lists, toggles, quotes, callouts, code, tables and `/` commands.
+- **Notion import** from the Notion app on your computer or an export, with pages that keep refreshing.
+- **To-dos** with natural-language quick add, due dates, repeats, priorities, subtasks, tags and reminders.
+- **Databases** with table, board, gallery, list and calendar views; **dashboards** you lay out yourself.
+- **Habits, journal, goals, calendar, focus timer, trackers and values** that change on their own from rules.
+- An optional **assistant** that runs locally (Ollama) or with your own API key.
 - Undo/redo everywhere, command palette (`Ctrl K`), keyboard shortcuts (`Ctrl /`).
 
 ## Your data
 
-Everything stays on your computer in `%APPDATA%\Planner\data`. Nothing is sent anywhere.
+Everything stays on your computer in `%APPDATA%\Deskbase\data`. Nothing is sent anywhere.
 
 - Saved automatically and written atomically, so a crash can't leave a half-written file.
 - A backup is made every day (the last 20 are kept), plus one before every import, restore or data upgrade.

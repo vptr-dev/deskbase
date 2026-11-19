@@ -3,8 +3,8 @@ import { moveOverdueToToday, openPage, updatePage, useData } from '../store'
 import { habitDoneOn, habitScheduled } from '../lib/habits'
 import { DAYS_SHORT, addDays, dayKey, formatMinutes, friendlyDay, parseDay, today, weekStartOf } from '../lib/util'
 import { AutoText, BarChart, Stat } from '../components/ui'
-import { Icon } from '../components/Icon'
-import { MOODS } from './JournalPage'
+import { Glyph, Icon } from '../components/Icon'
+import { MOOD_NAMES } from './JournalPage'
 import { formatValue } from '../lib/values'
 
 const shortDate = (k: string): string => parseDay(k).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -68,7 +68,7 @@ export function ReviewPage({ pageId }: { pageId: string }): JSX.Element {
         <Stat label="Tasks done" value={s.done.length} />
         <Stat label="Habits" value={s.habitRate === null ? '–' : `${Math.round(s.habitRate * 100)}%`} />
         <Stat label="Focus" value={s.focus ? formatMinutes(Math.round(s.focus)) : '0m'} />
-        <Stat label="Journal" value={s.entries} sub={s.mood ? `mood ${MOODS[Math.round(s.mood)] ?? ''}` : undefined} />
+        <Stat label="Journal" value={s.entries} sub={s.mood ? `mood: ${(MOOD_NAMES[Math.round(s.mood)] ?? '').toLowerCase()}` : undefined} />
       </div>
       <div className="review-grid">
         <section className="panel glass">
@@ -79,7 +79,7 @@ export function ReviewPage({ pageId }: { pageId: string }): JSX.Element {
           <div className="panel-head"><h3>Highlights</h3></div>
           <div className="review-list">
             {s.tags.length > 0 && <div className="row gap-xs wrap">{s.tags.map(([t, n]) => <span key={t} className="chip">#{t} · {n}</span>)}</div>}
-            {s.valueChanges.map(({ v, delta }) => <div key={v.id} className="row between small"><span>{v.icon} {v.name}</span><span className="muted">{delta > 0 ? '+' : ''}{formatValue(v, delta)}</span></div>)}
+            {s.valueChanges.map(({ v, delta }) => <div key={v.id} className="row between small"><span className="row gap-xs"><Glyph value={v.icon} fallback="gem" size={13} color={v.color} /> {v.name}</span><span className="muted">{delta > 0 ? '+' : ''}{formatValue(v, delta)}</span></div>)}
             {s.done.slice().sort((a, b) => b.priority - a.priority).slice(0, 5).map((t) => <div key={t.id} className="row gap-xs small"><Icon name="check" size={12} className="accent" /><span className="ellipsis">{t.title}</span></div>)}
             {!s.done.length && !s.valueChanges.length && <div className="muted small">Nothing logged this week.</div>}
           </div>

@@ -47,7 +47,7 @@ export const focusActions = {
     const st = getData().settings
     if (watch) {
       focusActions.reset('stopwatch')
-      if (elapsed >= 1) toast(`Logged ${formatMinutes(elapsed)} of focus`, { icon: '⏱️' })
+      if (elapsed >= 1) toast(`Logged ${formatMinutes(elapsed)} of focus`, { icon: 'timer' })
       return
     }
     if (!early) {
@@ -58,7 +58,7 @@ export const focusActions = {
     const next: Mode = s.mode === 'focus' ? (cycle % Math.max(1, st.longBreakEvery) === 0 ? 'long' : 'break') : 'focus'
     useFocus.setState({ cycle })
     focusActions.reset(next)
-    if (!early) toast(next === 'focus' ? 'Break over' : 'Session complete. Take a break.', { icon: next === 'focus' ? '🎯' : '☕' })
+    if (!early) toast(next === 'focus' ? 'Break over' : 'Session complete. Take a break.', { icon: next === 'focus' ? 'target' : 'coffee' })
   },
   tick(): void {
     const s = useFocus.getState()

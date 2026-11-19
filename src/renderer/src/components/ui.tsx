@@ -1,6 +1,11 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, type ReactNode, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Icon } from './Icon'
+import { Glyph, Icon } from './Icon'
+import { ICON_GROUPS } from '../lib/icon-data'
+
+/** The document UI renders into. Desktop widget windows provide their own. */
+export const DocContext = createContext<Document>(document)
+export const useDoc = (): Document => useContext(DocContext)
 
 export function Button({ children, onClick, kind = 'default', icon, title, disabled, small, className = '', type = 'button' }: {
   children?: ReactNode; onClick?: (e: React.MouseEvent) => void; kind?: 'default' | 'primary' | 'ghost' | 'danger'; icon?: string; title?: string; disabled?: boolean; small?: boolean; className?: string; type?: 'button' | 'submit'
@@ -15,33 +20,36 @@ export function Button({ children, onClick, kind = 'default', icon, title, disab
 
 /** Floating popover anchored to an element or a point. Closes on outside click / Esc. */
 export function Popover({ anchor, onClose, children, align = 'start', width }: {
-  anchor: HTMLElement | { x: number; y: number } | null; onClose: () => void; children: ReactNode; align?: 'start' | 'end'; width?: number
+  anchor: Element | { x: number; y: number } | null; onClose: () => void; children: ReactNode; align?: 'start' | 'end'; width?: number
 }): JSX.Element | null {
   const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ left: number; top: number }>({ left: -9999, top: -9999 })
+  const doc = useDoc()
+  const view = doc.defaultView ?? window
+  const [pos, setPos] = useState<{ left: number; top: number; origin: string }>({ left: -9999, top: -9999, origin: 'top left' })
   useLayoutEffect(() => {
     if (!anchor || !ref.current) return
-    const r = anchor instanceof HTMLElement ? anchor.getBoundingClientRect() : { left: anchor.x, right: anchor.x, top: anchor.y, bottom: anchor.y }
+    const r = 'getBoundingClientRect' in anchor ? anchor.getBoundingClientRect() : { left: anchor.x, right: anchor.x, top: anchor.y, bottom: anchor.y }
     const el = ref.current.getBoundingClientRect()
     let left = align === 'end' ? r.right - el.width : r.left
     let top = r.bottom + 6
-    if (top + el.height > window.innerHeight - 8) top = Math.max(8, r.top - el.height - 6)
-    left = Math.max(8, Math.min(left, window.innerWidth - el.width - 8))
-    setPos({ left, top })
+    let below = true
+    if (top + el.height > view.innerHeight - 8) { top = Math.max(8, r.top - el.height - 6); below = false }
+    left = Math.max(8, Math.min(left, view.innerWidth - el.width - 8))
+    setPos({ left, top, origin: `${below ? 'top' : 'bottom'} ${align === 'end' ? 'right' : 'left'}` })
   }, [anchor, align])
   useEffect(() => {
     const down = (e: MouseEvent): void => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
     const key = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
-    const t = setTimeout(() => document.addEventListener('mousedown', down), 0)
-    document.addEventListener('keydown', key, true)
-    return () => { clearTimeout(t); document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key, true) }
-  }, [onClose])
+    const t = setTimeout(() => doc.addEventListener('mousedown', down), 0)
+    doc.addEventListener('keydown', key, true)
+    return () => { clearTimeout(t); doc.removeEventListener('mousedown', down); doc.removeEventListener('keydown', key, true) }
+  }, [onClose, doc])
   if (!anchor) return null
   return createPortal(
-    <div ref={ref} className="popover glass" style={{ left: pos.left, top: pos.top, width }} onMouseDown={(e) => e.stopPropagation()}>
+    <div ref={ref} className="popover glass" style={{ left: pos.left, top: pos.top, width, transformOrigin: pos.origin }} onMouseDown={(e) => e.stopPropagation()}>
       {children}
     </div>,
-    document.body
+    doc.body
   )
 }
 
@@ -75,18 +83,19 @@ export function MenuButton({ items, icon = 'more', title = 'More', label, small 
 }
 
 export function Modal({ onClose, children, width = 560, className = '' }: { onClose: () => void; children: ReactNode; width?: number; className?: string }): JSX.Element {
+  const doc = useDoc()
   useEffect(() => {
     const key = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', key)
-    return () => document.removeEventListener('keydown', key)
-  }, [onClose])
+    doc.addEventListener('keydown', key)
+    return () => doc.removeEventListener('keydown', key)
+  }, [onClose, doc])
   return createPortal(
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className={`modal glass-strong ${className}`} style={{ width }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         {children}
       </div>
     </div>,
-    document.body
+    doc.body
   )
 }
 
@@ -153,41 +162,52 @@ export function Checkbox({ checked, onChange, color, size = 18, round }: { check
   )
 }
 
-export const EMOJI_SETS: Record<string, string[]> = {
-  Common: '📄 📝 📓 📒 📕 📗 📘 📙 📚 🗂️ 📁 📌 📎 ✏️ 🖊️ 📅 🗓️ ⏰ ⏱️ ✅ ☑️ 🎯 🏆 🥇 ⭐ 🌟 ✨ 💡 🔥 ⚡ 💎 🧭 🗺️ 🏠 💼 💰 🛒 🎁 🔁 📈 📊 🔒 🔑 🧩'.split(' '),
-  Games: '🎮 🕹️ 👾 🎲 ♟️ 🃏 🧙 🧝 🧛 🐉 ⚔️ 🗡️ 🛡️ 🏹 🪄 🔮 🧪 💀 👑 🏰 🗝️ 🪙 💣 🚀 🛸 🤖 🦸 🥷 🐲 🧟'.split(' '),
-  Life: '❤️ 💪 🧠 🦉 🎨 🎵 🎧 📷 🏃 🚴 🏋️ 🧘 🍎 🥗 💧 😴 🛏️ 🌱 🌳 🌞 🌙 ☕ 🍳 🐶 🐱 ✈️ 🚗 💊 🩺 🧹'.split(' '),
-  Faces: '😀 😄 😊 🙂 😐 😕 😢 😭 😡 😴 🤩 😎 🤓 🥳 😌 🤔 😬 🥲 😇 🤯'.split(' '),
-  Symbols: '🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟥 🟧 🟨 🟩 🟦 🟪 ⬛ ⬜ ❗ ❓ ➕ ➖ ✖️ ♾️ 💯 🔔 🚩 🏁 🔺 🔻 ⭕ ❌'.split(' ')
-}
+export const ICON_COLORS = ['', '#0a84ff', '#5e5ce6', '#bf5af2', '#ff375f', '#ff453a', '#ff9f0a', '#e5b000', '#30d158', '#00c7be', '#40c8e0', '#8e8e93']
 
-export function EmojiPicker({ onPick, onRemove }: { onPick: (e: string) => void; onRemove?: () => void }): JSX.Element {
-  const [tab, setTab] = useState('Common')
-  const [custom, setCustom] = useState('')
+/** Searchable grid of line icons. */
+export function IconPicker({ onPick, onRemove, color, onColor }: { onPick: (name: string) => void; onRemove?: () => void; color?: string; onColor?: (c: string) => void }): JSX.Element {
+  const groups = Object.keys(ICON_GROUPS)
+  const [tab, setTab] = useState(groups[0])
+  const [q, setQ] = useState('')
+  const all = useMemo(() => [...new Set(Object.values(ICON_GROUPS).flat())], [])
+  const shown = q.trim() ? all.filter((n) => n.includes(q.trim().toLowerCase().replace(/\s+/g, '-'))) : ICON_GROUPS[tab]
   return (
-    <div className="emoji-picker">
-      <div className="emoji-tabs">
-        {Object.keys(EMOJI_SETS).map((k) => <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{k}</button>)}
-      </div>
-      <div className="emoji-grid">
-        {EMOJI_SETS[tab].map((e) => <button key={e} onClick={() => onPick(e)}>{e}</button>)}
-      </div>
-      <div className="emoji-foot">
-        <input id="emoji-custom" className="input input-sm" placeholder="Type or paste any emoji" value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && custom.trim()) onPick(custom.trim()) }} />
+    <div className="icon-picker">
+      <div className="icon-picker-top">
+        <input className="input input-sm grow" autoFocus placeholder="Search icons" value={q} onChange={(e) => setQ(e.target.value)} />
         {onRemove && <Button small kind="ghost" onClick={onRemove}>Remove</Button>}
       </div>
+      {!q.trim() && (
+        <div className="icon-tabs">
+          {groups.map((k) => <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{k}</button>)}
+        </div>
+      )}
+      <div className="icon-grid">
+        {shown.map((n) => <button key={n} title={n.replace(/-/g, ' ')} onClick={() => onPick(n)} style={color ? { color } : undefined}><Icon name={n} size={18} /></button>)}
+        {shown.length === 0 && <div className="muted small pad">No icons match.</div>}
+      </div>
+      {onColor && (
+        <div className="icon-colors">
+          {ICON_COLORS.map((c) => (
+            <button key={c || 'auto'} className={`color-dot ${(color ?? '') === c ? 'active' : ''} ${c ? '' : 'auto'}`} style={c ? { background: c } : undefined} title={c ? c : 'Default color'} onClick={() => onColor(c)} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-export function IconPickerButton({ value, onChange, size = 'md', placeholder = '📄' }: { value: string; onChange: (v: string) => void; size?: 'sm' | 'md' | 'lg'; placeholder?: string }): JSX.Element {
+export function IconPickerButton({ value, onChange, size = 'md', placeholder = 'file-text', color, onColor }: { value: string; onChange: (v: string) => void; size?: 'sm' | 'md' | 'lg'; placeholder?: string; color?: string; onColor?: (c: string) => void }): JSX.Element {
   const [el, setEl] = useState<HTMLElement | null>(null)
+  const px = size === 'lg' ? 34 : size === 'sm' ? 15 : 20
   return (
     <>
-      <button className={`icon-pick icon-pick-${size}`} onClick={(e) => setEl(e.currentTarget)} title="Change icon">{value || placeholder}</button>
+      <button className={`icon-pick icon-pick-${size} ${value ? '' : 'empty'}`} onClick={(e) => setEl(e.currentTarget)} title="Change icon">
+        <Glyph value={value || placeholder} size={px} color={color || undefined} />
+      </button>
       {el && (
-        <Popover anchor={el} onClose={() => setEl(null)} width={320}>
-          <EmojiPicker onPick={(e) => { onChange(e); setEl(null) }} onRemove={() => { onChange(''); setEl(null) }} />
+        <Popover anchor={el} onClose={() => setEl(null)} width={340}>
+          <IconPicker color={color} onColor={onColor} onPick={(n) => { onChange(n); setEl(null) }} onRemove={() => { onChange(''); setEl(null) }} />
         </Popover>
       )}
     </>
@@ -205,7 +225,7 @@ export function ColorDots({ value, colors, onChange }: { value: string; colors: 
 export function Empty({ icon, title, children }: { icon: string; title: string; children?: ReactNode }): JSX.Element {
   return (
     <div className="empty">
-      <div className="empty-icon">{icon}</div>
+      <div className="empty-icon"><Icon name={icon} size={26} /></div>
       <div className="empty-title">{title}</div>
       {children}
     </div>

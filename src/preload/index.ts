@@ -18,25 +18,33 @@ const api = {
   loginItem: (on?: boolean) => ipcRenderer.invoke('app:loginItem', on),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   displays: () => ipcRenderer.invoke('app:displays'),
-  onDataChanged: (cb: (data: unknown) => void) => {
-    const fn = (_e: unknown, data: unknown): void => cb(data)
-    ipcRenderer.on('data:changed', fn)
-    return () => ipcRenderer.removeListener('data:changed', fn)
-  },
   onOpenPage: (cb: (id: string) => void) => {
     const fn = (_e: unknown, id: string): void => cb(id)
     ipcRenderer.on('app:openPage', fn)
     return () => ipcRenderer.removeListener('app:openPage', fn)
   },
-  onWidgetToggle: (cb: () => void) => {
-    const fn = (_e: unknown): void => cb()
-    ipcRenderer.on('widget:toggle', fn)
-    return () => ipcRenderer.removeListener('widget:toggle', fn)
-  },
-  widget: {
-    set: (w: unknown) => ipcRenderer.invoke('widget:set', w),
-    openMain: (pageId?: string) => ipcRenderer.invoke('widget:openMain', pageId),
-    interactive: (on: boolean) => ipcRenderer.send('widget:interactive', on)
+  showMain: () => ipcRenderer.invoke('app:showMain'),
+  desk: {
+    active: (on: boolean, spaces?: { id: string; name: string }[], current?: string) => ipcRenderer.invoke('desk:active', on, spaces, current),
+    prepare: (spec: unknown) => ipcRenderer.invoke('desk:prepare', spec),
+    show: (id: string) => ipcRenderer.invoke('desk:show', id),
+    update: (spec: unknown) => ipcRenderer.invoke('desk:update', spec),
+    close: (id: string) => ipcRenderer.invoke('desk:close', id),
+    edit: (on: boolean) => ipcRenderer.invoke('desk:edit', on),
+    drag: (id: string, phase: 'start' | 'move', x: number, y: number, mode: 'move' | 'resize', free: boolean, grid: number) => ipcRenderer.send('desk:drag', id, phase, x, y, mode, free, grid),
+    dragEnd: (id: string) => ipcRenderer.invoke('desk:dragEnd', id),
+    bounds: (id: string) => ipcRenderer.invoke('desk:bounds', id),
+    menu: (id: string, items: unknown) => ipcRenderer.invoke('desk:menu', id, items),
+    onClosed: (cb: (id: string) => void) => {
+      const fn = (_e: unknown, id: string): void => cb(id)
+      ipcRenderer.on('desk:closed', fn)
+      return () => ipcRenderer.removeListener('desk:closed', fn)
+    },
+    onCommand: (cb: (id: string, cmd: string) => void) => {
+      const fn = (_e: unknown, id: string, cmd: string): void => cb(id, cmd)
+      ipcRenderer.on('desk:command', fn)
+      return () => ipcRenderer.removeListener('desk:command', fn)
+    }
   },
   setShell: (p: { closeToTray?: boolean; quickAddHotkey?: boolean }) => ipcRenderer.invoke('app:setShell', p),
   quickAddDone: (added: boolean) => ipcRenderer.invoke('app:quickAddDone', added),

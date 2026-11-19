@@ -3,7 +3,7 @@ import { descendants, movePage, setOverlay, useApp, useData } from '../store'
 import { typeInfo } from '../lib/defaults'
 import type { AppData } from '../types'
 import { Modal } from './ui'
-import { Icon } from './Icon'
+import { Glyph, Icon } from './Icon'
 
 export function pagePath(d: AppData, id: string): string {
   const parts: string[] = []
@@ -54,7 +54,7 @@ export function MovePageDialog(): JSX.Element | null {
         {targets.length === 0 && <div className="muted small pad">No pages found</div>}
         {targets.map((t, i) => (
           <button key={t.id ?? 'root'} className={`palette-item ${i === sel ? 'active' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => choose(t.id)}>
-            <span className="palette-icon">{t.icon || <Icon name="home" size={15} />}</span>
+            <span className="palette-icon">{t.icon ? <Glyph value={t.icon} size={15} /> : <Icon name="home" size={15} />}</span>
             <span className="grow ellipsis">{t.title}</span>
             {t.path && <span className="muted small ellipsis move-path">{t.path}</span>}
           </button>

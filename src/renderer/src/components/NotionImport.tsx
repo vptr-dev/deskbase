@@ -4,7 +4,7 @@ import { api, isDesktop } from '../lib/api'
 import { applyImport, describeImport } from '../lib/importer'
 import type { ImportResult, NotionPageInfo } from '../../../shared/import-types'
 import { Button, Empty, Modal } from './ui'
-import { Icon } from './Icon'
+import { Glyph, Icon } from './Icon'
 
 export function NotionImportDialog(): JSX.Element {
   const [available, setAvailable] = useState<boolean | null>(null)
@@ -61,7 +61,7 @@ export function NotionImportDialog(): JSX.Element {
                   {shown.map((p) => (
                     <label key={p.id} className={`notion-row ${picked.has(p.id) ? 'on' : ''}`}>
                       <input type="checkbox" checked={picked.has(p.id)} onChange={() => toggle(p.id)} />
-                      <span className="notion-icon">{p.icon || (p.kind === 'database' ? '🗂️' : '📄')}</span>
+                      <span className="notion-icon"><Glyph value={p.icon} fallback={p.kind === 'database' ? 'database' : 'file-text'} size={15} /></span>
                       <span className="grow ellipsis">{p.title}</span>
                       {p.parent && <span className="muted small ellipsis">in {p.parent}</span>}
                     </label>
@@ -71,7 +71,7 @@ export function NotionImportDialog(): JSX.Element {
                 <p className="muted small">Subpages and databases inside the pages you pick come along.</p>
               </>
             )}
-            {isDesktop && available === false && <Empty icon="📦" title="The Notion app isn't installed here" />}
+            {isDesktop && available === false && <Empty icon="box" title="The Notion app isn't installed here" />}
             {!isDesktop && <p className="muted">Notion import is available in the desktop app.</p>}
             <div className="section-label mt">From a Notion export</div>
             <p className="muted small">In Notion: ••• → Export → Markdown & CSV. Then choose the .zip here.</p>

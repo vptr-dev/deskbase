@@ -7,7 +7,9 @@
  * A backup of the file is written automatically before any migration runs.
  */
 
-export const CURRENT_SCHEMA = 5
+import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
+
+export const CURRENT_SCHEMA = 6
 
 type Raw = Record<string, any>
 
@@ -72,6 +74,58 @@ const migrations: Record<number, (d: Raw) => Raw> = {
       profile: { name: typeof p.name === 'string' ? p.name : '', avatar: typeof p.avatar === 'string' ? p.avatar : '' },
       values: d.values && typeof d.values === 'object' ? d.values : {},
       rules: Array.isArray(d.rules) ? d.rules : []
+    }
+  },
+  // 5 -> 6: emoji icons become line icons (originals kept in legacy.emoji), the single
+  // desktop dashboard becomes the first free-floating desktop widget, appearance settings (0.6.0).
+  5: (d) => {
+    const legacy: Raw = { ...(d.legacy && typeof d.legacy === 'object' ? d.legacy : {}) }
+    const emoji: Raw = { ...(legacy.emoji && typeof legacy.emoji === 'object' ? legacy.emoji : {}) }
+    const conv = (kind: string, id: string, icon: unknown, fallback: string): string => {
+      if (typeof icon !== 'string' || !icon) return ''
+      if (!isEmoji(icon)) return icon
+      emoji[`${kind}:${id}`] = icon
+      return emojiToIcon(icon, fallback)
+    }
+    const mapItems = (key: string, fallback: string): Raw => {
+      const src: Raw = d[key] && typeof d[key] === 'object' ? d[key] : {}
+      const out: Raw = {}
+      for (const [k, v] of Object.entries(src)) out[k] = v && typeof v === 'object' ? { ...v, icon: conv(key, k, v.icon, fallback) || fallback } : v
+      return out
+    }
+    const pages: Raw = {}
+    for (const [k, p] of Object.entries((d.pages ?? {}) as Raw)) pages[k] = p && typeof p === 'object' ? { ...p, icon: conv('pages', k, p.icon, 'file-text') } : p
+    const settings: Raw = { ...(d.settings && typeof d.settings === 'object' ? d.settings : {}) }
+    const old: Raw = settings.widget && typeof settings.widget === 'object' ? settings.widget : {}
+    delete settings.widget
+    const widgets: Raw[] = []
+    if (old.pageId && pages[old.pageId]) {
+      widgets.push({
+        id: 'dash-' + String(old.pageId),
+        type: 'dashboard',
+        config: { pageId: old.pageId, displayId: old.displayId ?? null },
+        x: 0, y: 0, w: 0, h: 0,
+        style: { material: old.background === 'acrylic' ? 'acrylic' : 'clear', opacity: typeof old.opacity === 'number' ? old.opacity : 100, header: false, padding: 12 },
+        layer: old.layer === 'top' ? 'top' : 'desktop',
+        hidden: !old.enabled,
+        createdAt: Date.now()
+      })
+    }
+    legacy.emoji = emoji
+    const profile: Raw = d.profile && typeof d.profile === 'object' ? d.profile : {}
+    const { profile: _drop, ...rest } = d
+    void _drop
+    return {
+      ...rest,
+      pages,
+      habits: mapItems('habits', 'circle-check'),
+      goals: mapItems('goals', 'target'),
+      metrics: mapItems('metrics', 'activity'),
+      values: mapItems('values', 'gem'),
+      countdowns: Array.isArray(d.countdowns) ? d.countdowns.map((c: Raw, i: number) => (c && typeof c === 'object' ? { ...c, icon: conv('countdowns', String(c.id ?? i), c.icon, 'calendar') || 'calendar' } : c)) : [],
+      settings,
+      desktop: { enabled: true, snap: true, grid: 8, spaces: [{ id: 'main', name: 'Main', icon: 'monitor' }], active: 'main', widgets: widgets.map((w) => ({ ...w, space: 'main' })) },
+      legacy: { ...legacy, profile: { ...(legacy.profile ?? {}), name: profile.name, avatar: profile.avatar } }
     }
   }
 }

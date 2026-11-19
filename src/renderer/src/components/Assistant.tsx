@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { emojiToIcon } from '../../../shared/emoji-icons'
 import { create } from 'zustand'
 import { act, addTask, getData, openPage, setOverlay, toast, upsert, useApp, useData } from '../store'
 import type { AiAction, AiConfig, ChatMessage } from '../../../shared/ai-core'
@@ -11,7 +12,7 @@ import { pageToMarkdown } from '../lib/exporters'
 import { habitDoneOn, habitScheduled } from '../lib/habits'
 import { addDays, longDate, today, uid } from '../lib/util'
 import { ensureEntry } from '../pages/JournalPage'
-import { Icon } from './Icon'
+import { Glyph, Icon } from './Icon'
 import { Button } from './ui'
 
 export const useAssistant = create<{ open: boolean }>(() => ({ open: false }))
@@ -33,7 +34,7 @@ function buildSystem(d: AppData, pageId: string | null): string {
   let pageText = page ? pageToMarkdown(page.id) : ''
   if (pageText.length > 12000) pageText = pageText.slice(0, 12000) + '\n…(page continues)'
   return [
-    `You are the assistant inside Planner, a personal planner and life tracker app on the user's computer. Today is ${longDate(t)} (${t}). ${d.profile.name ? `The user's name is ${d.profile.name}.` : ''}`,
+    `You are the assistant inside the user's personal workspace app on their computer (pages, tasks, notes, habits and desktop panels). Today is ${longDate(t)} (${t}). The workspace on screen is "${d.desktop.spaces.find((s) => s.id === d.desktop.active)?.name ?? 'Main'}".`,
     'Be concise, warm and practical. Use short Markdown: brief paragraphs and bullet lists. No long preambles.',
     '',
     'When the user asks you to add, create, plan or change something in the app, also include ONE fenced code block whose language is `actions`, containing a JSON array. The user reviews and applies it. Supported actions:',
@@ -68,13 +69,13 @@ function findOrCreatePage(type: PageType, title: string): string {
 
 function describe(a: AiAction): { icon: string; text: string } {
   switch (a.type) {
-    case 'add_task': return { icon: '☑️', text: `Task: ${a.title}${a.due ? ` · ${a.due}${a.time ? ' ' + a.time : ''}` : ''}${a.subtasks?.length ? ` · ${a.subtasks.length} subtasks` : ''}` }
-    case 'create_page': return { icon: a.icon || '📄', text: `New page: ${a.title}` }
-    case 'append_to_page': return { icon: '➕', text: `Add to this page: ${a.markdown.split('\n')[0].slice(0, 60)}` }
-    case 'add_habit': return { icon: a.icon || '🔁', text: `Habit: ${a.name}` }
-    case 'add_goal': return { icon: '🎯', text: `Goal: ${a.title}${a.milestones?.length ? ` · ${a.milestones.length} milestones` : ''}` }
-    case 'add_journal': return { icon: '📓', text: `Journal: ${a.text.slice(0, 60)}` }
-    default: return { icon: '•', text: (a as any).type }
+    case 'add_task': return { icon: 'square-check-big', text: `Task: ${a.title}${a.due ? ` · ${a.due}${a.time ? ' ' + a.time : ''}` : ''}${a.subtasks?.length ? ` · ${a.subtasks.length} subtasks` : ''}` }
+    case 'create_page': return { icon: a.icon || 'file-text', text: `New page: ${a.title}` }
+    case 'append_to_page': return { icon: 'plus', text: `Add to this page: ${a.markdown.split('\n')[0].slice(0, 60)}` }
+    case 'add_habit': return { icon: a.icon || 'repeat', text: `Habit: ${a.name}` }
+    case 'add_goal': return { icon: 'target', text: `Goal: ${a.title}${a.milestones?.length ? ` · ${a.milestones.length} milestones` : ''}` }
+    case 'add_journal': return { icon: 'notebook-pen', text: `Journal: ${a.text.slice(0, 60)}` }
+    default: return { icon: 'circle', text: (a as any).type }
   }
 }
 
@@ -102,8 +103,8 @@ function applyAction(a: AiAction): boolean {
     case 'create_page': {
       const type = PAGE_TYPES.includes(a.pageType as PageType) ? (a.pageType as PageType) : 'doc'
       const p = newPage(type, a.title || 'Untitled')
-      if (a.icon) p.icon = a.icon
-      else if (type === 'doc') p.icon = '📄'
+      if (a.icon) p.icon = emojiToIcon(a.icon, 'file-text')
+      else if (type === 'doc') p.icon = 'file-text'
       if (a.markdown) p.blocks = markdownToBlocks(a.markdown)
       act((dr) => { dr.pages[p.id] = p; dr.rootOrder.push(p.id) })
       openPage(p.id)
@@ -126,14 +127,14 @@ function applyAction(a: AiAction): boolean {
       if (!a.name) return false
       const pid = findOrCreatePage('habits', 'Habits')
       const n = Object.keys(getData().habits).length
-      upsert('habits', { id: uid(), pageId: pid, name: a.name, icon: a.icon || '✅', color: COLORS[n % COLORS.length], kind: a.kind === 'bad' ? 'bad' : 'good', target: 1, days: [0, 1, 2, 3, 4, 5, 6], log: {}, difficulty: 'easy', stat: null, createdAt: Date.now(), order: n })
+      upsert('habits', { id: uid(), pageId: pid, name: a.name, icon: emojiToIcon(a.icon, 'circle-check'), color: COLORS[n % COLORS.length], kind: a.kind === 'bad' ? 'bad' : 'good', target: 1, days: [0, 1, 2, 3, 4, 5, 6], log: {}, difficulty: 'easy', stat: null, createdAt: Date.now(), order: n })
       return true
     }
     case 'add_goal': {
       if (!a.title) return false
       const pid = findOrCreatePage('goals', 'Goals')
       const n = Object.keys(getData().goals).length
-      upsert('goals', { id: uid(), pageId: pid, title: a.title, why: '', icon: '🎯', deadline: /^\d{4}-\d{2}-\d{2}$/.test(a.deadline ?? '') ? a.deadline : null, milestones: (a.milestones ?? []).map((m) => ({ id: uid(), title: String(m), done: false })), progressMode: 'milestones', manual: 0, color: COLORS[n % COLORS.length], done: false, createdAt: Date.now(), category: '', difficulty: 'hard', order: n })
+      upsert('goals', { id: uid(), pageId: pid, title: a.title, why: '', icon: 'target', deadline: /^\d{4}-\d{2}-\d{2}$/.test(a.deadline ?? '') ? a.deadline : null, milestones: (a.milestones ?? []).map((m) => ({ id: uid(), title: String(m), done: false })), progressMode: 'milestones', manual: 0, color: COLORS[n % COLORS.length], done: false, createdAt: Date.now(), category: '', difficulty: 'hard', order: n })
       return true
     }
     case 'add_journal': {
@@ -302,7 +303,7 @@ export function AssistantPanel(): JSX.Element | null {
                     const done = m.applied?.includes(i)
                     return (
                       <div key={i} className={`action-row ${done ? 'done' : ''}`}>
-                        <span>{dsc.icon}</span><span className="grow ellipsis">{dsc.text}</span>
+                        <Glyph value={dsc.icon} size={15} /><span className="grow ellipsis">{dsc.text}</span>
                         {done ? <Icon name="check" size={14} className="accent" /> : <button className="link small" onClick={() => applyAll(m.id, actions, i)}>Add</button>}
                       </div>
                     )

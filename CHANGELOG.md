@@ -2,9 +2,24 @@
 
 ## Unreleased
 
+The app is now **Deskbase**: your pages, tasks and notes as glass panels on the Windows desktop.
+
+- Desktop panels: put tasks, checklists, any page (Notion imports included), a scratchpad, quick add, focus timer, agenda, week, month, goals, habits, numbers, charts, deadlines, a clock, a heading or a picture right on your desktop. Each panel is its own window: drag it, resize it, snap it to screen edges and other panels (hold Alt to place freely), lock it, let clicks pass through, keep it on the desktop, like a window, or always on top. Right-click a panel for its options.
+- Real glass on the desktop: blurred or frosted backgrounds that stay blurred when you click elsewhere, a solid tint, or fully see-through, with rounded corners, tint color and strength, border, padding, size, text color, accent, font, light or dark per panel.
+- Workspaces: each workspace keeps its own set of panels on the screen. Switch from the top of the sidebar, the Desktop page or the tray menu; start a new one empty or from the current layout.
+- Desktop page: a map of your screens to place panels, a live preview, and settings for content, style and placement. Arrange mode lets you move and resize panels right on the desktop.
+- Pages imported from the Notion app keep their link and refresh on start and every 30 minutes; checks you made here are kept. Panels showing a Notion page have a refresh button.
+- Appearance page: 12 themes, accent color, 14 backgrounds including your own gradient or a picture (with blur and dim), glass strength, blur, color, edge shine, shadow depth, corner roundness, floating or attached sidebar, icon weight, any installed font for text and headings, heading weight, line height, letter spacing, motion level, page transitions and custom CSS. Themes can be exported and imported.
+- Line icons everywhere instead of emoji, with a searchable icon picker and icon colors. Existing emoji icons are converted automatically.
+- Smoother everything: page transitions, springy menus, dialogs and toasts, animated checkmarks and toggles.
+- Text on accent-colored buttons switches between white and dark so it stays readable with light accents.
+- The workspace name and avatar in the sidebar are replaced by the workspace switcher.
+- New app icon.
+- Your data moves over by itself: the data folder becomes %APPDATA%\Deskbase and is upgraded in place after a backup.
+
 ## 0.5.0 — 2026-11-18
 
-A new direction: Planner is now a blank, fully custom workspace.
+A new direction: the app is now a blank, fully custom workspace.
 
 - Removed the game layer: XP, levels, gold, quests, the item shop, rewards, the character page and the game library. Nothing is deleted: old game data is kept inside your data file, and the old Character and Games pages are in the trash.
 - New installs start with an empty workspace.
@@ -13,14 +28,14 @@ A new direction: Planner is now a blank, fully custom workspace.
 - Databases: tables with text, number, select, multi-select, status, date, checkbox, URL and progress properties. Table, board, gallery, list and calendar views, each with its own filters, sort and visible properties. Every row opens as a full page.
 - Dashboards: build your own page from widgets (values, charts, progress rings, stats, tasks, habits, database views, calendar, clock, notes, countdowns, focus timer, quick add, goals and page links). Drag to move, drag the corner to resize, pick 8 to 24 columns.
 - Desktop widget: pin a dashboard to a second monitor. It covers that screen and stays on the desktop behind your windows (or always on top), see-through or with blurred glass, and clicks on empty space go through to the desktop. Set it up in Settings → Desktop widget.
-- With "Start with Windows" on and the desktop widget or "Close to tray" turned on, Planner starts quietly in the tray.
+- With "Start with Windows" on and the desktop widget or "Close to tray" turned on, the app starts quietly in the tray.
 
 ## 0.4.0 — 2026-11-18
 
 - Select several tasks with Ctrl or Shift click, then complete, reschedule, change priority, move or delete them together.
 - "Move overdue to today" on to-do lists, the Today page and the weekly review.
 - Quick add from anywhere: press Ctrl Shift Space (can be turned off in Settings), or use "Quick add task" in the command palette.
-- Optional tray icon: with "Close to tray" on, closing the window keeps Planner running in the tray.
+- Optional tray icon: with "Close to tray" on, closing the window keeps the app running in the tray.
 - New Weekly review page: tasks done per day, XP, habit rate, focus time, journal mood, games played, and a reflection note for each week.
 - Countdowns on the Today page (trips, birthdays that repeat every year, launches). Wishlist games with a release date show up there too.
 - Game library: cover images (choose, drop or paste), your own "time to beat" estimate with progress, last played on cards, and a 12-week play chart per game. The stats show how many hours your backlog still needs.

@@ -6,17 +6,17 @@ import { AutoText, Checkbox, Menu, Popover } from '../components/ui'
 import { Icon } from '../components/Icon'
 
 const SLASH: { type: BlockType; label: string; icon: string; hint: string }[] = [
-  { type: 'p', label: 'Text', icon: 'note', hint: '' },
-  { type: 'h1', label: 'Heading 1', icon: 'note', hint: '#' },
-  { type: 'h2', label: 'Heading 2', icon: 'note', hint: '##' },
-  { type: 'h3', label: 'Heading 3', icon: 'note', hint: '###' },
-  { type: 'todo', label: 'To-do', icon: 'check', hint: '[]' },
+  { type: 'p', label: 'Text', icon: 'type', hint: '' },
+  { type: 'h1', label: 'Heading 1', icon: 'heading-1', hint: '#' },
+  { type: 'h2', label: 'Heading 2', icon: 'heading-2', hint: '##' },
+  { type: 'h3', label: 'Heading 3', icon: 'heading-3', hint: '###' },
+  { type: 'todo', label: 'To-do', icon: 'square-check-big', hint: '[]' },
   { type: 'bullet', label: 'Bulleted list', icon: 'list', hint: '-' },
-  { type: 'number', label: 'Numbered list', icon: 'list', hint: '1.' },
-  { type: 'toggle', label: 'Toggle', icon: 'chevron', hint: '>>' },
-  { type: 'quote', label: 'Quote', icon: 'note', hint: '"' },
-  { type: 'callout', label: 'Callout', icon: 'bolt', hint: '!' },
-  { type: 'code', label: 'Code', icon: 'keyboard', hint: '```' },
+  { type: 'number', label: 'Numbered list', icon: 'list-ordered', hint: '1.' },
+  { type: 'toggle', label: 'Toggle', icon: 'list-collapse', hint: '>>' },
+  { type: 'quote', label: 'Quote', icon: 'quote', hint: '"' },
+  { type: 'callout', label: 'Callout', icon: 'lightbulb', hint: '!' },
+  { type: 'code', label: 'Code', icon: 'code', hint: '```' },
   { type: 'divider', label: 'Divider', icon: 'minus', hint: '---' },
   { type: 'table', label: 'Table', icon: 'table', hint: '' }
 ]
@@ -221,7 +221,7 @@ export function BlockEditor({ pageId, locked }: { pageId: string; locked?: boole
                 {b.type === 'toggle' && (
                   <button className={`toggle-arrow ${b.open ? 'open' : ''}`} onClick={() => setBlock(b.id, (x) => { x.open = !x.open })}><Icon name="chevron" size={13} stroke={2.4} /></button>
                 )}
-                {b.type === 'callout' && <span className="callout-icon">💡</span>}
+                {b.type === 'callout' && <span className="callout-icon"><Icon name="lightbulb" size={16} /></span>}
                 <div className="block-text">
                   <AutoText className={`bt bt-${b.type} ${b.checked ? 'checked' : ''}`} {...common} />
                   {b.type === 'toggle' && b.open && (

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPage, duplicatePage, movePage, openPage, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
+import { act, duplicatePage, movePage, openPage, openView, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
 import { typeInfo } from '../lib/defaults'
+import { addSpace, removeSpace, switchSpace } from '../lib/desktop'
 import { api, type UpdateStatus } from '../lib/api'
 import { exportPageMarkdown } from '../lib/exporters'
-import { Icon } from './Icon'
-import { Menu, Popover, Progress } from './ui'
+import { Glyph, Icon } from './Icon'
+import { IconPickerButton, Menu, Popover } from './ui'
 import { pagePath } from './MovePage'
 
 type DropPos = 'before' | 'after' | 'inside'
@@ -86,7 +87,7 @@ function PageRow({ id, depth }: { id: string; depth: number }): JSX.Element | nu
         >
           <Icon name="chevron" size={12} stroke={2.2} />
         </button>
-        <span className="tree-icon">{icon}</span>
+        <span className="tree-icon"><Glyph value={icon} size={15} color={page.iconColor || undefined} /></span>
         {renaming ? (
           <input
             ref={inputRef}
@@ -141,7 +142,6 @@ export function Sidebar(): JSX.Element {
   const favIds = useData((d) => Object.values(d.pages).filter((p) => p.favorite && !p.deletedAt).map((p) => p.id).join(','))
   const width = useData((d) => d.settings.sidebarWidth)
   const collapsed = useData((d) => d.settings.sidebarCollapsed)
-  const profile = useData((d) => d.profile)
   const current = useApp((s) => s.current)
   const pages = useData((d) => d.pages)
   const roots = rootIds ? rootIds.split(',') : []
@@ -172,10 +172,7 @@ export function Sidebar(): JSX.Element {
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`} aria-hidden={collapsed}>
       <div className="sidebar-top drag">
-        <button className="profile-chip no-drag" onClick={() => setOverlay('settings')} title="Workspace settings">
-          <span className="profile-avatar">{profile.avatar || (profile.name || 'W').slice(0, 1).toUpperCase()}</span>
-          <span className="profile-name">{profile.name || 'Workspace'}</span>
-        </button>
+        <SpaceSwitcher />
         <button className="icon-btn no-drag" title="Collapse sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = true })}>
           <Icon name="left" size={15} stroke={2} />
         </button>
@@ -185,6 +182,7 @@ export function Sidebar(): JSX.Element {
       <nav className="sidebar-nav">
         <button className="nav-item" onClick={() => setOverlay('search')}><Icon name="search" size={15} /> <span>Search</span><kbd>Ctrl K</kbd></button>
         <button className="nav-item" onClick={() => setOverlay('newPage', { parentId: null })}><Icon name="plus" size={15} /> <span>New page</span><kbd>Ctrl N</kbd></button>
+        <button className={`nav-item ${current === '@desktop' ? 'active' : ''}`} onClick={() => openView('@desktop')}><Icon name="monitor" size={15} /> <span>Desktop</span></button>
         <button className="nav-item" onClick={() => setOverlay('values')}><Icon name="diamond" size={15} /> <span>Values</span></button>
       </nav>
 
@@ -195,7 +193,7 @@ export function Sidebar(): JSX.Element {
             {favs.map((id) => (
               <button key={id} className={`tree-row fav ${current === id ? 'active' : ''}`} style={{ paddingLeft: 8 }} onClick={() => openPage(id)}>
                 <span className="tree-chevron invisible" />
-                <span className="tree-icon">{pages[id].icon || typeInfo(pages[id].type).icon}</span>
+                <span className="tree-icon"><Glyph value={pages[id].icon || typeInfo(pages[id].type).icon} size={15} color={pages[id].iconColor || undefined} /></span>
                 <span className="tree-title">{pages[id].title || 'Untitled'}</span>
               </button>
             ))}
@@ -217,7 +215,7 @@ export function Sidebar(): JSX.Element {
           matches.length ? matches.map((p) => (
             <button key={p.id} className={`tree-row ${current === p.id ? 'active' : ''}`} style={{ paddingLeft: 8 }} onClick={() => openPage(p.id)} title={pagePath(data, p.id)}>
               <span className="tree-chevron invisible" />
-              <span className="tree-icon">{p.icon || typeInfo(p.type).icon}</span>
+              <span className="tree-icon"><Glyph value={p.icon || typeInfo(p.type).icon} size={15} color={p.iconColor || undefined} /></span>
               <span className="tree-title">{p.title || 'Untitled'}</span>
               {p.parentId && <span className="tree-path ellipsis">{pagePath(data, p.id)}</span>}
             </button>
@@ -233,10 +231,53 @@ export function Sidebar(): JSX.Element {
 
       <div className="sidebar-bottom">
         <UpdatePill />
+        <button className={`nav-item ${current === '@appearance' ? 'active' : ''}`} onClick={() => openView('@appearance')}><Icon name="palette" size={15} /> <span>Appearance</span></button>
         <button className="nav-item" onClick={() => setOverlay('trash')}><Icon name="trash" size={15} /> <span>Trash</span></button>
         <button className="nav-item" onClick={() => setOverlay('settings')}><Icon name="settings" size={15} /> <span>Settings</span><kbd>Ctrl ,</kbd></button>
       </div>
       <div className="sidebar-resizer" onMouseDown={startResize} onDoubleClick={() => setSettings((s) => { s.sidebarWidth = 248 })} />
     </aside>
+  )
+}
+
+/** Workspaces: each one keeps its own panels on the screen. */
+function SpaceSwitcher(): JSX.Element {
+  const spaces = useData((d) => d.desktop.spaces)
+  const activeId = useData((d) => d.desktop.active)
+  const counts = useData((d) => d.desktop.widgets.reduce<Record<string, number>>((m, w) => { if (!w.hidden) m[w.space] = (m[w.space] ?? 0) + 1; return m }, {}))
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  const active = spaces.find((s) => s.id === activeId) ?? spaces[0]
+  const rename = (name: string): void => act((d) => { const s = d.desktop.spaces.find((x) => x.id === activeId); if (s) s.name = name }, { key: 'space-name:' + activeId })
+  const reicon = (icon: string): void => act((d) => { const s = d.desktop.spaces.find((x) => x.id === activeId); if (s) s.icon = icon || 'monitor' })
+  return (
+    <>
+      <button className="space-chip no-drag" onClick={(e) => setEl(e.currentTarget)} title="Switch workspace">
+        <span className="space-icon"><Glyph value={active?.icon} fallback="monitor" size={14} /></span>
+        <span className="space-name">{active?.name || 'Workspace'}</span>
+        <Icon name="down" size={13} className="space-caret" />
+      </button>
+      {el && (
+        <Popover anchor={el} onClose={() => setEl(null)} width={250}>
+          <div className="space-menu">
+            {spaces.map((s) => (
+              <button key={s.id} className={`space-item ${s.id === activeId ? 'active' : ''}`} onClick={() => switchSpace(s.id)}>
+                <span className="space-icon"><Glyph value={s.icon} fallback="monitor" size={14} /></span>
+                <span className="grow ellipsis">{s.name}</span>
+                <span className="muted small">{counts[s.id] ?? 0}</span>
+              </button>
+            ))}
+            <div className="menu-divider" />
+            <div className="space-edit">
+              <IconPickerButton size="sm" value={active?.icon ?? 'monitor'} onChange={reicon} placeholder="monitor" />
+              <input className="input input-sm grow" value={active?.name ?? ''} placeholder="Workspace name" onChange={(e) => rename(e.target.value)} />
+            </div>
+            <button className="menu-item" onClick={() => { addSpace(false); setEl(null) }}><span className="menu-icon"><Icon name="plus" size={14} /></span><span className="menu-label">New workspace</span></button>
+            <button className="menu-item" onClick={() => { addSpace(true); setEl(null) }}><span className="menu-icon"><Icon name="copy" size={14} /></span><span className="menu-label">New from this layout</span></button>
+            <button className="menu-item" onClick={() => { openView('@desktop'); setEl(null) }}><span className="menu-icon"><Icon name="layout" size={14} /></span><span className="menu-label">Arrange panels…</span></button>
+            {spaces.length > 1 && <button className="menu-item danger" onClick={() => { removeSpace(activeId); setEl(null) }}><span className="menu-icon"><Icon name="trash" size={14} /></span><span className="menu-label">Delete this workspace</span></button>}
+          </div>
+        </Popover>
+      )}
+    </>
   )
 }

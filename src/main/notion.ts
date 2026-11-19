@@ -25,7 +25,7 @@ export function notionDbPath(): string | null {
 function openCopy(): { db: any; cleanup: () => void } {
   const src = notionDbPath()
   if (!src) throw new Error('The Notion app was not found on this computer.')
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'planner-notion-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deskbase-notion-'))
   const dest = path.join(dir, 'notion.db')
   fs.copyFileSync(src, dest)
   for (const ext of ['-wal', '-shm']) if (fs.existsSync(src + ext)) fs.copyFileSync(src + ext, dest + ext)
@@ -113,6 +113,7 @@ class NotionReader {
     const props = json(r.properties, {})
     const fmt = json(r.format, {})
     const page: ImportPage = {
+      notionId: id,
       title: this.rich(props.title) || 'Untitled',
       icon: isEmoji(fmt.page_icon) ? fmt.page_icon : '',
       type: 'doc',
@@ -122,7 +123,7 @@ class NotionReader {
     this.stats.pages++
     if (r.type === 'collection_view_page' && r.collection_id) {
       const db = this.collection(r.collection_id, page.title)
-      return db ?? page
+      return db ? { ...db, notionId: id } : page
     }
     for (const c of json(r.content, [])) this.convert(c, 0, page)
     page.blocks = tidy(page.blocks)

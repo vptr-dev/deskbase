@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { act, boot, duplicatePage, flushSave, getData, onConfetti, openPage, receiveRemote, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
+import { act, boot, duplicatePage, flushSave, getData, isView, onConfetti, openPage, openView, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
 import { api } from './lib/api'
 import { COVERS, typeInfo } from './lib/defaults'
 import { exportPageMarkdown } from './lib/exporters'
@@ -7,8 +7,8 @@ import { MovePageDialog } from './components/MovePage'
 import { habitWeek } from './lib/habits'
 import { playLevelUp } from './lib/sound'
 import { Sidebar } from './components/Sidebar'
-import { Icon } from './components/Icon'
-import { Button, IconPickerButton, MenuButton, Popover } from './components/ui'
+import { Glyph, Icon } from './components/Icon'
+import { IconPickerButton, MenuButton, Popover, Button } from './components/ui'
 import { CommandPalette, NewPageDialog, QuickAddDialog, SettingsDialog, ShortcutsDialog, TrashDialog } from './components/Overlays'
 import { DocPage, BlockEditor } from './pages/DocPage'
 import { BoardPage, TasksPage } from './pages/TasksPage'
@@ -21,16 +21,20 @@ import { TrackerPage } from './pages/TrackerPage'
 import { TodayPage } from './pages/TodayPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { DatabasePage, RowProps } from './pages/DatabasePage'
-import { DashboardGrid, DashboardPage } from './pages/DashboardPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { DesktopPage } from './pages/DesktopPage'
+import { AppearancePage } from './pages/AppearancePage'
 import type { Page } from './types'
 import { AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
 import { NotionImportDialog } from './components/NotionImport'
 import { ValuesDialog } from './components/Values'
-import { applyImport } from './lib/importer'
-import { isDesktop, isWidgetWindow } from './lib/api'
+import { applyImport, refreshFromNotion } from './lib/importer'
+import { isDesktop } from './lib/api'
+import { applyCustomCss, applyLook } from './lib/look'
+import { addDesktopWidget, addSpace, runCommand, startDesktop, switchSpace } from './lib/desktop'
 
 // Browser preview only: lets an import result be applied from the dev console for testing.
-if (!isDesktop) (window as any).__plannerApplyImport = applyImport
+if (!isDesktop) (window as any).__deskApplyImport = applyImport
 
 // ---------- navigation history ----------
 const back: string[] = []
@@ -43,13 +47,14 @@ useApp.subscribe((s, prev) => {
     fwd.length = 0
   }
 })
+const go = (id: string): void => { if (isView(id)) openView(id); else openPage(id) }
 function goBack(): void {
   const id = back.pop()
   const cur = useApp.getState().current
   if (!id) return
   if (cur) fwd.push(cur)
   navigating = true
-  openPage(id)
+  go(id)
   navigating = false
 }
 function goForward(): void {
@@ -58,7 +63,7 @@ function goForward(): void {
   if (!id) return
   if (cur) back.push(cur)
   navigating = true
-  openPage(id)
+  go(id)
   navigating = false
 }
 
@@ -72,7 +77,7 @@ function Breadcrumbs({ page }: { page: Page }): JSX.Element {
       {trail.map((c, i) => (
         <span key={c.id} className="crumb-wrap">
           {i > 0 && <span className="crumb-sep">/</span>}
-          <button className="crumb" onClick={() => openPage(c.id)}>{c.icon || typeInfo(c.type).icon} {c.title || 'Untitled'}</button>
+          <button className="crumb" onClick={() => openPage(c.id)}><Glyph value={c.icon || typeInfo(c.type).icon} size={14} color={c.iconColor || undefined} /> {c.title || 'Untitled'}</button>
         </span>
       ))}
     </div>
@@ -110,7 +115,7 @@ function SubpageList({ page }: { page: Page }): JSX.Element | null {
     <div className="subpages">
       {kids.map((k) => (
         <button key={k.id} className="subpage" onClick={() => openPage(k.id)}>
-          <span>{k.icon || typeInfo(k.type).icon}</span><span className="subpage-title">{k.title || 'Untitled'}</span>
+          <Glyph value={k.icon || typeInfo(k.type).icon} size={15} color={k.iconColor || undefined} /><span className="subpage-title">{k.title || 'Untitled'}</span>
         </button>
       ))}
     </div>
@@ -156,7 +161,7 @@ function PageView({ id }: { id: string }): JSX.Element | null {
     <div className={`page ${page.fullWidth || ['calendar', 'board', 'database', 'dashboard'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
       <PageCover page={page} />
       <div className="page-header">
-        <IconPickerButton size="lg" value={page.icon} placeholder={info.icon} onChange={(icon) => updatePage(id, (p) => { p.icon = icon })} />
+        <IconPickerButton size="lg" value={page.icon} placeholder={info.icon} color={page.iconColor} onColor={(c) => updatePage(id, (p) => { p.iconColor = c || undefined })} onChange={(icon) => updatePage(id, (p) => { p.icon = icon })} />
         <input
           ref={titleRef}
           id={`title-${id}`}
@@ -187,7 +192,7 @@ function Toasts(): JSX.Element {
     <div className="toasts" aria-live="polite">
       {toasts.map((t) => (
         <div key={t.id} className={`toast glass-strong toast-${t.kind ?? 'info'}`}>
-          {t.icon && <span className="toast-icon">{t.icon}</span>}
+          {t.icon && <span className="toast-icon"><Icon name={t.icon} size={15} /></span>}
           <span>{t.text}</span>
           {t.undo && <button className="link" onClick={() => { undo(); useApp.setState((s) => ({ toasts: s.toasts.filter((x) => x.id !== t.id) })) }}>Undo</button>}
         </div>
@@ -224,7 +229,7 @@ function Confetti(): JSX.Element {
   return <canvas ref={ref} className="confetti" />
 }
 
-function useAppearance(widget = false): void {
+function useAppearance(): void {
   const s = useData((d) => d.settings)
   habitWeek.start = s.weekStart
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -234,32 +239,43 @@ function useAppearance(widget = false): void {
     mq.addEventListener('change', fn)
     return () => mq.removeEventListener('change', fn)
   }, [])
-  useEffect(() => { if (!widget) api.setTheme(s.theme) }, [s.theme])
-  useEffect(() => { if (!widget) api.setShell({ closeToTray: s.closeToTray, quickAddHotkey: s.quickAddHotkey }).catch(() => {}) }, [s.closeToTray, s.quickAddHotkey])
-  useEffect(() => (widget ? undefined : api.onQuickAdd(() => setOverlay('quickAdd'))), [])
-  useEffect(() => { if (!widget) api.info().then((i) => { if (i.micaSupported && i.material !== s.material) api.setMaterial(s.material) }) }, [])
-  // The desktop widget follows the saved settings; both windows share data through the main process.
-  const widgetKey = JSON.stringify(s.widget)
-  useEffect(() => { if (!widget) api.widget.set(s.widget).catch(() => {}) }, [widgetKey])
-  useEffect(() => api.onDataChanged(receiveRemote), [])
-  useEffect(() => (widget ? undefined : api.onOpenPage((id) => openPage(id))), [])
-  useEffect(() => (widget ? undefined : api.onWidgetToggle(() => setSettings((x) => { x.widget = { ...x.widget, enabled: !x.widget.enabled } }))), [])
+  useEffect(() => { api.setTheme(s.theme) }, [s.theme])
+  useEffect(() => { api.setShell({ closeToTray: s.closeToTray, quickAddHotkey: s.quickAddHotkey }).catch(() => {}) }, [s.closeToTray, s.quickAddHotkey])
+  useEffect(() => api.onQuickAdd(() => setOverlay('quickAdd')), [])
+  useEffect(() => { api.info().then((i) => { if (i.micaSupported && i.material !== s.material) api.setMaterial(s.material) }) }, [])
+  useEffect(() => api.onOpenPage((id) => openPage(id)), [])
   const dark = s.theme === 'dark' || (s.theme === 'system' && systemDark)
+  useEffect(() => { applyLook(document.documentElement, s, dark) }, [dark, s])
+  useEffect(() => { applyCustomCss(document, s.look.customCss) }, [s.look.customCss])
   useEffect(() => {
-    const r = document.documentElement
-    r.dataset.theme = dark ? 'dark' : 'light'
-    r.dataset.density = s.density
-    r.dataset.font = s.font
-    if (widget) { r.classList.add('widget-mode'); delete r.dataset.backdrop; r.dataset.widgetBg = s.widget.background } else r.dataset.backdrop = s.backdrop || 'sky'
-    r.classList.toggle('reduce-motion', s.reduceMotion)
-    r.style.setProperty('--accent', s.accent)
-    r.style.setProperty('--fs', s.fontSize + 'px')
-    r.style.setProperty('--sidebar-w', s.sidebarWidth + 'px')
-    r.style.setProperty('--glass', String(s.glassStrength / 100))
-  }, [dark, s.accent, s.fontSize, s.sidebarWidth, s.density, s.font, s.reduceMotion, s.glassStrength, s.backdrop, s.widget.background])
+    api.info().then((i) => document.documentElement.classList.toggle('mica', i.micaSupported && s.material !== 'none' && s.backdrop === 'mica'))
+  }, [s.material, s.backdrop])
+}
+
+/** Keeps pages imported from the Notion app up to date. */
+function useNotionSync(): void {
+  const on = useData((d) => d.settings.notionSync)
+  const ready = useApp((s) => s.ready)
   useEffect(() => {
-    if (!widget) api.info().then((i) => document.documentElement.classList.toggle('mica', i.micaSupported && s.material !== 'none'))
-  }, [s.material])
+    if (!on || !ready || !isDesktop) return
+    const run = (): void => {
+      const d = getData()
+      if (Object.values(d.pages).some((p) => p.source?.kind === 'notion' && !p.deletedAt)) refreshFromNotion(undefined, true).catch(() => {})
+    }
+    const first = setTimeout(run, 4000)
+    const id = setInterval(run, 30 * 60 * 1000)
+    return () => { clearTimeout(first); clearInterval(id) }
+  }, [on, ready])
+}
+
+function useDesktopWidgets(): void {
+  const ready = useApp((s) => s.ready)
+  useEffect(() => (ready ? startDesktop() : undefined), [ready])
+  // Unpackaged runs only: lets automated checks drive the desktop panels.
+  useEffect(() => {
+    if (!isDesktop) return
+    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, runCommand, addSpace, switchSpace } }).catch(() => {})
+  }, [])
 }
 
 function useShortcuts(): void {
@@ -318,56 +334,9 @@ function useTicker(): void {
 }
 
 export function App(): JSX.Element {
-  return isWidgetWindow ? <WidgetApp /> : <MainApp />
+  return <MainApp />
 }
 
-/** Clicks on empty space fall through to the desktop; widgets stay clickable. */
-function usePassThrough(): void {
-  useEffect(() => {
-    let last: boolean | null = null
-    const empty = (el: Element | null): boolean => !el || el === document.documentElement || el === document.body || el.id === 'root' || el.matches('.widget-shell, .dash, .dash-grid')
-    const onMove = (e: MouseEvent): void => {
-      const on = !empty(e.target as Element)
-      if (on !== last) { last = on; api.widget.interactive(on) }
-    }
-    const onLeave = (): void => { if (last !== false) { last = false; api.widget.interactive(false) } }
-    window.addEventListener('mousemove', onMove)
-    document.documentElement.addEventListener('mouseleave', onLeave)
-    api.widget.interactive(false)
-    return () => { window.removeEventListener('mousemove', onMove); document.documentElement.removeEventListener('mouseleave', onLeave) }
-  }, [])
-}
-
-/** The desktop widget window: one dashboard, full screen, no app chrome. */
-function WidgetApp(): JSX.Element {
-  const ready = useApp((s) => s.ready)
-  const overlay = useApp((s) => s.overlay)
-  const pageId = useData((d) => d.settings.widget.pageId)
-  const page = useData((d) => (pageId ? d.pages[pageId] : undefined))
-  useEffect(() => { boot() }, [])
-  useEffect(() => { const id = setInterval(() => focusActions.tick(), 1000); return () => clearInterval(id) }, [])
-  useAppearance(true)
-  usePassThrough()
-  if (!ready) return <div className="boot" />
-  const ok = page && !page.deletedAt && page.type === 'dashboard'
-  return (
-    <div className="widget-shell">
-      {ok ? <DashboardGrid pageId={page.id} bare /> : (
-        <div className="widget-missing glass">
-          <Icon name="monitor" size={22} />
-          <div className="strong">No dashboard picked</div>
-          <div className="muted small">Choose one in Planner → Settings → Desktop widget.</div>
-          <Button small onClick={() => api.widget.openMain()}>Open Planner</Button>
-        </div>
-      )}
-      <div className="widget-bar glass">
-        <button className="icon-btn" title="Open in Planner" onClick={() => api.widget.openMain(ok ? page.id : undefined)}><Icon name="layout" size={15} /></button>
-      </div>
-      {overlay === 'values' && <ValuesDialog />}
-      <Toasts />
-    </div>
-  )
-}
 
 function MainApp(): JSX.Element {
   const ready = useApp((s) => s.ready)
@@ -382,7 +351,10 @@ function MainApp(): JSX.Element {
   useAppearance()
   useShortcuts()
   useTicker()
+  useNotionSync()
+  useDesktopWidgets()
   if (!ready) return <div className="boot" />
+  const view = isView(current) ? current : null
 
   return (
     <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${assistantOpen ? 'assistant-open' : ''}`}>
@@ -392,14 +364,14 @@ function MainApp(): JSX.Element {
           {collapsed && <button className="icon-btn no-drag" title="Show sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = false })}><Icon name="sidebar" size={16} /></button>}
           <button className="icon-btn no-drag" title="Back (Ctrl+[)" onClick={goBack}><Icon name="left" size={15} stroke={2} /></button>
           <button className="icon-btn no-drag" title="Forward (Ctrl+])" onClick={goForward}><Icon name="right" size={15} stroke={2} /></button>
-          {page && <Breadcrumbs page={page} />}
+          {view ? <div className="crumbs no-drag"><span className="crumb"><Icon name={view === '@desktop' ? 'monitor' : 'palette'} size={14} /> {view === '@desktop' ? 'Desktop' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
           <div className="spacer" />
           <FocusMini />
           <SaveIndicator />
           <button className="icon-btn no-drag" title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={undo}><Icon name="undo" size={15} /></button>
           <button className="icon-btn no-drag" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo} onClick={redo}><Icon name="redo" size={15} /></button>
           <button className={`icon-btn no-drag ${assistantOpen ? 'accent' : ''}`} title="Assistant (Ctrl+J)" onClick={toggleAssistant}><Icon name="sparkle" size={15} /></button>
-          {page && (
+          {page && !view && (
             <span className="no-drag">
               <MenuButton items={[
                 { label: page.favorite ? 'Remove from favorites' : 'Add to favorites', icon: 'star', onClick: () => updatePage(page.id, (p) => { p.favorite = !p.favorite }) },
@@ -412,6 +384,8 @@ function MainApp(): JSX.Element {
                 { label: 'Duplicate', icon: 'copy', onClick: () => duplicatePage(page.id) },
                 { label: 'Move to…', icon: 'folder', onClick: () => setOverlay('movePage', { pageId: page.id }) },
                 { label: 'Export as Markdown', icon: 'download', onClick: () => exportPageMarkdown(page.id) },
+                ...(page.source?.kind === 'notion' ? [{ label: 'Refresh from Notion', icon: 'refresh', onClick: () => { refreshFromNotion([page.id]) } }] : []),
+                ...(isDesktop && page.type === 'doc' ? [{ label: 'Show on desktop', icon: 'monitor', onClick: () => { addDesktopWidget(page.blocks.some((b) => b.type === 'todo') ? 'checklist' : 'pageview', { config: { pageId: page.id, hideChecked: true }, w: 340, h: 420 }) } }] : []),
                 { divider: true, label: '' },
                 { label: `Edited ${new Date(page.updatedAt).toLocaleString()}`, disabled: true },
                 { label: 'Move to trash', icon: 'trash', danger: true, onClick: () => trashPage(page.id) }
@@ -421,7 +395,7 @@ function MainApp(): JSX.Element {
           {!assistantOpen && <div className="caption-space" />}
         </header>
         <div className="scroll">
-          {page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
+          {view === '@desktop' ? <DesktopPage key="desktop" /> : view === '@appearance' ? <AppearancePage key="appearance" /> : page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
             <div className="no-page">
               <div className="muted">No page open</div>
               <button className="btn btn-primary" onClick={() => setOverlay('newPage', { parentId: null })}><Icon name="plus" size={15} /> New page</button>

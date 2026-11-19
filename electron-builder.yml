@@ -1,5 +1,6 @@
+# Kept from the first releases so existing installs upgrade in place.
 appId: com.vptrdev.planner
-productName: Planner
+productName: Deskbase
 copyright: Copyright © 2026 vptr-dev
 directories:
   buildResources: build
@@ -14,6 +15,13 @@ files:
   - '!node_modules/koffi/vendor/**'
   - '!node_modules/koffi/build/koffi/!(win32_x64)/**'
 asar: true
+extraResources:
+  - from: build/tray.png
+    to: tray.png
+  - from: build/tray@1.5x.png
+    to: tray@1.5x.png
+  - from: build/tray@2x.png
+    to: tray@2x.png
 asarUnpack:
   - node_modules/koffi/build/koffi/win32_x64/**
 win:
@@ -21,7 +29,7 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/icon.png
-  artifactName: Planner-Setup-${version}.${ext}
+  artifactName: Deskbase-Setup-${version}.${ext}
 nsis:
   oneClick: true
   perMachine: false
@@ -29,9 +37,9 @@ nsis:
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Planner
+  shortcutName: Deskbase
 publish:
   provider: github
   owner: vptr-dev
-  repo: planner
+  repo: deskbase
   releaseType: release

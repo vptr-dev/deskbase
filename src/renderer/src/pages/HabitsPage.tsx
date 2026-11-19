@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { act, emit, pageItems, removeItem, unemit, upsert, useData, patch, updatePage } from '../store'
 import type { Habit } from '../types'
-import { habitBestStreak, habitDayTarget, habitDoneOn, habitDueToday, habitRate, habitScheduled, habitStreak, habitWeekCount, habitWeekKey, isWeekly } from '../lib/habits'
+import { habitBestStreak, habitDayTarget, habitDoneOn, habitDueToday, habitRate, habitScheduled, habitStreak, habitWeekCount, isWeekly } from '../lib/habits'
 import { COLORS } from '../lib/defaults'
 import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid } from '../lib/util'
 import { Button, ColorDots, ConfirmButton, Empty, IconPickerButton, MenuButton, Modal, Ring, Segmented } from '../components/ui'
-import { Icon } from '../components/Icon'
+import { Glyph, Icon } from '../components/Icon'
 
 export function logHabit(id: string, day: string, delta: number): void {
   act((d) => {
@@ -25,7 +25,7 @@ export function logHabit(id: string, day: string, delta: number): void {
 }
 
 function newHabit(pageId: string, order: number): Habit {
-  return { id: uid(), pageId, name: '', icon: '✅', color: COLORS[order % COLORS.length], kind: 'good', target: 1, days: [0, 1, 2, 3, 4, 5, 6], log: {}, difficulty: 'easy', stat: null, createdAt: Date.now(), order, period: 'day', dayNotes: {}, frozen: [] }
+  return { id: uid(), pageId, name: '', icon: 'circle-check', color: COLORS[order % COLORS.length], kind: 'good', target: 1, days: [0, 1, 2, 3, 4, 5, 6], log: {}, difficulty: 'easy', stat: null, createdAt: Date.now(), order, period: 'day', dayNotes: {}, frozen: [] }
 }
 
 function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }): JSX.Element {
@@ -36,7 +36,7 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }):
       <div className="modal-head"><h3>{habit.name ? 'Edit habit' : 'New habit'}</h3></div>
       <div className="modal-body form">
         <div className="row gap-sm">
-          <IconPickerButton value={h.icon} onChange={(icon) => set({ icon })} />
+          <IconPickerButton value={h.icon} placeholder="circle-check" color={h.color} onChange={(icon) => set({ icon: icon || 'circle-check' })} />
           <input id="habit-name" className="input grow" autoFocus placeholder="e.g. Drink water, Read 20 pages" value={h.name} onChange={(e) => set({ name: e.target.value })} />
         </div>
         <label>Type</label>
@@ -129,7 +129,7 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
         <Button kind="primary" small icon="plus" onClick={() => setEditing(newHabit(pageId, habits.length))}>New habit</Button>
       </div>
 
-      {habits.length === 0 ? <Empty icon="🔁" title={showArchived ? 'No archived habits' : 'No habits yet'} /> : mode === 'month' ? <MonthChains habits={habits} /> : (
+      {habits.length === 0 ? <Empty icon="repeat" title={showArchived ? 'No archived habits' : 'No habits yet'} /> : mode === 'month' ? <MonthChains habits={habits} /> : (
         <div className="habit-table glass">
           <div className="habit-head">
             <div />
@@ -148,7 +148,7 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
                 onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverId(h.id) } }}
                 onDrop={(e) => { e.preventDefault(); if (dragId) reorder(dragId, h.id); setDragId(null); setOverId(null) }}>
                 <button className="habit-name" draggable onDragStart={(e) => { setDragId(h.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', h.id) }} onDragEnd={() => { setDragId(null); setOverId(null) }} onClick={() => setDetail(detail === h.id ? null : h.id)}>
-                  <span className="habit-icon" style={{ background: h.color + '26' }}>{h.icon}</span>
+                  <span className="habit-icon" style={{ background: h.color + '26', color: h.color }}><Glyph value={h.icon} fallback="circle-check" size={16} /></span>
                   <span className="habit-title">{h.name}{h.kind === 'bad' && <span className="muted small"> · quitting</span>}{weekly && <span className="muted small"> · {habitWeekCount(h, t)}/{h.target} this week</span>}</span>
                 </button>
                 {days.map((k) => {
@@ -167,12 +167,12 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
                       onClick={() => logHabit(h.id, k, h.kind === 'good' && v >= need ? -v : 1)}
                       onContextMenu={(e) => { e.preventDefault(); logHabit(h.id, k, -1) }}
                     >
-                      {done ? (h.kind === 'bad' ? <Icon name="x" size={14} stroke={3} /> : <Icon name="check" size={14} stroke={3} />) : partial ? <span className="small">{v}</span> : isFrozen ? <span className="small">❄</span> : null}
+                      {done ? (h.kind === 'bad' ? <Icon name="x" size={14} stroke={3} /> : <Icon name="check" size={14} stroke={3} />) : partial ? <span className="small">{v}</span> : isFrozen ? <Icon name="snowflake" size={13} /> : null}
                       {dn && <span className="cell-note-dot" />}
                     </button>
                   )
                 })}
-                <div className="habit-streak">{streak > 0 ? `🔥 ${streak}${weekly ? 'w' : ''}` : '–'}</div>
+                <div className="habit-streak">{streak > 0 ? <><Icon name="flame" size={13} className="flame" /> {streak}{weekly ? 'w' : ''}</> : '–'}</div>
                 {detail === h.id && (
                   <div className="habit-detail">
                     <div className="row gap-lg wrap">
@@ -240,7 +240,7 @@ function MonthChains({ habits }: { habits: Habit[] }): JSX.Element {
           const elapsed = days.filter((k) => k <= t && k >= dayOf(h.createdAt)).length
           return (
             <div key={h.id} className="chain-row" style={{ ['--n' as any]: count, ['--c' as any]: h.color }}>
-              <span className="chain-name ellipsis" title={h.name}>{h.icon} {h.name}</span>
+              <span className="chain-name ellipsis" title={h.name}><Glyph value={h.icon} size={13} color={h.color} /> {h.name}</span>
               {days.map((k, i) => {
                 const on = k <= t && done(k)
                 const prev = i > 0 && days[i - 1] <= t && done(days[i - 1])

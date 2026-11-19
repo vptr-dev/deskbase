@@ -5,10 +5,10 @@ import { COLORS } from '../lib/defaults'
 import { TRIGGERS, formatValue, valueNow, valueSeries } from '../lib/values'
 import { timeAgo, uid } from '../lib/util'
 import { Button, ColorDots, IconPickerButton, Modal, Progress, Segmented, Sparkline, Toggle } from './ui'
-import { Icon } from './Icon'
+import { Glyph, Icon } from './Icon'
 
 export function newValue(order: number, name = ''): TrackedValue {
-  return { id: uid(), name, icon: '◆', color: COLORS[order % COLORS.length], unit: '', base: 0, goal: null, decimals: 0, reset: 'never', log: [], order, createdAt: Date.now() }
+  return { id: uid(), name, icon: 'gem', color: COLORS[order % COLORS.length], unit: '', base: 0, goal: null, decimals: 0, reset: 'never', log: [], order, createdAt: Date.now() }
 }
 
 export function createValue(name = 'New value'): string {
@@ -42,12 +42,12 @@ const patchRule = (id: string, fn: (r: ValueRule) => void, key?: string): void =
 function scopeOptions(d: AppData, on: RuleTrigger): { value: string; label: string }[] {
   const live = (pid: string): boolean => !!d.pages[pid] && !d.pages[pid].deletedAt
   const pagesOf = (types: string[]): { value: string; label: string }[] =>
-    Object.values(d.pages).filter((p) => !p.deletedAt && !p.rowOf && types.includes(p.type)).map((p) => ({ value: p.id, label: `${p.icon} ${p.title || 'Untitled'}` }))
+    Object.values(d.pages).filter((p) => !p.deletedAt && !p.rowOf && types.includes(p.type)).map((p) => ({ value: p.id, label: `${p.title || 'Untitled'}` }))
   switch (on) {
     case 'task': return pagesOf(['tasks', 'board', 'today'])
-    case 'habit': return Object.values(d.habits).filter((h) => !h.archived && live(h.pageId)).map((h) => ({ value: h.id, label: `${h.icon} ${h.name}` }))
+    case 'habit': return Object.values(d.habits).filter((h) => !h.archived && live(h.pageId)).map((h) => ({ value: h.id, label: h.name }))
     case 'row': return pagesOf(['database'])
-    case 'metric': return Object.values(d.metrics).filter((m) => live(m.pageId)).map((m) => ({ value: m.id, label: `${m.icon} ${m.name}` }))
+    case 'metric': return Object.values(d.metrics).filter((m) => live(m.pageId)).map((m) => ({ value: m.id, label: m.name }))
     case 'goal': return pagesOf(['goals'])
     case 'journal': return pagesOf(['journal'])
     default: return []
@@ -121,7 +121,7 @@ function ValueDetail({ v }: { v: TrackedValue }): JSX.Element {
   return (
     <div className="value-detail">
       <div className="row gap-sm">
-        <IconPickerButton value={v.icon} placeholder="◆" onChange={(icon) => patchValue(v.id, (x) => { x.icon = icon || '◆' })} />
+        <IconPickerButton value={v.icon} placeholder="gem" onChange={(icon) => patchValue(v.id, (x) => { x.icon = icon || 'gem' })} />
         <input className="value-name" value={v.name} placeholder="Name" onChange={(e) => patchValue(v.id, (x) => { x.name = e.target.value }, 'vname:' + v.id)} />
       </div>
       <div className="value-hero glass">
@@ -187,7 +187,7 @@ export function ValuesDialog(): JSX.Element {
           <div className="section-label">Values</div>
           {values.map((v) => (
             <button key={v.id} className={`values-item ${cur?.id === v.id ? 'active' : ''}`} onClick={() => setSel(v.id)}>
-              <span className="values-dot" style={{ background: v.color }}>{v.icon}</span>
+              <span className="values-dot" style={{ background: v.color }}><Glyph value={v.icon} fallback="gem" size={13} /></span>
               <span className="grow ellipsis">{v.name || 'Untitled'}</span>
               <span className="muted small tabular">{formatValue(v, valueNow(v, weekStart), false)}</span>
             </button>
@@ -196,7 +196,7 @@ export function ValuesDialog(): JSX.Element {
         </nav>
         <div className="values-body">
           {cur ? <ValueDetail key={cur.id} v={cur} /> : (
-            <div className="empty"><div className="empty-icon">◆</div><div className="empty-title">No values yet</div><Button kind="primary" small icon="plus" onClick={() => setSel(createValue())}>New value</Button></div>
+            <div className="empty"><div className="empty-icon"><Icon name="gem" size={26} /></div><div className="empty-title">No values yet</div><Button kind="primary" small icon="plus" onClick={() => setSel(createValue())}>New value</Button></div>
           )}
         </div>
       </div>

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPage, getData, openPage, purgePage, replaceData, restorePage, setOverlay, setSettings, toast, useApp, useData, act, undo, redo } from '../store'
-import { ACCENTS, BACKDROPS, PAGE_TYPES, typeInfo } from '../lib/defaults'
-import { api, isDesktop, type AppInfo, type DisplayInfo, type UpdateStatus } from '../lib/api'
-import type { Settings } from '../types'
+import { createPage, getData, openPage, openView, purgePage, replaceData, restorePage, setOverlay, setSettings, toast, useApp, useData, act, undo, redo } from '../store'
+import { ACCENTS, PAGE_TYPES, typeInfo } from '../lib/defaults'
+import { api, isDesktop, type AppInfo, type UpdateStatus } from '../lib/api'
 import { exportAll, tasksToCsv } from '../lib/exporters'
 import { timeAgo, today } from '../lib/util'
 import { Button, ConfirmButton, Empty, Modal, Segmented, Toggle } from './ui'
-import { Icon } from './Icon'
+import { Glyph, Icon } from './Icon'
 import { PROVIDERS, providerInfo, type AiConfig, type AiProvider } from '../../../shared/ai-core'
 import { toggleAssistant } from './Assistant'
 import { QuickAdd } from './TaskItems'
@@ -30,7 +29,7 @@ export function QuickAddDialog(): JSX.Element {
               <div className="row gap-sm">
                 <span className="muted small">Add to</span>
                 <select id="quickadd-list" className="input input-sm" value={pageId} onChange={(e) => setPageId(e.target.value)}>
-                  {lists.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
+                  {lists.map((p) => <option key={p.id} value={p.id}>{p.title || 'Untitled'}</option>)}
                 </select>
               </div>
             )}
@@ -58,7 +57,7 @@ export function NewPageDialog(): JSX.Element {
         <div className="type-grid">
           {PAGE_TYPES.map((t) => (
             <button key={t.type} className="type-card" onClick={() => make(t.type)}>
-              <span className="type-icon">{t.icon}</span>
+              <span className="type-icon"><Icon name={t.icon} size={18} /></span>
               <span className="strong">{t.name}</span>
               <span className="muted small">{t.desc}</span>
             </button>
@@ -88,29 +87,31 @@ export function CommandPalette(): JSX.Element {
     }
     if (ql) {
       for (const t of Object.values(data.tasks).filter((t) => t.title.toLowerCase().includes(ql) || t.notes.toLowerCase().includes(ql)).slice(0, 8)) {
-        out.push({ id: 't' + t.id, icon: t.done ? '✅' : '⬜', title: t.title, sub: data.pages[t.pageId]?.title, run: () => openPage(t.pageId) })
+        out.push({ id: 't' + t.id, icon: t.done ? 'circle-check' : 'circle', title: t.title, sub: data.pages[t.pageId]?.title, run: () => openPage(t.pageId) })
       }
       for (const j of Object.values(data.journal).filter((j) => (j.title + j.text).toLowerCase().includes(ql)).slice(0, 5)) {
-        out.push({ id: 'j' + j.id, icon: '📓', title: j.title || j.date, sub: j.text.slice(0, 80), run: () => openPage(j.pageId) })
+        out.push({ id: 'j' + j.id, icon: 'notebook-pen', title: j.title || j.date, sub: j.text.slice(0, 80), run: () => openPage(j.pageId) })
       }
       for (const h of Object.values(data.habits).filter((h) => h.name.toLowerCase().includes(ql)).slice(0, 5)) {
         out.push({ id: 'h' + h.id, icon: h.icon, title: h.name, sub: 'Habit', run: () => openPage(h.pageId) })
       }
     }
     const cmds: Result[] = [
-      { id: 'c-new', icon: '➕', title: 'New page', sub: 'Ctrl N', run: () => setOverlay('newPage', { parentId: null }) },
-      { id: 'c-values', icon: '◆', title: 'Values and rules', sub: 'Your own numbers', run: () => setOverlay('values') },
-      { id: 'c-quickadd', icon: '✅', title: 'Quick add task', sub: 'Ctrl Shift Space', run: () => setOverlay('quickAdd') },
-      { id: 'c-settings', icon: '⚙️', title: 'Open settings', sub: 'Ctrl ,', run: () => setOverlay('settings') },
-      { id: 'c-trash', icon: '🗑️', title: 'Open trash', run: () => setOverlay('trash') },
-      { id: 'c-theme', icon: '🌓', title: 'Toggle dark mode', run: () => { const dark = document.documentElement.dataset.theme === 'dark'; setSettings((s) => { s.theme = dark ? 'light' : 'dark' }) } },
-      { id: 'c-sidebar', icon: '📑', title: 'Toggle sidebar', sub: 'Ctrl \\', run: () => setSettings((s) => { s.sidebarCollapsed = !s.sidebarCollapsed }) },
-      { id: 'c-export', icon: '💾', title: 'Export all data', run: () => exportAll() },
-      { id: 'c-ai', icon: '✨', title: 'Ask the assistant', sub: 'Ctrl J', run: () => toggleAssistant() },
-      { id: 'c-notion', icon: '📥', title: 'Import from Notion', run: () => setTimeout(() => setOverlay('notionImport'), 0) },
-      { id: 'c-undo', icon: '↩️', title: 'Undo', sub: 'Ctrl Z', run: undo },
-      { id: 'c-redo', icon: '↪️', title: 'Redo', sub: 'Ctrl Shift Z', run: redo },
-      { id: 'c-keys', icon: '⌨️', title: 'Keyboard shortcuts', sub: 'Ctrl /', run: () => setOverlay('shortcuts') },
+      { id: 'c-new', icon: 'plus', title: 'New page', sub: 'Ctrl N', run: () => setOverlay('newPage', { parentId: null }) },
+      { id: 'c-desktop', icon: 'monitor', title: 'Desktop', sub: 'Panels and workspaces', run: () => openView('@desktop') },
+      { id: 'c-look', icon: 'palette', title: 'Appearance', sub: 'Themes, glass, fonts', run: () => openView('@appearance') },
+      { id: 'c-values', icon: 'gem', title: 'Values and rules', sub: 'Your own numbers', run: () => setOverlay('values') },
+      { id: 'c-quickadd', icon: 'square-check-big', title: 'Quick add task', sub: 'Ctrl Shift Space', run: () => setOverlay('quickAdd') },
+      { id: 'c-settings', icon: 'settings', title: 'Open settings', sub: 'Ctrl ,', run: () => setOverlay('settings') },
+      { id: 'c-trash', icon: 'trash', title: 'Open trash', run: () => setOverlay('trash') },
+      { id: 'c-theme', icon: 'contrast', title: 'Toggle dark mode', run: () => { const dark = document.documentElement.dataset.theme === 'dark'; setSettings((s) => { s.theme = dark ? 'light' : 'dark' }) } },
+      { id: 'c-sidebar', icon: 'sidebar', title: 'Toggle sidebar', sub: 'Ctrl \\', run: () => setSettings((s) => { s.sidebarCollapsed = !s.sidebarCollapsed }) },
+      { id: 'c-export', icon: 'download', title: 'Export all data', run: () => exportAll() },
+      { id: 'c-ai', icon: 'sparkles', title: 'Ask the assistant', sub: 'Ctrl J', run: () => toggleAssistant() },
+      { id: 'c-notion', icon: 'file-input', title: 'Import from Notion', run: () => setTimeout(() => setOverlay('notionImport'), 0) },
+      { id: 'c-undo', icon: 'undo', title: 'Undo', sub: 'Ctrl Z', run: undo },
+      { id: 'c-redo', icon: 'redo', title: 'Redo', sub: 'Ctrl Shift Z', run: redo },
+      { id: 'c-keys', icon: 'keyboard', title: 'Keyboard shortcuts', sub: 'Ctrl /', run: () => setOverlay('shortcuts') },
       ...PAGE_TYPES.map((t) => ({ id: 'c-new-' + t.type, icon: t.icon, title: `New ${t.name.toLowerCase()} page`, run: () => { createPage(t.type, null); setOverlay(null) } }))
     ]
     out.push(...cmds.filter((c) => !ql || c.title.toLowerCase().includes(ql)).slice(0, ql ? 6 : 4))
@@ -133,7 +134,7 @@ export function CommandPalette(): JSX.Element {
         {!q && <div className="palette-section">Recent</div>}
         {results.map((r, i) => (
           <button key={r.id} className={`palette-item ${i === sel ? 'active' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => run(r)}>
-            <span className="palette-icon">{r.icon}</span>
+            <span className="palette-icon"><Glyph value={r.icon} size={16} /></span>
             <span className="palette-title">{r.title}</span>
             {r.sub && <span className="palette-sub">{r.sub}</span>}
           </button>
@@ -152,9 +153,9 @@ export function TrashDialog(): JSX.Element {
     <Modal onClose={() => setOverlay(null)} width={520}>
       <div className="modal-head"><h3>Trash</h3>{deleted.length > 0 && <ConfirmButton label="Empty trash" confirmLabel="Delete forever" onConfirm={() => deleted.forEach((p) => purgePage(p.id))} />}</div>
       <div className="modal-body">
-        {deleted.length === 0 ? <Empty icon="🗑️" title="Trash is empty" /> : deleted.map((p) => (
+        {deleted.length === 0 ? <Empty icon="trash" title="Trash is empty" /> : deleted.map((p) => (
           <div key={p.id} className="trash-row">
-            <span>{p.icon || typeInfo(p.type).icon}</span>
+            <Glyph value={p.icon || typeInfo(p.type).icon} size={15} />
             <span className="grow ellipsis">{p.title || 'Untitled'}</span>
             <span className="muted small">{timeAgo(p.deletedAt!)}</span>
             <Button small kind="ghost" icon="restore" onClick={() => restorePage(p.id)}>Restore</Button>
@@ -190,64 +191,15 @@ function Row({ label, sub, children }: { label: string; sub?: string; children: 
   return <div className="set-row"><div className="set-label"><div>{label}</div>{sub && <div className="muted small">{sub}</div>}</div><div className="set-control">{children}</div></div>
 }
 
-type WidgetPrefs = Settings['widget']
-
-function DesktopWidgetSettings(): JSX.Element {
-  const w = useData((d) => d.settings.widget)
-  const pages = useData((d) => d.pages)
-  const [displays, setDisplays] = useState<DisplayInfo[]>([])
-  useEffect(() => { api.displays().then(setDisplays).catch(() => {}) }, [])
-  const dashboards = Object.values(pages).filter((p) => p.type === 'dashboard' && !p.deletedAt)
-  const set = (fn: (x: WidgetPrefs) => void): void => setSettings((s) => { const n = { ...s.widget }; fn(n); s.widget = n })
-  const others = displays.filter((d) => !d.primary)
-  const target = displays.find((d) => d.id === w.displayId) ?? others.find((d) => d.bounds.width >= d.bounds.height) ?? others[0] ?? displays.find((d) => d.primary)
-  const minX = Math.min(...displays.map((d) => d.bounds.x))
-  const minY = Math.min(...displays.map((d) => d.bounds.y))
-  const spanX = Math.max(1, Math.max(...displays.map((d) => d.bounds.x + d.bounds.width)) - minX)
-  const spanY = Math.max(1, Math.max(...displays.map((d) => d.bounds.y + d.bounds.height)) - minY)
-  const newDashboard = (): void => {
-    const id = createPage('dashboard', null, 'Desktop')
-    set((x) => { x.pageId = id })
-  }
+function DesktopSettings(): JSX.Element {
+  const desk = useData((d) => d.desktop)
   return <>
-    <h3>Desktop widget</h3>
-    <p className="muted small set-intro">Pin a dashboard to a monitor. It covers that screen and stays on the desktop behind your windows, so it is always there when you look over.</p>
-    <Row label="Show desktop widget" sub={w.enabled && !w.pageId ? 'Pick a dashboard below' : undefined}>
-      <Toggle checked={w.enabled} onChange={(v) => set((x) => { x.enabled = v; if (v && !x.pageId) x.pageId = dashboards[0]?.id ?? null })} />
-    </Row>
-    <Row label="Dashboard" sub="Edit its widgets on the dashboard page">
-      {dashboards.length ? (
-        <div className="row gap-sm">
-          <select id="widget-page" className="input input-sm" value={w.pageId ?? ''} onChange={(e) => { const v = e.target.value; set((x) => { x.pageId = v || null }) }}>
-            {!w.pageId && <option value="">Choose…</option>}
-            {dashboards.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
-          </select>
-          {w.pageId && pages[w.pageId] && <Button small kind="ghost" onClick={() => openPage(w.pageId!)}>Open</Button>}
-        </div>
-      ) : <Button small icon="plus" onClick={newDashboard}>Create a dashboard</Button>}
-    </Row>
-    {displays.length > 0 && (
-      <div className="set-block">
-        <div className="set-label"><div>Monitor</div><div className="muted small">{displays.length > 1 ? 'Click the screen the widget should cover' : 'Only one screen is connected'}</div></div>
-        <div className="display-map">
-          <div className="display-map-inner" style={{ aspectRatio: `${spanX} / ${spanY}` }}>
-            {displays.map((d, i) => (
-              <button key={d.id} className={`display-tile ${target?.id === d.id ? 'active' : ''}`}
-                style={{ left: `${((d.bounds.x - minX) / spanX) * 100}%`, top: `${((d.bounds.y - minY) / spanY) * 100}%`, width: `${(d.bounds.width / spanX) * 100}%`, height: `${(d.bounds.height / spanY) * 100}%` }}
-                onClick={() => set((x) => { x.displayId = d.id })}>
-                <span className="strong">{i + 1}{d.primary ? ' · main' : ''}</span>
-                <span className="muted tiny">{d.width}×{d.height}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    )}
-    <Row label="Layer"><Segmented small value={w.layer} onChange={(v) => set((x) => { x.layer = v })} options={[{ value: 'desktop', label: 'Behind windows' }, { value: 'top', label: 'Always on top' }]} /></Row>
-    <Row label="Background" sub="See-through shows your wallpaper. Blurred uses Windows acrylic."><Segmented small value={w.background} onChange={(v) => set((x) => { x.background = v })} options={[{ value: 'clear', label: 'See-through' }, { value: 'acrylic', label: 'Blurred' }]} /></Row>
-    <Row label="Opacity"><input id="widget-opacity" type="range" min={20} max={100} value={w.opacity} onChange={(e) => { const v = Number(e.target.value); set((x) => { x.opacity = v }) }} /><span className="muted small w-40">{w.opacity}%</span></Row>
-    <StartWithWindows sub="Starts in the tray with just the widget showing" />
-    <p className="muted small">Clicks on empty space go through to the desktop. While the widget is on, closing the Planner window keeps it running in the tray.</p>
+    <h3>Desktop</h3>
+    <p className="muted small set-intro">Your tasks, pages and notes as panels on the Windows desktop. Each workspace keeps its own layout.</p>
+    <Row label="Show panels on the desktop"><Toggle checked={desk.enabled} onChange={(v) => act((d) => { d.desktop.enabled = v })} /></Row>
+    <Row label="Panels" sub={`${desk.widgets.filter((w) => !w.hidden && w.space === desk.active).length} in this workspace, ${desk.spaces.length} workspace${desk.spaces.length === 1 ? '' : 's'}`}><Button small icon="monitor" onClick={() => openView('@desktop')}>Open Desktop</Button></Row>
+    <StartWithWindows sub="Starts in the tray with just your panels showing" />
+    <p className="muted small">While panels are showing, closing the window keeps it running in the tray. Right-click a panel for its options; switch workspaces from the tray or the top of the sidebar.</p>
   </>
 }
 
@@ -259,7 +211,6 @@ function StartWithWindows({ sub }: { sub?: string }): JSX.Element {
 
 export function SettingsDialog(): JSX.Element {
   const s = useData((d) => d.settings)
-  const profile = useData((d) => d.profile)
   const pages = useData((d) => d.pages)
   const initialTab = useApp((st) => st.overlayArg)
   const TABS = ['general', 'appearance', ...(isDesktop ? ['widget' as const] : []), 'assistant', 'data', 'about'] as const
@@ -277,16 +228,15 @@ export function SettingsDialog(): JSX.Element {
       <div className="settings-layout">
         <nav className="settings-nav">
           {TABS.map((t) => (
-            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', widget: 'Desktop widget', assistant: 'Assistant', data: 'Data & backups', about: 'About & updates' }[t]}</button>
+            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', widget: 'Desktop', assistant: 'Assistant', data: 'Data & backups', about: 'About & updates' }[t]}</button>
           ))}
         </nav>
         <div className="settings-body">
           {tab === 'general' && <>
             <h3>General</h3>
-            <Row label="Workspace name" sub="Shown in the sidebar and greetings"><input id="set-name" className="input input-sm" value={profile.name} onChange={(e) => act((d) => { d.profile.name = e.target.value }, { key: 'pname' })} /></Row>
             <Row label="Open on start"><select id="set-start" className="input input-sm" value={s.startPage} onChange={(e) => set((x) => { x.startPage = e.target.value })}>
               <option value="last">Last opened page</option>
-              {Object.values(pages).filter((p) => !p.deletedAt && !p.rowOf).map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
+              {Object.values(pages).filter((p) => !p.deletedAt && !p.rowOf).map((p) => <option key={p.id} value={p.id}>{p.title || 'Untitled'}</option>)}
             </select></Row>
             <Row label="Week starts on"><Segmented small value={s.weekStart} onChange={(v) => set((x) => { x.weekStart = v })} options={[{ value: 1, label: 'Monday' }, { value: 0, label: 'Sunday' }]} /></Row>
             <Row label="Time format"><Segmented small value={s.use24h ? 1 : 0} onChange={(v) => set((x) => { x.use24h = v === 1 })} options={[{ value: 0, label: '12-hour' }, { value: 1, label: '24-hour' }]} /></Row>
@@ -295,41 +245,27 @@ export function SettingsDialog(): JSX.Element {
             <Row label="Notifications" sub="Reminders and focus timer"><Toggle checked={s.notifications} onChange={(v) => set((x) => { x.notifications = v })} /></Row>
             <Row label="Sounds"><Toggle checked={s.sounds} onChange={(v) => set((x) => { x.sounds = v })} /></Row>
             {isDesktop && <StartWithWindows />}
-            {isDesktop && <Row label="Close to tray" sub="Closing the window keeps Planner running in the tray"><Toggle checked={s.closeToTray} onChange={(v) => set((x) => { x.closeToTray = v })} /></Row>}
+            {isDesktop && <Row label="Close to tray" sub="Closing the window keeps it running in the tray"><Toggle checked={s.closeToTray} onChange={(v) => set((x) => { x.closeToTray = v })} /></Row>}
             {isDesktop && <Row label="Quick add hotkey" sub="Ctrl Shift Space adds a task from anywhere"><Toggle checked={s.quickAddHotkey} onChange={(v) => set((x) => { x.quickAddHotkey = v })} /></Row>}
           </>}
           {tab === 'appearance' && <>
             <h3>Appearance</h3>
             <Row label="Theme"><Segmented small value={s.theme} onChange={(v) => set((x) => { x.theme = v })} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} /></Row>
-            <Row label="Accent color"><div className="color-dots">{ACCENTS.map((a) => <button key={a.value} title={a.name} className={`color-dot ${s.accent === a.value ? 'active' : ''}`} style={{ background: a.value }} onClick={() => set((x) => { x.accent = a.value })} />)}
-              <label title="Custom color" className={`color-dot custom-dot ${ACCENTS.some((a) => a.value === s.accent) ? '' : 'active'}`} style={ACCENTS.some((a) => a.value === s.accent) ? undefined : { ['--custom' as any]: s.accent }}>
-                <input id="accent-custom" type="color" value={s.accent} onChange={(e) => { const v = e.target.value; set((x) => { x.accent = v }) }} />
-              </label>
-            </div></Row>
-            <Row label="Background" sub="Behind the glass panels. Desktop lets your wallpaper show through.">
-              <div className="backdrop-picker">
-                {BACKDROPS.map((b) => (
-                  <button key={b.id} title={b.name} className={`backdrop-swatch ${s.backdrop === b.id ? 'active' : ''}`} data-swatch={b.id} onClick={() => set((x) => { x.backdrop = b.id })}><span>{b.name}</span></button>
-                ))}
-              </div>
-            </Row>
+            <Row label="Accent color"><div className="color-dots">{ACCENTS.map((a) => <button key={a.value} title={a.name} className={`color-dot ${s.accent === a.value ? 'active' : ''}`} style={{ background: a.value }} onClick={() => set((x) => { x.accent = a.value })} />)}</div></Row>
             <Row label="Window material" sub={info && !info.micaSupported ? 'Mica needs Windows 11' : 'Used with the Desktop background'}>
               <Segmented small value={s.material} onChange={(v) => { set((x) => { x.material = v }); api.setMaterial(v) }} options={[{ value: 'mica', label: 'Mica' }, { value: 'acrylic', label: 'Acrylic' }, { value: 'none', label: 'Solid' }]} />
             </Row>
-            <Row label="Glass strength"><input id="set-glass" type="range" min={20} max={95} value={s.glassStrength} onChange={(e) => set((x) => { x.glassStrength = Number(e.target.value) })} /></Row>
-            <Row label="Text size"><input id="set-font" type="range" min={12} max={18} value={s.fontSize} onChange={(e) => set((x) => { x.fontSize = Number(e.target.value) })} /><span className="muted small w-40">{s.fontSize}px</span></Row>
-            <Row label="Font"><Segmented small value={s.font} onChange={(v) => set((x) => { x.font = v })} options={[{ value: 'system', label: 'Default' }, { value: 'serif', label: 'Serif' }, { value: 'mono', label: 'Mono' }]} /></Row>
-            <Row label="Density"><Segmented small value={s.density} onChange={(v) => set((x) => { x.density = v })} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} /></Row>
-            <Row label="Reduce motion"><Toggle checked={s.reduceMotion} onChange={(v) => set((x) => { x.reduceMotion = v })} /></Row>
+            <Row label="Everything else" sub="Themes, backgrounds, glass, corners, fonts, motion and custom CSS"><Button small kind="primary" icon="palette" onClick={() => openView('@appearance')}>Open Appearance</Button></Row>
           </>}
-          {tab === 'widget' && <DesktopWidgetSettings />}
+          {tab === 'widget' && <DesktopSettings />}
           {tab === 'assistant' && <AssistantSettings />}
           {tab === 'data' && <>
             <h3>Data & backups</h3>
             <p className="muted small">Everything is stored on this computer{info?.dataPath ? <> in <code>{info.dataPath}</code></> : null}. Updates never touch your data, and a backup is made every day.</p>
             <Row label="Import from Notion" sub="From the Notion app on this computer, or an export"><Button small icon="upload" onClick={() => setOverlay('notionImport')}>Import</Button></Row>
+            {isDesktop && <Row label="Keep Notion pages updated" sub="Pages imported from the Notion app refresh on start and every 30 minutes"><Toggle checked={s.notionSync} onChange={(v) => set((x) => { x.notionSync = v })} /></Row>}
             <Row label="Export everything" sub="A single JSON file you can import later"><Button small icon="download" onClick={() => exportAll()}>Export</Button></Row>
-            <Row label="Export tasks as CSV"><Button small icon="download" onClick={() => api.exportFile(tasksToCsv(), `planner-tasks-${today()}.csv`)}>CSV</Button></Row>
+            <Row label="Export tasks as CSV"><Button small icon="download" onClick={() => api.exportFile(tasksToCsv(), `tasks-${today()}.csv`)}>CSV</Button></Row>
             <Row label="Import" sub="Replaces current data. A backup is made first."><Button small icon="upload" onClick={async () => {
               try { const d = await api.importFile(); if (d) { replaceData(d, 'Import complete') } } catch (e: any) { toast(e?.message ?? 'Import failed', { kind: 'error' }) }
             }}>Import</Button></Row>
@@ -340,7 +276,7 @@ export function SettingsDialog(): JSX.Element {
                 {backups.length === 0 && <div className="muted small">No backups yet.</div>}
                 {backups.map((b) => (
                   <div key={b.name} className="trash-row">
-                    <span className="grow ellipsis small">{b.date}<span className="muted"> · {b.name.replace(/^planner-[\dT-]+-?/, '').replace('.json', '')} · {(b.size / 1024).toFixed(0)} KB</span></span>
+                    <span className="grow ellipsis small">{b.date}<span className="muted"> · {b.name.replace(/^(?:planner|deskbase)-[\dT-]+-?/, '').replace('.json', '')} · {(b.size / 1024).toFixed(0)} KB</span></span>
                     <ConfirmButton label="Restore" confirmLabel="Restore this" icon="restore" onConfirm={async () => { const d = await api.readBackup(b.name); if (d) replaceData(d, 'Backup restored') }} />
                   </div>
                 ))}
@@ -362,7 +298,7 @@ export function SettingsDialog(): JSX.Element {
               {upd.state === 'ready' ? <Button small kind="primary" icon="download" onClick={() => api.updater.install()}>Restart and update</Button>
                 : <Button small icon="restore" disabled={upd.state === 'checking' || upd.state === 'downloading' || upd.state === 'dev'} onClick={() => api.updater.check()}>Check now</Button>}
             </Row>
-            <Row label="Source code"><Button small kind="ghost" icon="external" onClick={() => api.openExternal('https://github.com/vptr-dev/planner')}>GitHub</Button></Row>
+            <Row label="Source code"><Button small kind="ghost" icon="external" onClick={() => api.openExternal('https://github.com/vptr-dev/deskbase')}>GitHub</Button></Row>
             <Row label="Keyboard shortcuts"><Button small kind="ghost" icon="keyboard" onClick={() => setOverlay('shortcuts')}>View</Button></Row>
           </>}
         </div>

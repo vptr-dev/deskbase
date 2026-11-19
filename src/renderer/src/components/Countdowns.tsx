@@ -4,7 +4,7 @@ import type { Countdown } from '../types'
 import { COLORS } from '../lib/defaults'
 import { diffDays, friendlyDay, today, uid } from '../lib/util'
 import { Button, IconPickerButton, Modal, ColorDots, Toggle } from './ui'
-import { Icon } from './Icon'
+import { Glyph, Icon } from './Icon'
 
 /** Next occurrence of a countdown (yearly ones roll over to next year). */
 export function nextDate(c: Pick<Countdown, 'date' | 'yearly'>, from = today()): string {
@@ -28,7 +28,7 @@ export function CountdownsPanel(): JSX.Element {
   ].sort((a, b) => a.date.localeCompare(b.date))
   const upcoming = rows.filter((r) => r.days >= 0)
   const past = rows.filter((r) => r.days < 0)
-  const blank = (): Countdown => ({ id: uid(), title: '', date: '', icon: '📅', color: COLORS[list.length % COLORS.length], yearly: false })
+  const blank = (): Countdown => ({ id: uid(), title: '', date: '', icon: 'calendar', color: COLORS[list.length % COLORS.length], yearly: false })
 
   return (
     <section className="panel glass countdowns">
@@ -52,7 +52,7 @@ export function CountdownsPanel(): JSX.Element {
 function CountdownRow({ r, onEdit }: { r: Row; onEdit: () => void }): JSX.Element {
   return (
     <button className={`countdown-row ${r.days < 0 ? 'past' : ''}`} onClick={onEdit} disabled={r.game} title={r.game ? 'Wishlist release date' : 'Edit'}>
-      <span className="countdown-icon" style={{ ['--c' as any]: r.color }}>{r.icon}</span>
+      <span className="countdown-icon" style={{ ['--c' as any]: r.color }}><Glyph value={r.icon} fallback="calendar" size={16} /></span>
       <span className="grow min0">
         <span className="ellipsis block">{r.title || 'Untitled'}</span>
         <span className="muted small">{friendlyDay(r.date)}</span>
@@ -81,7 +81,7 @@ function CountdownEditor({ c, isNew, onClose }: { c: Countdown; isNew: boolean; 
       <div className="modal-head"><h3>{isNew ? 'New countdown' : 'Edit countdown'}</h3></div>
       <div className="modal-body form" onKeyDown={(e) => { if (e.key === 'Enter') save() }}>
         <div className="row gap-sm">
-          <IconPickerButton value={v.icon} onChange={(icon) => set({ icon: icon || '📅' })} />
+          <IconPickerButton value={v.icon} placeholder="calendar" onChange={(icon) => set({ icon: icon || 'calendar' })} />
           <input id="cd-title" autoFocus className="input grow" placeholder="Trip, birthday, launch…" value={v.title} onChange={(e) => set({ title: e.target.value })} />
         </div>
         <label>Date</label>

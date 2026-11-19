@@ -31,3 +31,10 @@ export function pickImage(): Promise<File | null> {
     input.click()
   })
 }
+
+/** Pick an image and return it shrunk to a data URL (null when cancelled or unreadable). */
+export async function pickImageData(maxW = 1600, maxH = 1600, quality = 0.85): Promise<string | null> {
+  const f = await pickImage()
+  if (!f) return null
+  try { return await imageToDataUrl(f, maxW, maxH, quality) } catch { return null }
+}

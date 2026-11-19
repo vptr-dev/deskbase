@@ -178,12 +178,12 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
             <label>Goal</label>
             <select id={`goal-${id}`} className="input input-sm" value={task.goalId ?? ''} onChange={(e) => set((t) => { t.goalId = e.target.value || null })}>
               <option value="">None</option>
-              {Object.values(goals).filter((g) => !g.done || g.id === task.goalId).map((g) => <option key={g.id} value={g.id}>{g.icon} {g.title || 'Untitled goal'}</option>)}
+              {Object.values(goals).filter((g) => !g.done || g.id === task.goalId).map((g) => <option key={g.id} value={g.id}>{g.title || 'Untitled goal'}</option>)}
             </select>
           </>}
           <label>List</label>
           <select id={`page-${id}`} className="input input-sm" value={task.pageId} onChange={(e) => set((t) => { t.pageId = e.target.value })}>
-            {listPages.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || 'Untitled'}</option>)}
+            {listPages.map((p) => <option key={p.id} value={p.id}>{p.title || 'Untitled'}</option>)}
           </select>
         </div>
 

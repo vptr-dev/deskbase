@@ -45,7 +45,7 @@ export function pageToMarkdown(id: string): string {
   const habits = pageItems(d.habits, id)
   if (habits.length) {
     out.push('', '## Habits')
-    for (const h of habits) out.push(`- ${h.icon} ${h.name}`)
+    for (const h of habits) out.push(`- ${h.name}`)
   }
   const journal = Object.values(d.journal).filter((j) => j.pageId === id).sort((a, b) => b.date.localeCompare(a.date))
   for (const j of journal) out.push('', `## ${j.date}${j.title ? ' — ' + j.title : ''}`, '', j.text)
@@ -68,7 +68,7 @@ export async function exportPageMarkdown(id: string): Promise<void> {
 }
 
 export async function exportAll(): Promise<void> {
-  const path = await api.exportFile(JSON.stringify(getData(), null, 2), `planner-backup-${today()}.json`)
+  const path = await api.exportFile(JSON.stringify(getData(), null, 2), `backup-${today()}.json`)
   if (path) toast('Exported all data')
 }
 

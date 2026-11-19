@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, shell, Tray, type WebContents } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, shell, Tray } from 'electron'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -6,7 +6,7 @@ import { createBackup, dataDir, listBackups, loadData, parseImport, readBackup, 
 import { checkForUpdates, getStatus, initUpdater, installUpdate } from './updater'
 import { registerAi } from './ai'
 import { importNotionExport, importNotionPages, listNotionPages, notionDbPath } from './notion'
-import { applyWidget, closeWidget, DEFAULT_WIDGET, listDisplays, setWidgetInteractive, widgetWindow, type WidgetPrefs } from './widget'
+import { attachDesktopHost, closeAllWidgets, deskBounds, deskClose, deskDrag, deskDragEnd, deskEdit, deskMenu, deskPrepare, deskShow, deskUpdate, listDisplays, type DeskSpec } from './desktop'
 
 type Material = 'mica' | 'acrylic' | 'none'
 
@@ -16,14 +16,43 @@ const micaSupported = isWin && winBuild >= 22621
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+/** Workspaces, as last reported by the window (for the tray menu). */
+let deskSpaces: { id: string; name: string }[] = []
+let activeSpace = ''
 let quitting = false
 let hiddenBeforeQuickAdd = false
 const QUICK_ADD_KEY = 'CommandOrControl+Shift+Space'
-/** Started by Windows at sign-in: stay in the tray and only show the desktop widget. */
+/** Started by Windows at sign-in: stay in the tray and only show the desktop widgets. */
 const startHidden = process.argv.includes('--hidden')
 
-// Development runs keep their own data so they never touch a real install.
-if (!app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'Planner-dev'))
+// User data lives in %APPDATA%\Deskbase (dev runs: Deskbase-dev, so they never touch a real install).
+// Versions before 0.6 used the folder "Planner"; it is moved over once, before anything reads it.
+function useDataFolder(): void {
+  const appData = app.getPath('appData')
+  const target = path.join(appData, app.isPackaged ? 'Deskbase' : 'Deskbase-dev')
+  const legacy = path.join(appData, app.isPackaged ? 'Planner' : 'Planner-dev')
+  if (!fs.existsSync(target) && fs.existsSync(path.join(legacy, 'data'))) {
+    try {
+      fs.renameSync(legacy, target)
+    } catch {
+      // Something still holds the old folder open: keep using it rather than starting empty.
+      app.setPath('userData', legacy)
+      return
+    }
+  }
+  app.setPath('userData', target)
+}
+useDataFolder()
+
+/** After the exe was renamed, re-point an existing "start with Windows" entry at it. */
+function refreshLoginItem(): void {
+  if (!app.isPackaged || !isWin) return
+  try {
+    const s = app.getLoginItemSettings({ args: ['--hidden'] })
+    const stale = (s.launchItems ?? []).some((i) => /planner\.exe/i.test(i.path))
+    if (stale && !s.executableWillLaunchAtLogin) app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] })
+  } catch { /* not supported here */ }
+}
 
 // ---------- window state ----------
 interface WinState { x?: number; y?: number; width: number; height: number; maximized: boolean }
@@ -51,8 +80,8 @@ function saveWinState(w: BrowserWindow): void {
 
 // ---------- preferences needed before the renderer loads ----------
 const prefsFile = (): string => path.join(app.getPath('userData'), 'shell-prefs.json')
-interface ShellPrefs { material: Material; theme: 'system' | 'light' | 'dark'; closeToTray: boolean; quickAddHotkey: boolean; widget: WidgetPrefs }
-const DEFAULT_PREFS: ShellPrefs = { material: 'mica', theme: 'system', closeToTray: false, quickAddHotkey: true, widget: DEFAULT_WIDGET }
+interface ShellPrefs { material: Material; theme: 'system' | 'light' | 'dark'; closeToTray: boolean; quickAddHotkey: boolean; desktop: boolean }
+const DEFAULT_PREFS: ShellPrefs = { material: 'mica', theme: 'system', closeToTray: false, quickAddHotkey: true, desktop: false }
 function readPrefs(): ShellPrefs {
   try {
     return { ...DEFAULT_PREFS, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) }
@@ -65,13 +94,12 @@ function writePrefs(p: Partial<ReturnType<typeof readPrefs>>): void {
 }
 
 /** Keep running in the tray when the window closes. */
-const keepRunning = (): boolean => { const p = readPrefs(); return p.closeToTray || (p.widget?.enabled && !!p.widget.pageId) }
+const keepRunning = (): boolean => { const p = readPrefs(); return p.closeToTray || p.desktop }
 
 function loadRenderer(w: BrowserWindow, hash?: string): void {
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) w.loadURL(process.env['ELECTRON_RENDERER_URL'] + (hash ? '#' + hash : ''))
   else w.loadFile(path.join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
 }
-const loadWidget = (w: BrowserWindow): void => loadRenderer(w, 'widget')
 
 function overlayColors(): { color: string; symbolColor: string; height: number } {
   return {
@@ -95,7 +123,7 @@ function createWindow(): void {
     minWidth: 720,
     minHeight: 480,
     show: false,
-    title: 'Planner',
+    title: 'Deskbase',
     ...(app.isPackaged ? {} : { icon: path.join(__dirname, '../../build/icon.png') }),
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
@@ -109,9 +137,13 @@ function createWindow(): void {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      spellcheck: true
+      spellcheck: true,
+      // Desktop widgets live in this renderer and keep running while the window is hidden.
+      backgroundThrottling: false
     }
   })
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'local-fonts' || permission === 'notifications' || permission === 'clipboard-sanitized-write'))
+  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) => permission === 'local-fonts' || permission === 'notifications' || permission === 'clipboard-sanitized-write')
 
   if (st.maximized) mainWindow.maximize()
   mainWindow.once('ready-to-show', () => { if (!(startHidden && keepRunning())) mainWindow?.show() })
@@ -122,13 +154,10 @@ function createWindow(): void {
       mainWindow?.hide()
     }
   })
-  mainWindow.on('closed', () => { mainWindow = null; closeWidget() })
+  mainWindow.on('closed', () => { mainWindow = null; closeAllWidgets() })
 
-  // Links open in the default browser, never inside the app.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) shell.openExternal(url)
-    return { action: 'deny' }
-  })
+  // Links open in the default browser; window.open('', 'pw-…') creates desktop widget windows.
+  attachDesktopHost(mainWindow, (url) => shell.openExternal(url))
   mainWindow.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith('http://localhost') && !url.startsWith('file://')) {
       e.preventDefault()
@@ -161,7 +190,10 @@ function openQuickAdd(): void {
 }
 
 async function trayIcon(): Promise<Electron.NativeImage> {
-  if (!app.isPackaged) return nativeImage.createFromPath(path.join(__dirname, '../../build/icon.png')).resize({ width: 16, height: 16 })
+  // tray.png with @1.5x / @2x siblings, picked by display scale
+  const file = app.isPackaged ? path.join(process.resourcesPath, 'tray.png') : path.join(__dirname, '../../build/tray.png')
+  const img = nativeImage.createFromPath(file)
+  if (!img.isEmpty()) return img
   try { return await app.getFileIcon(process.execPath, { size: 'small' }) } catch { return nativeImage.createEmpty() }
 }
 
@@ -170,7 +202,7 @@ async function applyTray(): Promise<void> {
   const want = keepRunning()
   if (want && !tray) {
     tray = new Tray(await trayIcon())
-    tray.setToolTip('Planner')
+    tray.setToolTip('Deskbase')
     tray.on('click', showWindow)
   } else if (!want && tray) {
     tray.destroy()
@@ -178,9 +210,13 @@ async function applyTray(): Promise<void> {
   }
   if (tray) {
     tray.setContextMenu(Menu.buildFromTemplate([
-      { label: 'Open Planner', click: showWindow },
+      { label: 'Open', click: showWindow },
       { label: 'Quick add task…', click: openQuickAdd },
-      ...(p.widget?.pageId ? [{ label: 'Desktop widget', type: 'checkbox' as const, checked: !!p.widget.enabled, click: () => mainWindow?.webContents.send('widget:toggle') }] : []),
+      { type: 'separator' },
+      ...deskSpaces.map((s) => ({ label: s.name, type: 'radio' as const, checked: s.id === activeSpace, click: () => mainWindow?.webContents.send('desk:command', '', 'space:' + s.id) })),
+      ...(deskSpaces.length ? [{ type: 'separator' as const }] : []),
+      { label: 'Show panels on the desktop', type: 'checkbox' as const, checked: p.desktop, click: () => mainWindow?.webContents.send('desk:command', '', 'toggle') },
+      { label: 'Arrange panels', enabled: p.desktop, click: () => mainWindow?.webContents.send('desk:command', '', 'arrange') },
       { type: 'separator' },
       { label: 'Quit', click: () => { quitting = true; app.quit() } }
     ]))
@@ -192,13 +228,6 @@ async function applyTray(): Promise<void> {
 }
 
 // ---------- IPC ----------
-/** Tell the other windows (desktop widget / main window) that data changed. */
-function broadcast(from: WebContents, data: unknown): void {
-  for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed() && w.webContents !== from) w.webContents.send('data:changed', data)
-  }
-}
-
 function registerIpc(): void {
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
@@ -210,9 +239,9 @@ function registerIpc(): void {
   }))
 
   ipcMain.handle('data:load', () => loadData())
-  ipcMain.handle('data:save', (e, data) => { saveData(data); broadcast(e.sender, data); return true })
+  ipcMain.handle('data:save', (_e, data) => { saveData(data); return true })
   ipcMain.on('data:saveSync', (e, data) => {
-    try { saveData(data); e.returnValue = true; broadcast(e.sender, data) } catch { e.returnValue = false }
+    try { saveData(data); e.returnValue = true } catch { e.returnValue = false }
   })
 
   ipcMain.handle('data:export', async (_e, text: string, defaultName: string) => {
@@ -226,7 +255,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('data:import', async () => {
-    const r = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], filters: [{ name: 'Planner backup', extensions: ['json'] }] })
+    const r = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'], filters: [{ name: 'Backup', extensions: ['json'] }] })
     if (r.canceled || !r.filePaths[0]) return null
     createBackup('before-import')
     return parseImport(fs.readFileSync(r.filePaths[0], 'utf8'))
@@ -282,18 +311,23 @@ function registerIpc(): void {
     hiddenBeforeQuickAdd = false
   })
   ipcMain.handle('app:displays', () => listDisplays())
-  ipcMain.handle('widget:set', async (_e, w: Partial<WidgetPrefs>) => {
-    const widget = { ...DEFAULT_WIDGET, ...(w ?? {}) }
-    writePrefs({ widget })
-    applyWidget(widget, loadWidget)
-    await applyTray()
-    return Boolean(widgetWindow())
+  ipcMain.handle('app:showMain', () => showWindow())
+  ipcMain.handle('desk:active', async (_e, on: boolean, spaces?: { id: string; name: string }[], current?: string) => {
+    const nextSpaces = Array.isArray(spaces) ? spaces.slice(0, 30).map((s) => ({ id: String(s.id), name: String(s.name).slice(0, 60) })) : deskSpaces
+    const changed = JSON.stringify(nextSpaces) !== JSON.stringify(deskSpaces) || (current ?? activeSpace) !== activeSpace
+    deskSpaces = nextSpaces
+    activeSpace = current ?? activeSpace
+    if (readPrefs().desktop !== on) { writePrefs({ desktop: on }); await applyTray() } else if (changed) await applyTray()
   })
-  ipcMain.handle('widget:openMain', (_e, pageId?: string) => {
-    showWindow()
-    if (pageId) mainWindow?.webContents.send('app:openPage', pageId)
-  })
-  ipcMain.on('widget:interactive', (_e, on: boolean) => setWidgetInteractive(on))
+  ipcMain.handle('desk:prepare', (_e, spec: DeskSpec) => deskPrepare(spec))
+  ipcMain.handle('desk:show', (_e, id: string) => deskShow(id))
+  ipcMain.handle('desk:update', (_e, spec: DeskSpec) => deskUpdate(spec))
+  ipcMain.handle('desk:close', (_e, id: string) => deskClose(id))
+  ipcMain.handle('desk:edit', (_e, on: boolean) => deskEdit(on))
+  ipcMain.on('desk:drag', (_e, id: string, phase: 'start' | 'move', x: number, y: number, mode: 'move' | 'resize', free: boolean, grid: number) => deskDrag(id, phase, x, y, mode, free, grid))
+  ipcMain.handle('desk:dragEnd', (_e, id: string) => deskDragEnd(id))
+  ipcMain.handle('desk:bounds', (_e, id: string) => deskBounds(id))
+  ipcMain.handle('desk:menu', (_e, id: string, items) => deskMenu(id, items))
   ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
 
@@ -319,12 +353,13 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => { quitting = true })
   app.on('will-quit', () => globalShortcut.unregisterAll())
   app.whenReady().then(() => {
+    // Same id as the first releases, so the taskbar pin, notifications and the sign-in entry carry over.
     if (isWin) app.setAppUserModelId('com.vptrdev.planner')
+    refreshLoginItem()
     registerIpc()
     registerAi()
     createWindow()
     applyTray()
-    applyWidget(readPrefs().widget, loadWidget)
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
   })
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

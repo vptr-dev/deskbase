@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { act, openPage, useData } from '../store'
-import type { DbFilter, DbProp, DbSchema, DbView, Page, PropType, ViewType } from '../types'
+import type { DbFilter, DbProp, DbSchema, DbView, Page, PropType } from '../types'
 import {
   TITLE, PROP_TYPES, VIEW_TYPES, addOption, addProp, addRow, deleteProp, deleteRows, filterOps, formatNumber, hasOptions,
   newView, optionOf, propText, propTypeInfo, rowsOf, setRowProp, updateDb, updateView, viewRows
@@ -8,7 +8,7 @@ import {
 import { COLORS } from '../lib/defaults'
 import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid, weekStartOf } from '../lib/util'
 import { Button, ColorDots, Empty, Menu, type MenuItem, Popover, Progress } from '../components/ui'
-import { Icon } from '../components/Icon'
+import { Glyph, Icon } from '../components/Icon'
 import { api } from '../lib/api'
 
 // ---------- option chips & picker ----------
@@ -120,7 +120,7 @@ function PropView({ prop, v }: { prop: DbProp; v: any }): JSX.Element | null {
     const ids: string[] = Array.isArray(v) ? v : [v]
     return <div className="row gap-xs wrap">{ids.map((id) => { const o = optionOf(prop, id); return o ? <Chip key={id} name={o.name} color={o.color} /> : null })}</div>
   }
-  if (prop.type === 'checkbox') return <span className="small">{v ? '☑' : '☐'} {prop.name}</span>
+  if (prop.type === 'checkbox') return <span className="small row gap-xs"><Icon name={v ? 'square-check-big' : 'square'} size={13} /> {prop.name}</span>
   if (prop.type === 'progress') return <Progress value={(Number(v) || 0) / (prop.max || 100)} height={4} />
   return <span className="small muted ellipsis">{prop.type === 'number' ? formatNumber(prop, Number(v)) : propText(prop, v)}</span>
 }
@@ -206,7 +206,7 @@ function TableView({ dbId, db, view, rows }: { dbId: string; db: DbSchema; view:
           <div key={r.id} className={`db-tr ${live.includes(r.id) ? 'selected' : ''}`}>
             <div className="db-td db-title-col" style={{ width: view.widths?.[TITLE] ?? 260 }}>
               <input type="checkbox" className="db-row-check" checked={live.includes(r.id)} onChange={(e) => setSel(e.target.checked ? [...live, r.id] : live.filter((x) => x !== r.id))} />
-              {r.icon && <span>{r.icon}</span>}
+              {r.icon && <Glyph value={r.icon} size={14} />}
               <input className="db-input strong" value={r.title} placeholder="Untitled" onChange={(e) => setRowProp(r.id, TITLE, e.target.value, 'title:' + r.id)} />
               <button className="db-open" onClick={() => openPage(r.id)} title="Open as page"><Icon name="expand" size={12} /> Open</button>
             </div>
@@ -244,7 +244,7 @@ function Card({ row, db, view, dbId, draggable }: { row: Page; db: DbSchema; vie
   return (
     <div className="db-card glass" draggable={draggable} onDragStart={(e) => e.dataTransfer.setData('text/row', row.id)} onClick={() => openPage(row.id)}>
       {row.cover && <div className="db-card-cover" style={{ background: `var(--cover-${row.cover})` }} />}
-      <div className="db-card-title">{row.icon && <span>{row.icon} </span>}{row.title || <span className="muted">Untitled</span>}</div>
+      <div className="db-card-title">{row.icon && <><Glyph value={row.icon} size={14} /> </>}{row.title || <span className="muted">Untitled</span>}</div>
       {shown.map((p) => <PropView key={p.id} prop={p} v={row.props?.[p.id]} />)}
       <span hidden>{dbId}</span>
     </div>
@@ -481,7 +481,7 @@ export function DatabaseView({ dbId, viewId, embedded }: { dbId: string; viewId?
         <ToolbarPop icon="eye" label="Properties"><PropsEditor dbId={dbId} db={db} view={view} /></ToolbarPop>
         <Button small kind="primary" icon="plus" onClick={() => { const id = addRow(dbId, defaultsFromFilters(view)); if (view.type !== 'table') openPage(id) }}>New</Button>
       </div>
-      {rows.length === 0 && view.type !== 'calendar' && view.type !== 'table' ? <Empty icon="🗃️" title="No rows yet" /> : null}
+      {rows.length === 0 && view.type !== 'calendar' && view.type !== 'table' ? <Empty icon="database" title="No rows yet" /> : null}
       {view.type === 'table' && <TableView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'board' && <BoardView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'gallery' && <GalleryView dbId={dbId} db={db} view={view} rows={shown} />}

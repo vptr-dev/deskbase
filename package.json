@@ -1,15 +1,15 @@
 {
-  "name": "planner",
-  "productName": "Planner",
+  "name": "deskbase",
+  "productName": "Deskbase",
   "version": "0.5.0",
-  "description": "A clean local planner and life tracker.",
+  "description": "Your desktop, organized: pages, tasks and notes as glass panels on your screen.",
   "main": "./out/main/index.js",
   "author": "vptr-dev",
   "license": "MIT",
-  "homepage": "https://github.com/vptr-dev/planner",
+  "homepage": "https://github.com/vptr-dev/deskbase",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vptr-dev/planner.git"
+    "url": "https://github.com/vptr-dev/deskbase.git"
   },
   "private": true,
   "scripts": {
@@ -39,6 +39,7 @@
     "electron": "44.11.4",
     "electron-builder": "25.1.8",
     "electron-vite": "2.3.0",
+    "lucide-react": "1.68.0",
     "typescript": "5.6.3",
     "vite": "5.4.11"
   },

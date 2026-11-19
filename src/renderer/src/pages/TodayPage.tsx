@@ -8,7 +8,7 @@ import { QuickAdd, TaskRow, useTaskDrawer } from '../components/TaskItems'
 import { logHabit } from './HabitsPage'
 import { ensureEntry, MOODS } from './JournalPage'
 import { focusActions, fmtClock, remainingSecs, useFocus } from './FocusPage'
-import { Icon } from '../components/Icon'
+import { Glyph, Icon } from '../components/Icon'
 import { goalProgress } from './GoalsPage'
 
 function greeting(): string {
@@ -22,7 +22,6 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
   const pages = useData((d) => d.pages)
   const journal = useData((d) => d.journal)
   const goals = useData((d) => d.goals)
-  const profile = useData((d) => d.profile)
   const focus = useFocus()
   const [, openTask, drawer] = useTaskDrawer()
   const t = today()
@@ -48,7 +47,7 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
     <div className="today">
       <div className="today-hero">
         <div>
-          <div className="today-greet">{greeting()}{profile.name ? `, ${profile.name}` : ''}</div>
+          <div className="today-greet">{greeting()}</div>
           <div className="muted">{longDate(t)}</div>
         </div>
         <div className="spacer" />
@@ -81,8 +80,8 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
                 <button className={`habit-cell ${done ? 'done' : ''} ${h.kind === 'bad' && v ? 'slip' : ''}`} style={{ ['--c' as any]: h.color }} onClick={() => logHabit(h.id, t, h.kind === 'good' && done ? -v : 1)}>
                   {done ? <Icon name="check" size={14} stroke={3} /> : h.kind === 'bad' && v ? <Icon name="x" size={14} stroke={3} /> : v ? <span className="small">{v}</span> : null}
                 </button>
-                <span className="grow">{h.icon} {h.name}{isWeekly(h) ? <span className="muted small"> {habitWeekCount(h, t)}/{h.target} this week</span> : h.target > 1 && h.kind === 'good' ? <span className="muted small"> {v}/{h.target}</span> : null}</span>
-                <span className="muted small">{habitStreak(h) ? `🔥 ${habitStreak(h)}${isWeekly(h) ? 'w' : ''}` : ''}</span>
+                <span className="grow row gap-xs"><Glyph value={h.icon} size={14} color={h.color} /> {h.name}{isWeekly(h) ? <span className="muted small"> {habitWeekCount(h, t)}/{h.target} this week</span> : h.target > 1 && h.kind === 'good' ? <span className="muted small"> {v}/{h.target}</span> : null}</span>
+                <span className="muted small row gap-xs">{habitStreak(h) ? <><Icon name="flame" size={12} className="flame" />{habitStreak(h)}{isWeekly(h) ? 'w' : ''}</> : ''}</span>
               </div>
             )
           })}
@@ -102,7 +101,7 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
           <div className="panel-head"><h3>Journal</h3></div>
           {journalPage ? (
             <button className="today-journal" onClick={() => { ensureEntry(journalPage.id, t); openPage(journalPage.id) }}>
-              {entry?.text ? <><span className="big">{MOODS[entry.mood] || '📝'}</span><span className="muted ellipsis">{entry.title || entry.text.slice(0, 80)}</span></> : <span className="muted">Write today’s entry</span>}
+              {entry?.text ? <><span className="big"><Icon name={MOODS[entry.mood] || 'notebook-pen'} size={22} /></span><span className="muted ellipsis">{entry.title || entry.text.slice(0, 80)}</span></> : <span className="muted">Write today’s entry</span>}
             </button>
           ) : <div className="muted small">Add a Journal page to write entries.</div>}
         </section>
@@ -112,7 +111,7 @@ export function TodayPage({ pageId }: { pageId: string }): JSX.Element {
             <div className="panel-head"><h3>Goals</h3></div>
             {activeGoals.map((g) => (
               <button key={g.id} className="today-goal" onClick={() => openPage(g.pageId)}>
-                <span>{g.icon}</span><span className="grow ellipsis">{g.title}</span>
+                <Glyph value={g.icon} fallback="target" size={15} color={g.color} /><span className="grow ellipsis">{g.title}</span>
                 <Progress value={goalProgress(g, tasks)} color={g.color} className="w-80" />
               </button>
             ))}
