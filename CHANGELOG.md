@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.0 — 2026-11-19
+
 - One look everywhere: windows, cards and desktop panels share the same surface. The new default is clear glass with a light edge (the 0.5 desktop look), in light and dark.
 - Surface setting in Appearance (and Settings): Glass, Blur, Frosted or Solid for the whole app, with an option to give the desktop panels their own surface, for example blur only on the panels.
 - Panels follow the app's surface unless you pick one for a panel ("Match app" is the new default). Glass is also available per panel.
