@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0 — 2026-11-19
+
 The app is now **Deskbase**: your pages, tasks and notes as glass panels on the Windows desktop.
 
 - Desktop panels: put tasks, checklists, any page (Notion imports included), a scratchpad, quick add, focus timer, agenda, week, month, goals, habits, numbers, charts, deadlines, a clock, a heading or a picture right on your desktop. Each panel is its own window: drag it, resize it, snap it to screen edges and other panels (hold Alt to place freely), lock it, let clicks pass through, keep it on the desktop, like a window, or always on top. Right-click a panel for its options.
