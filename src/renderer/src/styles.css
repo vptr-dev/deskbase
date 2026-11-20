@@ -2402,3 +2402,50 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 .media-ctl button { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-2); }
 .media-ctl button:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
 .media-ctl button.main { width: 36px; height: 36px; background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+
+.pk-net-inline { display: inline-flex; gap: 10px; font-variant-numeric: tabular-nums; }
+.pk-net-inline > span { display: inline-flex; align-items: center; gap: 2px; }
+.pk-sys-row.net .pk-sys-label { display: flex; align-items: center; gap: 2px 6px; flex-wrap: wrap; white-space: normal; }
+.pk-system:not(.bars) .pk-sys-row.net .pk-net-inline { font-size: 0.62em; font-weight: 650; flex-wrap: wrap; gap: 0 8px; }
+.pk-sys-legend .net { margin-left: auto; }
+
+/* month panel looks and calendar events */
+.pk-month-day.ev::after { content: ''; position: absolute; left: 50%; bottom: 1px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--accent); opacity: 0.85; }
+.pk-month-day { position: relative; }
+.pk-month-item.ev i { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.pk-month.look-strip { display: flex; flex-direction: column; gap: 8px; }
+.pk-strip { display: grid; gap: 4px; }
+.pk-strip-day { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0 8px; border-radius: 10px; }
+.pk-strip-day em { font-style: normal; font-size: 0.72em; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.pk-strip-day b { font-size: 1.15em; font-variant-numeric: tabular-nums; }
+.pk-strip-day.today { background: var(--accent); color: #fff; }
+.pk-strip-day.today em { color: rgba(255, 255, 255, 0.85); }
+.pk-strip-day i { width: 4px; height: 4px; border-radius: 50%; background: transparent; }
+.pk-strip-day.due i, .pk-strip-day.ev i { background: currentColor; opacity: 0.6; }
+.pk-month.look-big { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; }
+.pk-big-date { display: flex; flex-direction: column; align-items: center; padding: 0 6px; }
+.pk-big-dow { font-size: 0.8em; font-weight: 600; color: var(--accent-ink); text-transform: uppercase; letter-spacing: 0.06em; }
+.pk-big-num { font-size: 3.4em; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.pk-big-mon { font-size: 0.85em; color: var(--muted); }
+.pk-month.look-big .pk-month-day { font-size: clamp(9px, 4.2cqw, 14px); }
+@container (max-width: 330px) { .pk-month.look-big { grid-template-columns: 1fr; } .pk-month.look-big .pk-month-cal { display: none; } .pk-big-num { font-size: 4.4em; } }
+/* deadline panel looks */
+.w-cd { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
+.w-cd-boxes { display: flex; gap: 6px; }
+.w-cd-box { display: flex; flex-direction: column; align-items: center; min-width: 44px; padding: 6px 4px; border-radius: 10px; background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.w-cd-box b { font-size: 1.6em; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.w-cd-box em { font-style: normal; font-size: 0.68em; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.w-cd-ring-n { display: block; font-size: 1.6em; font-weight: 650; line-height: 1; text-align: center; }
+.w-cd-ring-l { display: block; font-size: 0.7em; color: var(--muted); text-align: center; }
+.w-cd.look-bar { align-items: stretch; padding: 0 4px; gap: 8px; }
+
+/* formatting bar over selected text, inline colors, reminders */
+.fmt-bar { position: fixed; z-index: 60; display: flex; align-items: center; gap: 1px; padding: 3px; border-radius: 10px; background: var(--menu-bg, var(--card)); border: 1px solid var(--card-border); box-shadow: 0 6px 22px rgba(0, 0, 0, 0.16); backdrop-filter: blur(18px); }
+.fmt-bar button { min-width: 28px; height: 28px; padding: 0 5px; border-radius: 7px; display: grid; place-items: center; color: var(--fg-2); }
+.fmt-bar button:hover { background: var(--hover); color: var(--fg); }
+.fmt-bar .fmt-s { font-weight: 600; }
+.fmt-sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
+.fmt-color span { font-weight: 700; font-size: 14px; line-height: 1; }
+.fmt-hl { background: var(--bc-yellow); padding: 1px 4px; border-radius: 3px; color: var(--fg); }
+.inline-bg { border-radius: 3px; padding: 0 2px; }
+.mention-date.remind { color: var(--accent-ink); }

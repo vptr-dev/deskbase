@@ -72,6 +72,22 @@ function NetGraph({ hist }: { hist: { down: number; up: number }[] }): JSX.Eleme
   )
 }
 
+/** Download and upload speed in one line, for other panels (System). */
+export function NetSpeed({ bits, big }: { bits?: boolean; big?: boolean }): JSX.Element | null {
+  const s = useNet()
+  if (s && !s.supported) return null
+  if (big) return <>
+    <div className="pk-sys-num net"><span className="pk-sys-big sm">{s ? rate(s.down, bits) : '—'}</span><span className="pk-sys-k">Down</span></div>
+    <div className="pk-sys-num net"><span className="pk-sys-big sm">{s ? rate(s.up, bits) : '—'}</span><span className="pk-sys-k">Up</span></div>
+  </>
+  return (
+    <span className="pk-net-inline">
+      <span><Icon name="down" size={12} stroke={2.4} />{s ? rate(s.down, bits) : '—'}</span>
+      <span><Icon name="up" size={12} stroke={2.4} />{s ? rate(s.up, bits) : '—'}</span>
+    </span>
+  )
+}
+
 export function NetworkWidget({ cfg }: { cfg: Cfg }): JSX.Element {
   const s = useNet()
   const hist = useSyncExternalStore(subscribeNet, () => netHist)

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Formatting bar over selected text in pages: bold, italic, strike-through, code, link, six text colors and highlight. Ctrl B, Ctrl I, Ctrl Shift X, Ctrl E, Ctrl K and Ctrl Shift H work too.
+- Reminders: a date with a time in a page (type @ and a time such as 14:30, or pick Remind in an hour) shows a notification at that time, and a dated to-do reminds you at 9:00 that day until it is checked.
+- Month panel looks: the grid with calendar events and today's events listed, a strip of the next days, and a big date with the month beside it.
+- Countdown looks: a clock with days, hours, minutes and seconds (with a time of day), a ring and a bar that fills up from a start date.
+- The System panel can show network speed.
+- Long pages type and scroll much faster: only the line you are writing in is redrawn.
+
 ## 0.16.0 — 2026-11-20
 
 - Mail: connect Gmail, iCloud, Yahoo, Fastmail or any IMAP inbox with an app password. An Inbox panel shows the unread count and the latest messages; click one to open it in the browser (Gmail opens the message itself).

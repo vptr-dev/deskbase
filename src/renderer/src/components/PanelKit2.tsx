@@ -3,6 +3,7 @@ import { getData, toast, useData } from '../store'
 import { api } from '../lib/api'
 import { DAYS_SHORT, MONTHS_LONG } from '../lib/util'
 import { Icon } from './Icon'
+import { NetSpeed } from './PanelKit3'
 import { GB, PlacePrompt, deg, pad, sunAltitude, sunTimes, sysHistory, usePlace, useSys, useTick, useTimeFormat, useWeather, wmo } from './PanelKit'
 
 type Cfg = Record<string, any>
@@ -396,6 +397,7 @@ export function SystemStyles({ cfg }: { cfg: Cfg }): JSX.Element {
         <div className="pk-sys-legend">
           {meters.map((m, i) => <span key={m.id} className={`m${i}`}><i />{m.label} <b>{m.value}%</b></span>)}
           {cfg.uptime && <span>Up <b>{up}</b></span>}
+          {cfg.net && <span className="net"><NetSpeed /></span>}
         </div>
       </div>
     )
@@ -410,6 +412,7 @@ export function SystemStyles({ cfg }: { cfg: Cfg }): JSX.Element {
         </div>
       ))}
       {cfg.uptime && <div className="pk-sys-num"><span className="pk-sys-big sm">{up}</span><span className="pk-sys-k">Uptime</span></div>}
+      {cfg.net && <NetSpeed big />}
     </div>
   )
 }

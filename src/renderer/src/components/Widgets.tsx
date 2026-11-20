@@ -3,7 +3,7 @@ import { openPage, setOverlay, updatePage, useData } from '../store'
 import type { AppData, Block, Page, Task, Widget, WidgetType } from '../types'
 import { formatValue, valueNow, valueSeries } from '../lib/values'
 import { habitDayTarget, habitDoneOn, habitDueToday } from '../lib/habits'
-import { DAYS_SHORT, addDays, dayKey, diffDays, friendlyDay, parseDay, today, weekStartOf } from '../lib/util'
+import { DAYS_SHORT, addDays, dayKey, diffDays, friendlyDay, longDate, parseDay, today, weekStartOf } from '../lib/util'
 import { countRows, datedRows, rowsOf, setRowDone, type DatedRow } from '../lib/db'
 import { BarChart, Checkbox, Progress, Ring, Sparkline, useDoc } from './ui'
 import { Glyph, Icon } from './Icon'
@@ -327,10 +327,41 @@ function NoteWidget({ w, setConfig }: { w: AnyWidget; setConfig: SetConfig }): J
 }
 
 function CountdownWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
-  useTick(60_000)
+  const look: string = cfg.look ?? 'number'
+  useTick(look === 'clock' ? 1000 : 60_000)
   if (!cfg.date) return <Missing text="Set a date in the panel settings." />
   const date = nextDate({ date: cfg.date, yearly: !!cfg.yearly })
   const n = diffDays(date, today())
+  const target = new Date(`${date}T${/^\d\d:\d\d$/.test(cfg.time ?? '') ? cfg.time : '00:00'}`).getTime()
+  const title = cfg.title || friendlyDay(date)
+  if (look === 'clock') {
+    const left = Math.max(0, target - Date.now())
+    const parts: [number, string][] = [[Math.floor(left / 86400000), 'days'], [Math.floor(left / 3600000) % 24, 'hours'], [Math.floor(left / 60000) % 60, 'min'], [Math.floor(left / 1000) % 60, 'sec']]
+    return (
+      <div className="w-cd look-clock">
+        <div className="w-cd-boxes">{parts.map(([v, l]) => <span key={l} className="w-cd-box"><b className="glass-text">{String(v).padStart(2, '0')}</b><em>{l}</em></span>)}</div>
+        <div className="w-label ellipsis">{left ? title : `${title} is here`}</div>
+      </div>
+    )
+  }
+  if (look === 'ring' || look === 'bar') {
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(cfg.from ?? '') ? cfg.from : addDays(date, -Math.max(30, Number(cfg.span) || 30))
+    const total = Math.max(1, diffDays(date, from))
+    const done = Math.min(1, Math.max(0, diffDays(today(), from) / total))
+    if (look === 'ring') return (
+      <div className="w-cd look-ring">
+        <Ring value={done * 100} size={92} stroke={7}><span className="w-cd-ring-n glass-text">{n === 0 ? '!' : Math.abs(n)}</span><span className="w-cd-ring-l">{n === 0 ? 'today' : n === 1 ? 'day' : 'days'}</span></Ring>
+        <div className="w-label ellipsis">{title}</div>
+      </div>
+    )
+    return (
+      <div className="w-cd look-bar">
+        <div className="row between"><span className="strong ellipsis">{title}</span><span className="muted small nowrap">{n === 0 ? 'Today' : n < 0 ? `${-n} days ago` : `${n} day${n === 1 ? '' : 's'} left`}</span></div>
+        <Progress value={done * 100} height={8} />
+        <div className="muted small">{longDate(date)}</div>
+      </div>
+    )
+  }
   return (
     <div className="w-stat">
       <div className="w-stat-num glass-text">{n === 0 ? 'Today' : Math.abs(n)}</div>

@@ -21,12 +21,12 @@ export function scrollToBlock(id: string): void {
   el?.closest('.block')?.animate([{ background: 'color-mix(in srgb, var(--accent) 16%, transparent)' }, { background: 'transparent' }], { duration: 1200 })
 }
 
-// ---------- inline marks: [[Page title]], @dates, links, **bold**, *italic*, ~~strike~~, `code` ----------
+// ---------- inline marks: [[Page title]], @dates (with a time: a reminder), links, **bold**, *italic*, ~~strike~~, `code`, {red|colored} and {yellow-bg|highlighted} ----------
 
 export type Inline =
   | { kind: 'text'; text: string; start: number; end: number }
   | { kind: 'page'; title: string; start: number; end: number }
-  | { kind: 'date'; day: string; start: number; end: number }
+  | { kind: 'date'; day: string; time?: string; start: number; end: number }
   | { kind: 'url'; url: string; start: number; end: number }
   | { kind: 'link'; text: string; url: string; start: number; end: number }
   | { kind: 'bold'; text: string; start: number; end: number }
@@ -34,8 +34,9 @@ export type Inline =
   | { kind: 'italic'; text: string; start: number; end: number }
   | { kind: 'strike'; text: string; start: number; end: number }
   | { kind: 'code'; text: string; start: number; end: number }
+  | { kind: 'color'; color: string; bg: boolean; text: string; start: number; end: number }
 
-const INLINE = /\[\[([^\]\n]{1,120})\]\]|@(\d{4}-\d{2}-\d{2}|today|tomorrow|yesterday)\b|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|\*\*\*([^*\n]+)\*\*\*|\*\*([^*\n]+)\*\*|(?<![\w*])\*(?![\s*])([^*\n]+?)\*(?![\w*])|~~([^~\n]+)~~|`([^`\n]+)`/gi
+const INLINE = /\[\[([^\]\n]{1,120})\]\]|@((?:\d{4}-\d{2}-\d{2}|today|tomorrow|yesterday)(?: \d{1,2}:\d{2}(?![\d:]))?)(?![\w-])|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])|\*\*\*([^*\n]+)\*\*\*|\*\*([^*\n]+)\*\*|(?<![\w*])\*(?![\s*])([^*\n]+?)\*(?![\w*])|~~([^~\n]+)~~|`([^`\n]+)`|\{(gray|brown|orange|yellow|green|blue|purple|pink|red)(-bg)?\|([^}\n]+)\}/gi
 
 /** A block's text without its marks: what it reads as (for matching, titles and contents lists). */
 export function plainText(s: string): string {
@@ -47,6 +48,7 @@ export function plainText(s: string): string {
     .replace(/(^|[^\w*])\*(?![\s*])([^*\n]+?)\*(?![\w*])/g, '$1$2')
     .replace(/~~([^~\n]+)~~/g, '$1')
     .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/\{(?:gray|brown|orange|yellow|green|blue|purple|pink|red)(?:-bg)?\|([^}\n]+)\}/gi, '$1')
 }
 
 /** True when a block's text has something to draw as a link, chip or mark. */
@@ -69,14 +71,15 @@ export function parseInline(text: string): Inline[] {
     const end = start + m[0].length
     if (start > last) out.push({ kind: 'text', text: text.slice(last, start), start: last, end: start })
     if (m[1] !== undefined) out.push({ kind: 'page', title: m[1].trim(), start, end })
-    else if (m[2] !== undefined) out.push({ kind: 'date', day: dayOf(m[2]), start, end })
+    else if (m[2] !== undefined) { const [w, tm] = m[2].split(' '); out.push({ kind: 'date', day: dayOf(w), ...(tm ? { time: tm.padStart(5, '0') } : {}), start, end }) }
     else if (m[3] !== undefined) out.push({ kind: 'link', text: m[3], url: m[4], start, end })
     else if (m[5] !== undefined) out.push({ kind: 'url', url: m[5], start, end })
     else if (m[6] !== undefined) out.push({ kind: 'bolditalic', text: m[6], start, end })
     else if (m[7] !== undefined) out.push({ kind: 'bold', text: m[7], start, end })
     else if (m[8] !== undefined) out.push({ kind: 'italic', text: m[8], start, end })
     else if (m[9] !== undefined) out.push({ kind: 'strike', text: m[9], start, end })
-    else out.push({ kind: 'code', text: m[10], start, end })
+    else if (m[10] !== undefined) out.push({ kind: 'code', text: m[10], start, end })
+    else out.push({ kind: 'color', color: m[11].toLowerCase(), bg: !!m[12], text: m[13], start, end })
     last = end
   }
   if (last < text.length) out.push({ kind: 'text', text: text.slice(last), start: last, end: text.length })

@@ -2,12 +2,14 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { openPage, setSettings, updatePage, useData } from '../store'
 import type { Block, Place } from '../types'
 import { api, type SysStats } from '../lib/api'
-import { DAYS_SHORT, MONTHS_LONG, addDays, parseDay, today, weekStartOf } from '../lib/util'
+import { DAYS_LONG, DAYS_SHORT, MONTHS_LONG, addDays, parseDay, today, weekStartOf } from '../lib/util'
+import { eventsByDay, useCalendarEvents } from '../lib/connections'
 import { playChime } from '../lib/sound'
 import { Checkbox } from './ui'
 import { Icon } from './Icon'
 import { Marks, findBlock } from './Blocks'
 import { plainText } from '../lib/links'
+import { NetSpeed } from './PanelKit3'
 
 type Cfg = Record<string, any>
 type SetConfig = (key: string, value: any) => void
@@ -336,6 +338,7 @@ export function SystemWidget({ cfg }: { cfg: Cfg }): JSX.Element {
             {cfg.details && m.sub && <span className="pk-sys-sub">{m.sub}</span>}
           </div>
         ))}
+        {cfg.net && <div className="pk-sys-row net"><span className="pk-sys-label"><span className="pk-sys-key">Net</span> <NetSpeed /></span></div>}
       </div>
     </div>
   )
@@ -536,27 +539,65 @@ export function MonthWidget({ cfg }: { cfg: Cfg }): JSX.Element {
   const due = new Set(open.map((x) => x.due))
   const [y, m] = ym.split('-').map(Number)
   const todays = open.filter((x) => x.due === t).sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'))
+  const events = useCalendarEvents()
+  const evDays = new Set(cfg.events === false ? [] : Object.keys(eventsByDay(events)))
+  const todayEvents = cfg.events === false ? [] : events.filter((e) => e.start <= t && (e.end ?? e.start) >= t)
+  const look: 'grid' | 'strip' | 'big' = cfg.look ?? 'grid'
   const time = (s?: string | null): string => {
     if (!s) return ''
     if (use24h) return s
     const [h, mm] = s.split(':').map(Number)
     return `${h % 12 || 12}:${pad(mm)}`
   }
+  const list = cfg.list !== false && (
+    <div className="pk-month-list">
+      <div className="pk-month-today">Today</div>
+      {todayEvents.slice(0, 4).map((e) => <div key={e.id + e.conn} className="pk-month-item ev"><span className="pk-month-time">{e.allDay ? '' : time(e.time)}</span><i style={{ background: e.color }} /><span className="ellipsis">{e.title}</span></div>)}
+      {todays.length || todayEvents.length
+        ? todays.slice(0, 8).map((x) => <button key={x.id} className="pk-month-item" onClick={() => openPage(x.pageId)}>{x.time && <span className="pk-month-time">{time(x.time)}</span>}<span className="ellipsis">{x.title}</span></button>)
+        : <span className="pk-month-none">Nothing due</span>}
+    </div>
+  )
+  const mark = (k: string): string => `${k === t ? 'today' : ''} ${due.has(k) ? 'due' : ''} ${evDays.has(k) ? 'ev' : ''}`
+  if (look === 'strip') {
+    const n = Number(cfg.days) || 7
+    const strip = Array.from({ length: n }, (_, i) => addDays(cfg.from === 'week' ? weekStartOf(t, weekStart) : t, i))
+    return (
+      <div className="pk pk-month look-strip">
+        {cfg.title !== false && <div className="pk-month-name">{MONTHS_LONG[m - 1]} {cfg.year ? y : ''}</div>}
+        <div className="pk-strip" style={{ gridTemplateColumns: `repeat(${n}, 1fr)` }}>
+          {strip.map((k) => { const d = parseDay(k); return <span key={k} className={`pk-strip-day ${mark(k)}`}><em>{DAYS_SHORT[d.getDay()].slice(0, 2)}</em><b>{d.getDate()}</b><i /></span> })}
+        </div>
+        {list}
+      </div>
+    )
+  }
+  if (look === 'big') {
+    const d = parseDay(t)
+    return (
+      <div className="pk pk-month look-big">
+        <div className="pk-big-date">
+          <span className="pk-big-dow">{DAYS_LONG[d.getDay()]}</span>
+          <span className="pk-big-num">{d.getDate()}</span>
+          <span className="pk-big-mon">{MONTHS_LONG[m - 1]} {cfg.year ? y : ''}</span>
+        </div>
+        <div className="pk-month-cal">
+          <div className="pk-month-grid">
+            {Array.from({ length: 7 }, (_, i) => <span key={i} className="pk-month-dow">{DAYS_SHORT[(i + weekStart) % 7].slice(0, 1)}</span>)}
+            {days.map((k) => <span key={k} className={`pk-month-day ${k.slice(0, 7) !== ym ? 'other' : ''} ${mark(k)}`}>{parseDay(k).getDate()}</span>)}
+          </div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className={`pk pk-month ${cfg.list === false ? '' : 'with-list'}`}>
-      {cfg.list !== false && (
-        <div className="pk-month-list">
-          <div className="pk-month-today">Today</div>
-          {todays.length
-            ? todays.slice(0, 8).map((x) => <button key={x.id} className="pk-month-item" onClick={() => openPage(x.pageId)}>{x.time && <span className="pk-month-time">{time(x.time)}</span>}<span className="ellipsis">{x.title}</span></button>)
-            : <span className="pk-month-none">Nothing due</span>}
-        </div>
-      )}
+      {list}
       <div className="pk-month-cal">
         {cfg.title !== false && <div className="pk-month-name">{MONTHS_LONG[m - 1]} {cfg.year ? y : ''}</div>}
         <div className="pk-month-grid">
           {Array.from({ length: 7 }, (_, i) => <span key={i} className="pk-month-dow">{DAYS_SHORT[(i + weekStart) % 7].slice(0, 1)}</span>)}
-          {days.map((k) => <span key={k} className={`pk-month-day ${k.slice(0, 7) !== ym ? 'other' : ''} ${k === t ? 'today' : ''} ${due.has(k) ? 'due' : ''}`}>{parseDay(k).getDate()}</span>)}
+          {days.map((k) => <span key={k} className={`pk-month-day ${k.slice(0, 7) !== ym ? 'other' : ''} ${mark(k)}`}>{parseDay(k).getDate()}</span>)}
         </div>
       </div>
     </div>

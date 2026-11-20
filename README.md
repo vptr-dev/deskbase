@@ -13,7 +13,7 @@ Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com
 - **Desktop panels** that live on the desktop like Rainmeter skins (no taskbar buttons, not in Alt+Tab): tasks, pages (or just today's part), clocks in many styles, world clock, timers, stopwatch, sunrise and sunset, weather, moon, system use, network speed, battery, calculator, recent pages, database charts, activity heatmap, deadlines, launcher, web search, study progress, table totals, month and more. Each has its own styles and parts to show or hide; set one up with a live preview before adding it. Move, resize, lock and group them.
 - **Workspaces**, each with its own panel layout.
 - **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts, text tone and colors, with its own section for the desktop panels.
-- **Pages** in tabs, with columns, tabs blocks, inline databases, toggle headings, links between pages, backlinks, bookmarks, images, embeds, equations, buttons and synced blocks.
+- **Pages** in tabs, with a formatting bar (colors and highlight), reminders from dates in the text, columns, tabs blocks, inline databases, toggle headings, links between pages, backlinks, bookmarks, images, embeds, equations, buttons and synced blocks.
 - **Page history and templates** for pages and database rows.
 - **Assistant** in a side panel (Ctrl J) or a page of its own: chats with history, a provider and model per chat (Ollama, LM Studio, Anthropic, OpenAI, Gemini, OpenRouter), roles, and access from read-only to making changes with undo.
 - **Connections**: Google, Outlook and Apple calendars, mail (IMAP), Todoist, RSS feeds, GitHub issues and pull requests, and Notion pages and databases kept in sync, with panels for each, plus a Now playing panel.

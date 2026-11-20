@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { act, getData, toast, updatePage, useApp, useData } from '../store'
 import { blocksToText, clearSelection, useSelection } from '../lib/selection'
@@ -99,6 +99,10 @@ export interface ColumnRef { block: string; index: number }
 const listOf = (p: Page | undefined, col?: ColumnRef): Block[] | undefined =>
   !p ? undefined : col ? findBlock(p.blocks, col.block)?.cols?.[col.index] : p.blocks
 
+const INLINE_COLORS = ['red', 'orange', 'green', 'blue', 'purple', 'gray']
+
+const BlockRow = memo(function BlockRow({ render }: { b: Block; deps: string; render: () => JSX.Element }): JSX.Element { return render() }, (a, z) => a.b === z.b && a.deps === z.deps)
+
 export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: boolean; col?: ColumnRef }): JSX.Element {
   const blocks = useData((d) => listOf(d.pages[pageId], col) ?? EMPTY)
   const spell = useData((d) => d.settings.spellcheck)
@@ -110,11 +114,77 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
   const selIds = useSelection((s) => (s.page === pageId && !col ? s.ids : NONE))
   /** A menu on a selected block acts on every selected block. */
   const targetsOf = (id: string): string[] => (selIds.length > 1 && selIds.includes(id) ? selIds : [id])
+  /** The formatting bar over selected text. */
+  const [fmt, setFmt] = useState<{ id: string; top: number; left: number } | null>(null)
+  useEffect(() => {
+    if (locked) return
+    const onSel = (): void => {
+      const el = document.activeElement as HTMLTextAreaElement | null
+      if (!el || el.tagName !== 'TEXTAREA' || el.selectionStart === el.selectionEnd) { setFmt((f) => (f ? null : f)); return }
+      const id = [...refs.entries()].find(([, x]) => x === el)?.[0]
+      const b = id ? current().find((x) => x.id === id) : undefined
+      if (!b || b.type === 'code' || !TEXT_TYPES.has(b.type)) { setFmt((f) => (f ? null : f)); return }
+      const r = (el.closest('[data-block]') ?? el).getBoundingClientRect()
+      setFmt({ id: b.id, top: r.top, left: r.left + 28 })
+    }
+    document.addEventListener('selectionchange', onSel)
+    return () => document.removeEventListener('selectionchange', onSel)
+  }, [locked, pageId])
 
   const edit = (fn: (b: Block[]) => void, key?: string): void => updatePage(pageId, (p) => { const l = listOf(p, col); if (l) fn(l) }, key)
   const setBlock = (id: string, fn: (b: Block) => void, key?: string): void =>
     edit((bs) => { const b = bs.find((x) => x.id === id); if (b) fn(b) }, key)
   const current = (): Block[] => listOf(getData().pages[pageId], col) ?? EMPTY
+
+  /** Wraps the selected text in marks (or takes them off when they are already there). */
+  const wrapSel = (id: string, open: string, close: string, select?: [number, number]): void => {
+    const el = refs.get(id)
+    const b = current().find((x) => x.id === id)
+    if (!el || !b) return
+    const s = el.selectionStart
+    const e = el.selectionEnd
+    const t = b.text
+    let next: string
+    let ns: number
+    let ne: number
+    if (t.slice(s - open.length, s) === open && t.slice(e, e + close.length) === close && open) {
+      next = t.slice(0, s - open.length) + t.slice(s, e) + t.slice(e + close.length); ns = s - open.length; ne = e - open.length
+    } else if (e - s >= open.length + close.length && t.slice(s, s + open.length) === open && t.slice(e - close.length, e) === close) {
+      next = t.slice(0, s) + t.slice(s + open.length, e - close.length) + t.slice(e); ns = s; ne = e - open.length - close.length
+    } else {
+      next = t.slice(0, s) + open + t.slice(s, e) + close + t.slice(e); ns = s + open.length; ne = e + open.length
+      if (select) { ns = e + open.length + select[0]; ne = e + open.length + select[1] }
+    }
+    setBlock(id, (x) => { x.text = next })
+    requestAnimationFrame(() => { const el2 = refs.get(id); if (el2) { el2.focus(); el2.setSelectionRange(ns, ne) } })
+  }
+  /** Colors the selected text, or takes its color off. */
+  const paintSel = (id: string, color: string | null, bg = false): void => {
+    const el = refs.get(id)
+    const b = current().find((x) => x.id === id)
+    if (!el || !b) return
+    const s = el.selectionStart
+    const e = el.selectionEnd
+    const t = b.text
+    const tag = /\{([a-z]+(?:-bg)?)\|$/.exec(t.slice(Math.max(0, s - 16), s))
+    let start = s
+    let end = e
+    let text = t
+    if (tag && t[e] === '}') {
+      text = t.slice(0, s - tag[0].length) + t.slice(s, e) + t.slice(e + 1); start = s - tag[0].length; end = e - tag[0].length
+      if (!color || tag[1] === color + (bg ? '-bg' : '')) {
+        setBlock(id, (x) => { x.text = text })
+        requestAnimationFrame(() => { const el2 = refs.get(id); if (el2) { el2.focus(); el2.setSelectionRange(start, end) } })
+        return
+      }
+    }
+    if (!color) return
+    const open = `{${color}${bg ? '-bg' : ''}|`
+    const out = text.slice(0, start) + open + text.slice(start, end) + '}' + text.slice(end)
+    setBlock(id, (x) => { x.text = out })
+    requestAnimationFrame(() => { const el2 = refs.get(id); if (el2) { el2.focus(); el2.setSelectionRange(start + open.length, end + open.length) } })
+  }
+  const linkSel = (id: string): void => wrapSel(id, '[', '](https://)', [2, 10])
 
   const insertAfter = (id: string, block: Partial<Block> = {}): string => {
     const nb: Block = { id: uid(), type: 'p', text: '', ...block }
@@ -203,6 +273,17 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
         setSlash(null)
       }
       return
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && b.type !== 'code' && !locked) {
+      const k = e.key.toLowerCase()
+      const sel = el.selectionStart !== el.selectionEnd
+      const run = (fn: () => void): void => { e.preventDefault(); e.stopPropagation(); fn() }
+      if (k === 'b' && !e.shiftKey) return run(() => wrapSel(b.id, '**', '**'))
+      if (k === 'i' && !e.shiftKey) return run(() => wrapSel(b.id, '*', '*'))
+      if (k === 'x' && e.shiftKey) return run(() => wrapSel(b.id, '~~', '~~'))
+      if (k === 'e' && !e.shiftKey) return run(() => wrapSel(b.id, '`', '`'))
+      if (k === 'h' && e.shiftKey) return run(() => paintSel(b.id, 'yellow', true))
+      if (k === 'k' && sel) return run(() => linkSel(b.id))
     }
     if (e.key === 'Enter' && !e.shiftKey && b.type !== 'code') {
       e.preventDefault()
@@ -387,12 +468,19 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
     return items
   }
 
+  const live = useRef({ onKey, onChange, onPaste, selIds })
+  live.current = { onKey, onChange, onPaste, selIds }
   let num = 0
   return (
     <div className={`blocks ${locked ? 'locked' : ''} ${col ? 'nested' : ''}`}>
       {blocks.map((b, idx) => {
         if (hidden.has(b.id)) return null
         num = b.type === 'number' ? num + 1 : 0
+        const n = num
+        // A row draws again only when its block or its place changes, so typing in one line of a
+        // long page doesn't redraw every other line. Handlers read the editor's latest state.
+        const deps = `${pageId}|${idx}|${n}|${locked ? 1 : 0}|${spell ? 1 : 0}|${dragOver === b.id ? 1 : 0}|${selIds.includes(b.id) ? 1 : 0}|${blocks.length === 1 ? 1 : 0}`
+        return <BlockRow key={b.id} b={b} deps={deps} render={() => {
         const set = (fn: (x: Block) => void, key?: string): void => setBlock(b.id, fn, key)
         const isToggle = TOGGLES.has(b.type)
         const headLevel = b.type.startsWith('toggle-h') ? b.type.slice(-2) : null
@@ -400,9 +488,9 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           value: b.text,
           spellCheck: spell,
           inputRef: (el: HTMLTextAreaElement | null) => { if (el) refs.set(b.id, el); else refs.delete(b.id) },
-          onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => onKey(e, b, idx),
-          onChange: (v: string) => onChange(b, v, refs.get(b.id) ?? null),
-          onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => onPaste(e, b),
+          onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => live.current.onKey(e, b, idx),
+          onChange: (v: string) => live.current.onChange(b, v, refs.get(b.id) ?? null),
+          onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => live.current.onPaste(e, b),
           placeholder: idx === 0 && blocks.length === 1 && !col ? 'Start writing, or press / for blocks' : b.type.startsWith('h') || headLevel ? 'Heading' : b.type === 'p' ? '' : isToggle ? 'Toggle' : 'List item'
         }
         let content: JSX.Element
@@ -431,7 +519,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
               <div className="block-body">
                 {b.type === 'todo' && <Checkbox checked={!!b.checked} onChange={(v) => setBlock(b.id, (x) => { x.checked = v })} size={17} />}
                 {b.type === 'bullet' && <span className="bullet">•</span>}
-                {b.type === 'number' && <span className="numlabel">{num}.</span>}
+                {b.type === 'number' && <span className="numlabel">{n}.</span>}
                 {isToggle && (
                   <button className={`toggle-arrow ${b.open ? 'open' : ''} ${headLevel ? 'toggle-arrow-' + headLevel : ''}`} onClick={() => setBlock(b.id, (x) => { x.open = !x.open })}><Icon name="chevron" size={13} stroke={2.4} /></button>
                 )}
@@ -467,7 +555,8 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
               setDragOver(null)
               dragRef.current = null
               // Dragging a selected block moves the whole selection.
-              const moving = selIds.includes(from) ? selIds : [from]
+              const sel = live.current.selIds
+              const moving = sel.includes(from) ? sel : [from]
               if (moving.includes(b.id)) return
               edit((bs) => {
                 const ms = bs.filter((x) => moving.includes(x.id))
@@ -488,6 +577,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
             <div className="block-main">{content}</div>
           </div>
         )
+        }} />
       })}
       {!locked && <div className="blocks-tail" onClick={() => {
         const last = blocks[blocks.length - 1]
@@ -504,6 +594,21 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
             />
           </div>
         </Popover>
+      )}
+      {fmt && !locked && !slash && !mention && (
+        createPortal(
+        <div className="fmt-bar" style={{ top: Math.max(8, fmt.top - 42), left: Math.max(8, fmt.left) }} onMouseDown={(e) => e.preventDefault()}>
+          <button title="Bold (Ctrl B)" onClick={() => wrapSel(fmt.id, '**', '**')}><Icon name="bold" size={14} /></button>
+          <button title="Italic (Ctrl I)" onClick={() => wrapSel(fmt.id, '*', '*')}><Icon name="italic" size={14} /></button>
+          <button title="Strike-through (Ctrl Shift X)" onClick={() => wrapSel(fmt.id, '~~', '~~')}><s className="fmt-s">S</s></button>
+          <button title="Code (Ctrl E)" onClick={() => wrapSel(fmt.id, '`', '`')}><Icon name="code" size={14} /></button>
+          <button title="Link (Ctrl K)" onClick={() => linkSel(fmt.id)}><Icon name="link" size={14} /></button>
+          <span className="fmt-sep" />
+          {INLINE_COLORS.map((c) => <button key={c} className="fmt-color" title={c[0].toUpperCase() + c.slice(1)} onClick={() => paintSel(fmt.id, c)}><span style={{ color: `var(--tc-${c})` }}>A</span></button>)}
+          <button className="fmt-color" title="Highlight (Ctrl Shift H)" onClick={() => paintSel(fmt.id, 'yellow', true)}><span className="fmt-hl">A</span></button>
+          <button title="No color" onClick={() => paintSel(fmt.id, null)}><Icon name="x" size={13} /></button>
+        </div>,
+        document.body)
       )}
       {mention && mentionOptions(mention).length > 0 && (
         <Popover anchor={mention.el} onClose={() => setMention(null)} width={260}>

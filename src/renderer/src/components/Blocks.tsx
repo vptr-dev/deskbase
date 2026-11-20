@@ -7,7 +7,7 @@ import { typeInfo } from '../lib/defaults'
 import { imageToDataUrl, pickImage } from '../lib/image'
 import { backlinks, hasInline, pageByTitle, pageForLink, parseInline, plainText, scrollToBlock } from '../lib/links'
 import { openFromClick } from '../lib/tabs'
-import { friendlyDay } from '../lib/util'
+import { addDays, friendlyDay, today } from '../lib/util'
 import type { Block, Page } from '../types'
 import { Glyph, Icon } from './Icon'
 import { AutoText, Popover, Segmented, type AutoTextProps } from './ui'
@@ -35,7 +35,8 @@ export function Marks({ text }: { text: string }): JSX.Element {
           case 'link': return <span key={i} className="inline-link">{p.text}</span>
           case 'url': return <span key={i} className="inline-link">{p.url.replace(/^https?:\/\/(www\.)?/, '')}</span>
           case 'page': return <span key={i} className="inline-link">{p.title}</span>
-          case 'date': return <span key={i}>{friendlyDay(p.day) || p.day}</span>
+          case 'date': return <span key={i}>{friendlyDay(p.day) || p.day}{p.time ? ' ' + p.time : ''}</span>
+          case 'color': return <span key={i} style={p.bg ? { background: `var(--bc-${p.color})`, borderRadius: 3 } : { color: `var(--tc-${p.color})` }}><Marks text={p.text} /></span>
           default: return <span key={i}>{p.text}</span>
         }
       })}
@@ -45,8 +46,10 @@ export function Marks({ text }: { text: string }): JSX.Element {
 
 /** Draws a block's links and marks while it is not being edited; a click on plain text edits at that spot. */
 function RichView({ text, className, onPlace }: { text: string; className: string; onPlace: (pos: number) => void }): JSX.Element {
-  const pages = useData((d) => d.pages)
   const parts = useMemo(() => parseInline(text), [text])
+  // Only the pages this line links to; following every page would redraw it on each keystroke anywhere.
+  const linked = useData((d) => parts.map((p) => { if (p.kind !== 'page') return ''; const t = pageByTitle(d, p.title); return t ? `${t.id}\u0001${t.title}\u0001${t.icon}\u0001${t.iconColor ?? ''}\u0001${t.type}` : '' }).join('\u0002'))
+  const targets = useMemo(() => linked.split('\u0002').map((x) => { if (!x) return undefined; const [id, title, icon, iconColor, type] = x.split('\u0001'); return { id, title, icon, iconColor, type } as { id: string; title: string; icon: string; iconColor: string; type: Page['type'] } }), [linked])
   const place = (e: React.MouseEvent): void => {
     if ((e.target as HTMLElement).closest('[data-act]')) return
     e.preventDefault()
@@ -71,6 +74,7 @@ function RichView({ text, className, onPlace }: { text: string; className: strin
           )
         }
         if (p.kind === 'code') return <code key={i} className="inline-code" data-s={p.start} data-e={p.end}>{p.text}</code>
+        if (p.kind === 'color') return <span key={i} data-s={p.start} data-e={p.end} className={p.bg ? 'inline-bg' : ''} style={p.bg ? { background: `var(--bc-${p.color})` } : { color: `var(--tc-${p.color})` }}><Marks text={p.text} /></span>
         if (p.kind === 'url') {
           return (
             <a key={i} data-act data-s={p.start} data-e={p.end} className="inline-link" href={p.url} title={p.url}
@@ -78,9 +82,9 @@ function RichView({ text, className, onPlace }: { text: string; className: strin
           )
         }
         if (p.kind === 'date') {
-          return <span key={i} data-act data-s={p.start} data-e={p.end} className="mention mention-date" title={p.day}><Icon name="calendar" size={12} />{friendlyDay(p.day) || p.day}</span>
+          return <span key={i} data-act data-s={p.start} data-e={p.end} className={`mention mention-date ${p.time ? 'remind' : ''}`} title={p.time ? `Reminder: ${p.day} ${p.time}` : p.day}><Icon name={p.time ? 'bell' : 'calendar'} size={12} />{friendlyDay(p.day) || p.day}{p.time ? ' ' + p.time : ''}</span>
         }
-        const target = pageByTitle({ pages }, p.title)
+        const target = targets[i]
         return (
           <span key={i} data-act data-s={p.start} data-e={p.end} className={`mention ${target ? '' : 'missing'}`} role="link" tabIndex={-1}
             title={target ? 'Open (Ctrl click for a new tab)' : 'Create this page'}
@@ -455,6 +459,20 @@ export function mentionOptions(m: MentionState): { label: string; icon: string; 
     const days: [string, string][] = [['Today', 'today'], ['Tomorrow', 'tomorrow'], ['Yesterday', 'yesterday']]
     for (const [label, word] of days) if (!ql || label.toLowerCase().startsWith(ql)) out.push({ label, icon: 'calendar', insert: '@' + word, hint: 'Date' })
     if (/^\d{4}-\d{2}-\d{2}$/.test(m.q.trim())) out.push({ label: m.q.trim(), icon: 'calendar', insert: '@' + m.q.trim(), hint: 'Date' })
+    // Reminders: a date with a time notifies you then.
+    const hm = /^(\d{1,2})(?::(\d{2}))?$/.exec(m.q.trim())
+    const pad2 = (n: number): string => String(n).padStart(2, '0')
+    const at = (dayK: string, h: number, mi: number): string => `@${dayK} ${pad2(h)}:${pad2(mi)}`
+    if (hm && Number(hm[1]) < 24) {
+      const h = Number(hm[1]); const mi = Math.min(59, Number(hm[2] ?? 0))
+      const now = new Date(); const later = h * 60 + mi > now.getHours() * 60 + now.getMinutes()
+      const dk = later ? today() : addDays(today(), 1)
+      out.push({ label: `Remind ${later ? 'today' : 'tomorrow'} at ${pad2(h)}:${pad2(mi)}`, icon: 'bell', insert: at(dk, h, mi), hint: 'Reminder' })
+    } else if (!ql || 'remind'.startsWith(ql) || ql.startsWith('remind')) {
+      const next = new Date(Date.now() + 3600000)
+      out.push({ label: `Remind in an hour (${pad2(next.getHours())}:00)`, icon: 'bell', insert: at(next.getDate() === new Date().getDate() ? today() : addDays(today(), 1), next.getHours(), 0), hint: 'Reminder' })
+      out.push({ label: 'Remind tomorrow at 09:00', icon: 'bell', insert: at(addDays(today(), 1), 9, 0), hint: 'Reminder' })
+    }
   }
   const pages = Object.values(d.pages).filter((p) => !p.deletedAt && (!ql || (p.title || 'untitled').toLowerCase().includes(ql)))
   const order = new Map(d.recent.map((id, i) => [id, i]))

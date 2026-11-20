@@ -218,8 +218,12 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         <Field label="Hours"><Segmented small value={c.h24 ?? 'auto'} onChange={(v) => set('h24', v)} options={[{ value: 'auto', label: 'App setting' }, { value: '12', label: '12-hour' }, { value: '24', label: '24-hour' }]} /></Field>
       </>}
       {w.type === 'calendar' && <>
-        <Field label="Today's list"><Toggle checked={c.list !== false} onChange={(v) => set('list', v)} /></Field>
+        <Field label="Look"><Segmented small value={c.look ?? 'grid'} onChange={(v) => set('look', v)} options={[{ value: 'grid', label: 'Month' }, { value: 'big', label: 'Big date' }, { value: 'strip', label: 'Days in a row' }]} /></Field>
+        {c.look === 'strip' && <Field label="Days"><Segmented small value={String(c.days ?? 7)} onChange={(v) => set('days', Number(v))} options={['5', '7', '10', '14'].map((n) => ({ value: n, label: n }))} /></Field>}
+        {c.look === 'strip' && <Field label="Starting"><Segmented small value={c.from ?? 'today'} onChange={(v) => set('from', v)} options={[{ value: 'today', label: 'Today' }, { value: 'week', label: 'Start of the week' }]} /></Field>}
+        {c.look !== 'big' && <Field label="Today's list"><Toggle checked={c.list !== false} onChange={(v) => set('list', v)} /></Field>}
         <Field label="Month name"><Toggle checked={c.title !== false} onChange={(v) => set('title', v)} /></Field>
+        <Field label="Calendar events"><Toggle checked={c.events !== false} onChange={(v) => set('events', v)} /></Field>
       </>}
       {w.type === 'weather' && <>
         {placeField}
@@ -255,6 +259,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
           <label className="row gap-xs small"><Toggle checked={c.cpu !== false} onChange={(v) => set('cpu', v)} />CPU</label>
           <label className="row gap-xs small"><Toggle checked={c.ram !== false} onChange={(v) => set('ram', v)} />Memory</label>
           <label className="row gap-xs small"><Toggle checked={c.disk !== false} onChange={(v) => set('disk', v)} />Disk</label>
+          <label className="row gap-xs small"><Toggle checked={!!c.net} onChange={(v) => set('net', v)} />Network</label>
         </Field>
         <Field label="Look"><Segmented small value={c.look ?? 'rings'} onChange={(v) => set('look', v)} options={[{ value: 'rings', label: 'Rings' }, { value: 'bars', label: 'Bars' }, { value: 'numbers', label: 'Numbers' }, { value: 'graph', label: 'Graph' }]} /></Field>
         <Field label="Extra">
@@ -382,6 +387,9 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         <Field label="What"><input className="input input-sm" value={c.title ?? ''} placeholder="Trip, launch, birthday…" onChange={(e) => set('title', e.target.value)} /></Field>
         <Field label="Date"><input className="input input-sm" type="date" value={c.date ?? ''} onChange={(e) => set('date', e.target.value)} /></Field>
         <Field label="Every year"><Toggle checked={!!c.yearly} onChange={(v) => set('yearly', v)} /></Field>
+        <Field label="Look"><Segmented small value={c.look ?? 'number'} onChange={(v) => set('look', v)} options={[{ value: 'number', label: 'Number' }, { value: 'clock', label: 'Countdown' }, { value: 'ring', label: 'Ring' }, { value: 'bar', label: 'Bar' }]} /></Field>
+        {c.look === 'clock' && <Field label="Time"><input className="input input-sm w-80" type="time" value={c.time ?? ''} onChange={(e) => set('time', e.target.value)} /></Field>}
+        {(c.look === 'ring' || c.look === 'bar') && <Field label="Counting from" sub="The ring or bar fills up from this day"><input className="input input-sm" type="date" value={c.from ?? ''} onChange={(e) => set('from', e.target.value)} /></Field>}
       </>}
       {w.type === 'quickadd' && <Field label="Add to"><PagePicker value={c.pageId ?? ''} pages={lists} empty="First to-do list" onChange={(v) => set('pageId', v)} /></Field>}
       {w.type === 'page' && <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs} onChange={(v) => set('pageId', v)} /></Field>}

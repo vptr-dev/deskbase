@@ -32,6 +32,7 @@ import { ValuesDialog } from './components/Values'
 import { HistoryDialog } from './components/History'
 import { applyImport, refreshFromNotion } from './lib/importer'
 import { loadFeed, startConnections, useFeeds, useMedia } from './lib/connections'
+import { fireReminders } from './lib/reminders'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { isDesktop } from './lib/api'
 import { applyCustomCss, applyLook } from './lib/look'
@@ -355,10 +356,12 @@ function useShortcuts(): void {
 /** Fires task reminders and the focus timer once per second. */
 function useTicker(): void {
   useEffect(() => {
+    let n = 0
     const id = setInterval(() => {
       focusActions.tick()
       const d = getData()
       if (!d.settings.notifications) return
+      if (n++ % 15 === 0) fireReminders(d)
       const now = Date.now()
       const due = Object.values(d.tasks).filter((t) => !t.done && t.remindAt && !t.reminded && t.remindAt <= now)
       if (due.length) {
