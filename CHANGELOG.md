@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.10.0 — 2026-11-20
+
 - Clock styles: ring, digital, stacked, minimal, analog (classic, minimal, numbers or dots), flip, bars, words and a 24-hour sun dial. Any clock can show another time zone, with 12 or 24 hours, seconds, date and date format to choose.
 - New panels: world clock (list, cards or analog), stopwatch with laps, time left in the day, week, month and year, moon phase, launcher for websites, apps, files and folders, web search, a line of words to keep in mind, and battery.
 - Daylight styles: curve, arc, day bar or just the times, with day length and the change since yesterday.
