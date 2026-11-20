@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 7
+export const CURRENT_SCHEMA = 8
 
 type Raw = Record<string, any>
 
@@ -137,6 +137,37 @@ const migrations: Record<number, (d: Raw) => Raw> = {
     if (style.opacity === undefined || style.opacity === 42) style.opacity = 50
     if (style.border === undefined || style.border === 40) style.border = 60
     return { ...d, desktop: { ...desktop, style } }
+  },
+  // 7 -> 8: panels always live on the desktop layer, and a whole dashboard on the desktop (one
+  // window covering the screen) becomes one panel per card, at the same spot (0.8.0).
+  7: (d) => {
+    const desktop: Raw = d.desktop && typeof d.desktop === 'object' ? { ...d.desktop } : {}
+    const pages: Raw = d.pages && typeof d.pages === 'object' ? d.pages : {}
+    const out: Raw[] = []
+    for (const w of (Array.isArray(desktop.widgets) ? desktop.widgets : []) as Raw[]) {
+      if (!w || typeof w !== 'object') continue
+      const page = w.type === 'dashboard' ? pages[w.config?.pageId] : null
+      if (page && Array.isArray(page.widgets) && page.widgets.length) {
+        const full = !(Number(w.w) > 0 && Number(w.h) > 0)
+        const ox = full ? 24 : Number(w.x) || 0
+        const oy = full ? 24 : Number(w.y) || 0
+        const cols = Number(page.view?.cols) || 12
+        const colW = full ? 1600 / cols : Math.max(40, Number(w.w) / cols)
+        const rowH = Number(page.view?.rowH) || 76
+        for (const c of page.widgets as Raw[]) {
+          if (!c || typeof c !== 'object' || c.type === 'dashboard') continue
+          out.push({
+            id: String(w.id) + '-' + String(c.id), type: c.type, config: { ...(c.config ?? {}) }, ...(typeof c.title === 'string' ? { title: c.title } : {}),
+            x: Math.round(ox + (Number(c.x) || 0) * colW), y: Math.round(oy + (Number(c.y) || 0) * rowH),
+            w: Math.max(120, Math.round((Number(c.w) || 3) * colW - 12)), h: Math.max(64, Math.round((Number(c.h) || 2) * rowH - 12)),
+            style: { ...(c.style ?? {}) }, layer: 'desktop', locked: false, hidden: Boolean(w.hidden), space: w.space, createdAt: Date.now()
+          })
+        }
+        continue
+      }
+      out.push({ ...w, layer: 'desktop' })
+    }
+    return { ...d, desktop: { ...desktop, widgets: out } }
   }
 }
 

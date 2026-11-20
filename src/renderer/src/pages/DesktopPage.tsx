@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { act, getData, useData } from '../store'
 import type { DeskWidget, WidgetStyle, WidgetType } from '../types'
 import { api, type DisplayInfo, isDesktop } from '../lib/api'
-import { addDesktopWidget, addSpace, patchDesk, runCommand, setDeskEditing, switchSpace, useDesk } from '../lib/desktop'
+import { addDeskSet, addDesktopWidget, addSpace, patchDesk, runCommand, setDeskEditing, switchSpace, useDesk } from '../lib/desktop'
 import { fullStyle, surfaceMaterial, widgetClass, widgetVars } from '../lib/widgetStyle'
 import { DEFAULT_WIDGET_STYLE } from '../lib/defaults'
 import { WidgetBody, widgetDef, widgetTitle } from '../components/Widgets'
@@ -146,9 +146,11 @@ function Inspector({ w, displays }: { w: DeskWidget; displays: DisplayInfo[] }):
       </>}
       {tab === 'place' && (
         <div className="form-grid">
-          <Field label="Stays">
-            <Segmented small value={w.layer} onChange={(v) => patchDesk(w.id, (x) => { x.layer = v })} options={[{ value: 'desktop', label: 'On desktop' }, { value: 'normal', label: 'Like a window' }, { value: 'top', label: 'On top' }]} />
-          </Field>
+          {w.group && (
+            <Field label="Group" sub="Moves together with the panels it was combined with">
+              <Button small kind="ghost" icon="ungroup" onClick={() => runCommand(w.id, 'ungroup')}>Separate</Button>
+            </Field>
+          )}
           <Field label="Lock position"><Toggle checked={!!w.locked} onChange={(v) => patchDesk(w.id, (x) => { x.locked = v })} /></Field>
           <Field label="Click-through" sub="Clicks go to what's behind"><Toggle checked={!!w.config.clickThrough} onChange={(v) => set('clickThrough', v)} /></Field>
           <Field label="Position">
@@ -270,7 +272,20 @@ export function DesktopPage(): JSX.Element {
       {adding && (
         <Modal onClose={() => setAdding(false)} width={720}>
           <div className="modal-head"><h3>Add a panel</h3></div>
-          <div className="modal-body"><WidgetGallery onPick={add} /></div>
+          <div className="modal-body">
+            <WidgetGallery onPick={add} extra={(
+              <div>
+                <div className="section-label">Sets</div>
+                <div className="widget-gallery">
+                  <button className="widget-pick glass" onClick={() => { addDeskSet(); setAdding(false) }}>
+                    <span className="widget-pick-icon"><Icon name="layout" size={18} /></span>
+                    <span className="strong">Desk set</span>
+                    <span className="muted small">Clock, daylight, month, weather, system and four timers down the right side</span>
+                  </button>
+                </div>
+              </div>
+            )} />
+          </div>
         </Modal>
       )}
     </div>

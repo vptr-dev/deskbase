@@ -9,6 +9,7 @@ import { Glyph, Icon } from './Icon'
 import { PROVIDERS, providerInfo, type AiConfig, type AiProvider } from '../../../shared/ai-core'
 import { toggleAssistant } from './Assistant'
 import { QuickAdd } from './TaskItems'
+import { PlaceSearch } from './PanelKit'
 
 // ---------- Quick add (global hotkey / tray) ----------
 export function QuickAddDialog(): JSX.Element {
@@ -194,12 +195,16 @@ function Row({ label, sub, children }: { label: string; sub?: string; children: 
 
 function DesktopSettings(): JSX.Element {
   const desk = useData((d) => d.desktop)
+  const place = useData((d) => d.settings.place)
+  const fahrenheit = useData((d) => d.settings.fahrenheit)
   return <>
     <h3>Desktop</h3>
     <p className="muted small set-intro">Your tasks, pages and notes as panels on the Windows desktop. Each workspace keeps its own layout.</p>
     <Row label="Show panels on the desktop"><Toggle checked={desk.enabled} onChange={(v) => act((d) => { d.desktop.enabled = v })} /></Row>
     <Row label="Panels" sub={`${desk.widgets.filter((w) => !w.hidden && w.space === desk.active).length} in this workspace, ${desk.spaces.length} workspace${desk.spaces.length === 1 ? '' : 's'}`}><Button small icon="monitor" onClick={() => openView('@desktop')}>Open Desktop</Button></Row>
     <StartWithWindows sub="Starts in the tray with just your panels showing" />
+    <Row label="Weather place" sub={place ? place.name : 'For weather and daylight panels'}><PlaceSearch compact /></Row>
+    <Row label="Temperature"><Segmented small value={fahrenheit ? 'f' : 'c'} onChange={(v) => setSettings((s) => { s.fahrenheit = v === 'f' })} options={[{ value: 'c', label: '°C' }, { value: 'f', label: '°F' }]} /></Row>
     <p className="muted small">While panels are showing, closing the window keeps it running in the tray. Right-click a panel for its options; switch workspaces from the tray or the top of the sidebar.</p>
   </>
 }

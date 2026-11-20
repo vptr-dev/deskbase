@@ -28,7 +28,12 @@ const UI = {
   notion: 'box', save: 'save', rows: 'rows-3', columns: 'columns-3', alignLeft: 'align-left', alignCenter: 'align-center',
   alignRight: 'align-right', bold: 'bold', italic: 'italic', contrast: 'contrast', blend: 'blend', aperture: 'aperture', focus: 'focus',
   timer: 'timer', hourglass: 'hourglass', activity: 'activity', percent: 'percent', hash: 'hash', at: 'at-sign', user: 'user', users: 'users',
-  coffee: 'coffee', party: 'party-popper', box: 'box', mouse: 'mouse-pointer-2', desktop: 'monitor-smartphone', shapes: 'shapes'
+  coffee: 'coffee', party: 'party-popper', box: 'box', mouse: 'mouse-pointer-2', desktop: 'monitor-smartphone', shapes: 'shapes',
+  cloud: 'cloud', cloudSun: 'cloud-sun', cloudMoon: 'cloud-moon', cloudRain: 'cloud-rain', cloudDrizzle: 'cloud-drizzle', cloudSnow: 'cloud-snow',
+  cloudFog: 'cloud-fog', cloudLightning: 'cloud-lightning', cloudHail: 'cloud-hail', cloudy: 'cloudy', wind: 'wind', droplets: 'droplets',
+  sunrise: 'sunrise', sunset: 'sunset', thermometer: 'thermometer', cpu: 'cpu', ram: 'memory-stick', disk: 'hard-drive', place: 'map-pin',
+  group: 'group', ungroup: 'ungroup', timerReset: 'timer-reset', listChecks: 'list-checks', calendarClock: 'calendar-clock', wallet: 'wallet',
+  dumbbell: 'dumbbell', study: 'graduation-cap'
 }
 
 /** Icons offered in the icon picker, by group. */

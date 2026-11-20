@@ -19,16 +19,21 @@ export interface DeskSpec {
   radius: number
   clickThrough: boolean
   title: string
+  /** panels with the same group move together */
+  group?: string | null
 }
-interface Entry { win: BrowserWindow; spec: DeskSpec; drag?: { mode: 'move' | 'resize'; sx: number; sy: number; start: Electron.Rectangle } }
+interface Entry { win: BrowserWindow; spec: DeskSpec; drag?: { mode: 'move' | 'resize'; sx: number; sy: number; start: Electron.Rectangle; mates: { e: Entry; start: Electron.Rectangle }[] } }
 
 const pending = new Map<string, DeskSpec>()
 const wins = new Map<string, Entry>()
 let host: WebContents | null = null
 let editing = false
 let watching = false
+/** A panel's right-click menu is open: it keeps focus until the menu closes. */
+let menuOpen = false
 
-const MIN_W = 120
+const HWND_BOTTOM = 1
+const MIN_W = 96
 const MIN_H = 64
 
 // ---------- native helpers (Windows) ----------
@@ -37,6 +42,8 @@ type Native = {
   accent: (h: bigint, state: number, color: number) => boolean
   corner: (h: bigint, pref: number) => number
   region: (h: bigint, w: number, hgt: number, r: number) => void
+  /** Brings a window to the foreground even when Windows' focus lock would refuse it. */
+  foreground: (h: bigint) => boolean
 }
 let native: Native | null | undefined
 function nat(): Native | null {
@@ -56,6 +63,11 @@ function nat(): Native | null {
     const dsa = dwm.func('int __stdcall DwmSetWindowAttribute(intptr_t hWnd, uint32_t attr, _In_ int *value, uint32_t size)')
     const rrr = gdi32.func('intptr_t __stdcall CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h)')
     const swr = user32.func('int __stdcall SetWindowRgn(intptr_t hWnd, intptr_t rgn, bool redraw)')
+    const sfw = user32.func('bool __stdcall SetForegroundWindow(intptr_t hWnd)')
+    const gfw = user32.func('intptr_t __stdcall GetForegroundWindow()')
+    const gwtp = user32.func('uint32_t __stdcall GetWindowThreadProcessId(intptr_t hWnd, void *pid)')
+    const ati = user32.func('bool __stdcall AttachThreadInput(uint32_t from, uint32_t to, bool attach)')
+    const gct = koffi.load('kernel32.dll').func('uint32_t __stdcall GetCurrentThreadId()')
     native = {
       setWindowPos: (h, after, x, y, cx, cy, flags) => swp(h, after, x, y, cx, cy, flags),
       accent: (h, state, color) => {
@@ -67,7 +79,19 @@ function nat(): Native | null {
         return ok
       },
       corner: (h, pref) => dsa(h, 33, [pref], 4),
-      region: (h, w, hgt, r) => { swr(h, r > 0 ? rrr(0, 0, w + 1, hgt + 1, r * 2, r * 2) : 0, true) }
+      region: (h, w, hgt, r) => { swr(h, r > 0 ? rrr(0, 0, w + 1, hgt + 1, r * 2, r * 2) : 0, true) },
+      foreground: (h) => {
+        if (sfw(h)) return true
+        // Share input with the foreground window's thread for a moment so the switch is allowed.
+        const fg = gfw()
+        const other = fg ? gwtp(fg, null) : 0
+        const me = gct()
+        if (!other || other === me) return sfw(h)
+        ati(me, other, true)
+        const ok = sfw(h)
+        ati(me, other, false)
+        return ok
+      }
     }
   } catch (e) {
     console.warn('desktop widgets: native effects unavailable', e)
@@ -79,11 +103,11 @@ const hwnd = (w: BrowserWindow): bigint => {
   return b.length >= 8 ? b.readBigInt64LE(0) : BigInt(b.readInt32LE(0))
 }
 
-const HWND_BOTTOM = 1
 const SWP_NOSIZE_NOMOVE_NOACTIVATE = 0x0001 | 0x0002 | 0x0010
 
 function sendToBack(e: Entry): void {
-  if (editing || e.spec.layer !== 'desktop' || e.win.isDestroyed()) return
+  // While its menu is open a panel stays where it is, so the menu shows above other windows.
+  if (editing || menuOpen || e.win.isDestroyed()) return
   try { nat()?.setWindowPos(hwnd(e.win), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE_NOMOVE_NOACTIVATE) } catch { /* ignore */ }
 }
 
@@ -113,10 +137,25 @@ function applyShape(e: Entry): void {
   } catch { /* ignore */ }
 }
 
+/** Panels always sit on the desktop, under every window; only arranging lifts them up. */
 function applyLayer(e: Entry): void {
   if (e.win.isDestroyed()) return
-  e.win.setAlwaysOnTop(editing || e.spec.layer === 'top', editing ? 'screen-saver' : 'floating')
-  if (!editing && e.spec.layer === 'desktop') sendToBack(e)
+  e.win.setAlwaysOnTop(editing, 'screen-saver')
+  if (!editing) {
+    if (!e.win.isFocused()) e.win.setFocusable(false)
+    sendToBack(e)
+  }
+}
+
+/**
+ * setBounds across monitors with different scaling can land with the wrong size (the size is
+ * converted with the old monitor's scale). Setting it again on the new monitor fixes it.
+ */
+function placeWindow(win: BrowserWindow, r: Electron.Rectangle): void {
+  const before = screen.getDisplayMatching(win.getBounds()).scaleFactor
+  win.setBounds(r)
+  const now = win.getBounds()
+  if (screen.getDisplayMatching(r).scaleFactor !== before || now.width !== r.width || now.height !== r.height) win.setBounds(r)
 }
 
 function applyMouse(e: Entry): void {
@@ -166,9 +205,9 @@ const SNAP = 10
 const GAP = 12
 
 /** Snap a rectangle to screen edges, other widgets and the grid. */
-function snap(id: string, r: Electron.Rectangle, mode: 'move' | 'resize', grid: number): Electron.Rectangle {
+function snap(id: string, r: Electron.Rectangle, mode: 'move' | 'resize', grid: number, skip: string[] = []): Electron.Rectangle {
   const area = screen.getDisplayMatching(r).workArea
-  const others = [...wins.values()].filter((e) => e.spec.id !== id && !e.win.isDestroyed() && e.win.isVisible()).map((e) => e.win.getBounds())
+  const others = [...wins.values()].filter((e) => e.spec.id !== id && !skip.includes(e.spec.id) && !e.win.isDestroyed() && e.win.isVisible()).map((e) => e.win.getBounds())
   const xs: number[] = [area.x + GAP, area.x + area.width - GAP]
   const ys: number[] = [area.y + GAP, area.y + area.height - GAP]
   for (const o of others) {
@@ -208,7 +247,7 @@ function watchDisplays(): void {
     setTimeout(() => {
       for (const e of wins.values()) {
         if (e.win.isDestroyed()) continue
-        e.win.setBounds(visibleBounds(e.spec))
+        placeWindow(e.win, visibleBounds(e.spec))
         applyShape(e)
       }
     }, 400)
@@ -236,7 +275,8 @@ function optionsFor(spec: DeskSpec): Electron.BrowserWindowConstructorOptions {
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    alwaysOnTop: spec.layer === 'top',
+    alwaysOnTop: false,
+    focusable: false,
     title: spec.title || 'Panel',
     thickFrame: false,
     autoHideMenuBar: true
@@ -249,8 +289,14 @@ function register(win: BrowserWindow, spec: DeskSpec): void {
   const e: Entry = { win, spec }
   wins.set(spec.id, e)
   win.setMenu(null)
+  // Panels never take focus on a click, so clicking one never lifts it over other windows.
+  // Text fields and the right-click menu ask for focus (deskFocus) and give it back on blur.
   win.on('focus', () => setTimeout(() => sendToBack(e), 0))
-  win.on('blur', () => sendToBack(e))
+  win.on('blur', () => {
+    if (win.isDestroyed()) return
+    if (!editing && !menuOpen) win.setFocusable(false)
+    sendToBack(e)
+  })
   win.on('minimize', () => { if (!win.isDestroyed()) win.restore() })
   win.on('closed', () => {
     if (wins.get(spec.id)?.win === win) {
@@ -317,10 +363,9 @@ export function deskUpdate(spec: DeskSpec): void {
   if (!e.drag) {
     const b = visibleBounds(spec)
     const cur = e.win.getBounds()
-    if (b.x !== cur.x || b.y !== cur.y || b.width !== cur.width || b.height !== cur.height) e.win.setBounds(b)
+    if (b.x !== cur.x || b.y !== cur.y || b.width !== cur.width || b.height !== cur.height) placeWindow(e.win, b)
   }
   if (prev.material !== spec.material || prev.radius !== spec.radius || prev.w !== spec.w || prev.h !== spec.h) applyEffects(e)
-  if (prev.layer !== spec.layer) applyLayer(e)
   if (prev.clickThrough !== spec.clickThrough) applyMouse(e)
   if (prev.title !== spec.title) e.win.setTitle(spec.title || 'Panel')
 }
@@ -347,7 +392,10 @@ export function deskDrag(id: string, phase: 'start' | 'move', sx: number, sy: nu
   const c = screen.getCursorScreenPoint()
   void sx; void sy
   if (phase === 'start' || !e.drag) {
-    e.drag = { mode, sx: c.x, sy: c.y, start: e.win.getBounds() }
+    const mates = mode === 'move' && e.spec.group
+      ? [...wins.values()].filter((o) => o !== e && o.spec.group === e.spec.group && !o.win.isDestroyed()).map((o) => ({ e: o, start: o.win.getBounds() }))
+      : []
+    e.drag = { mode, sx: c.x, sy: c.y, start: e.win.getBounds(), mates }
     return
   }
   const d = e.drag
@@ -356,25 +404,43 @@ export function deskDrag(id: string, phase: 'start' | 'move', sx: number, sy: nu
   let r: Electron.Rectangle = d.mode === 'move'
     ? { ...d.start, x: d.start.x + dx, y: d.start.y + dy }
     : { ...d.start, width: Math.max(MIN_W, d.start.width + dx), height: Math.max(MIN_H, d.start.height + dy) }
-  if (!free) r = snap(id, r, d.mode, grid)
+  if (!free) r = snap(id, r, d.mode, grid, d.mates.map((m) => m.e.spec.id))
   e.win.setBounds(r)
   if (d.mode === 'resize') applyShape(e)
+  for (const m of d.mates) if (!m.e.win.isDestroyed()) m.e.win.setBounds({ ...m.start, x: m.start.x + r.x - d.start.x, y: m.start.y + r.y - d.start.y })
 }
 
-export function deskDragEnd(id: string): Electron.Rectangle | null {
+/** Ends a drag; returns the new bounds of the panel and of every panel that moved with it. */
+export function deskDragEnd(id: string): { id: string; x: number; y: number; width: number; height: number }[] {
   const e = wins.get(id)
-  if (!e || e.win.isDestroyed()) return null
+  if (!e || e.win.isDestroyed()) return []
+  const moved = [e, ...(e.drag?.mates.map((m) => m.e) ?? [])].filter((x) => !x.win.isDestroyed())
   e.drag = undefined
-  const b = e.win.getBounds()
-  e.spec = { ...e.spec, x: b.x, y: b.y, w: b.width, h: b.height }
-  applyEffects(e)
-  sendToBack(e)
-  return b
+  return moved.map((x) => {
+    const b = x.win.getBounds()
+    x.spec = { ...x.spec, x: b.x, y: b.y, w: b.width, h: b.height }
+    applyEffects(x)
+    sendToBack(x)
+    return { id: x.spec.id, ...b }
+  })
 }
 
 export function deskBounds(id: string): Electron.Rectangle | null {
   const e = wins.get(id)
   return e && !e.win.isDestroyed() ? e.win.getBounds() : null
+}
+
+/** A text field in a panel was clicked: let the panel take keyboard focus, still under other windows. */
+export function deskFocus(id: string): void {
+  const e = wins.get(id)
+  if (!e || e.win.isDestroyed()) return
+  e.win.setFocusable(true)
+  e.win.focus()
+  if (!e.win.isFocused()) {
+    try { nat()?.foreground(hwnd(e.win)) } catch { /* ignore */ }
+    e.win.webContents.focus()
+  }
+  setTimeout(() => sendToBack(e), 0)
 }
 
 /** Native right-click menu on a widget. Resolves with the chosen command. */
@@ -389,7 +455,18 @@ export function deskMenu(id: string, items: { id: string; label: string; checked
       if (it.submenu) return { label: it.label, submenu: it.submenu.map((s) => ({ label: s.label, type: 'radio' as const, checked: !!s.checked, click: () => { picked = s.id } })) }
       return { label: it.label, ...(it.checked !== undefined ? { type: 'checkbox' as const, checked: it.checked } : {}), click: () => { picked = it.id } }
     })
-    Menu.buildFromTemplate(build(items)).popup({ window: e.win, callback: () => setTimeout(() => resolve(picked), 0) })
+    // A menu needs its window in front to close when you click elsewhere.
+    menuOpen = true
+    deskFocus(id)
+    Menu.buildFromTemplate(build(items)).popup({
+      window: e.win,
+      callback: () => {
+        menuOpen = false
+        if (!e.win.isDestroyed() && !e.win.isFocused() && !editing) e.win.setFocusable(false)
+        sendToBack(e)
+        setTimeout(() => resolve(picked), 0)
+      }
+    })
   })
 }
 

@@ -3,13 +3,14 @@ import { openPage, setOverlay, updatePage, useData } from '../store'
 import type { AppData, Block, Page, Task, Widget, WidgetType } from '../types'
 import { formatValue, valueNow, valueSeries } from '../lib/values'
 import { habitDayTarget, habitDoneOn, habitDueToday } from '../lib/habits'
-import { DAYS_SHORT, MONTHS_LONG, addDays, dayKey, diffDays, friendlyDay, parseDay, today, weekStartOf } from '../lib/util'
+import { DAYS_SHORT, addDays, dayKey, diffDays, friendlyDay, parseDay, today, weekStartOf } from '../lib/util'
 import { countRows, rowsOf } from '../lib/db'
 import { BarChart, Checkbox, Progress, Ring, Sparkline, useDoc } from './ui'
 import { Glyph, Icon } from './Icon'
 import { QuickAdd, TaskRow, useTaskDrawer } from './TaskItems'
 import { adjustValue } from './Values'
 import { logHabit } from '../pages/HabitsPage'
+import { DaylightWidget, MonthWidget, RingClock, SectionsWidget, SystemWidget, TableWidget, TimerWidget, WeatherWidget } from './PanelKit'
 import { focusActions, fmtClock, remainingSecs, useFocus } from '../pages/FocusPage'
 import { goalProgress } from '../pages/GoalsPage'
 import { nextDate } from './Countdowns'
@@ -29,9 +30,10 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'quickadd', name: 'Quick add', icon: 'plus', desc: 'Capture a task without opening the app', w: 4, h: 1, group: 'Work', config: {} },
   { type: 'focus', name: 'Focus timer', icon: 'timer', desc: 'Start a focus session from the desktop', w: 3, h: 2, group: 'Work', config: {} },
   { type: 'database', name: 'Database', icon: 'database', desc: 'A table, board or gallery you can edit', w: 6, h: 5, group: 'Work', config: {} },
+  { type: 'timer', name: 'Timer', icon: 'timer', desc: 'Click to start; put a few side by side', w: 2, h: 2, group: 'Work', config: { minutes: 5 } },
   { type: 'agenda', name: 'Agenda', icon: 'calendar-days', desc: 'The next days with tasks and times', w: 3, h: 4, group: 'Plan', config: { days: 5 } },
   { type: 'week', name: 'Week', icon: 'columns-3', desc: 'Seven days: what is due and what got done', w: 6, h: 2, group: 'Plan', config: {} },
-  { type: 'calendar', name: 'Month', icon: 'calendar', desc: 'This month with your due dates', w: 3, h: 4, group: 'Plan', config: {} },
+  { type: 'calendar', name: 'Month', icon: 'calendar', desc: "This month, with what's due today beside it", w: 5, h: 3, group: 'Plan', config: { list: true } },
   { type: 'goals', name: 'Goals', icon: 'target', desc: 'Active goals and how far along they are', w: 3, h: 3, group: 'Plan', config: {} },
   { type: 'habits', name: 'Habits', icon: 'repeat', desc: "Today's habits to check off", w: 3, h: 3, group: 'Plan', config: {} },
   { type: 'countdown', name: 'Deadline', icon: 'hourglass', desc: 'Days left until a date', w: 2, h: 2, group: 'Plan', config: { title: '', date: '' } },
@@ -39,9 +41,14 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'chart', name: 'Chart', icon: 'chart-column', desc: 'Tasks, focus, habits or a value over time', w: 4, h: 3, group: 'Track', config: { source: 'tasks', days: 14, kind: 'bar' } },
   { type: 'progress', name: 'Progress', icon: 'gauge', desc: 'A value toward its goal, or database rows done', w: 2, h: 2, group: 'Track', config: { source: 'value' } },
   { type: 'value', name: 'Counter', icon: 'gem', desc: 'One of your values with + and −', w: 3, h: 2, group: 'Track', config: { showChart: true, step: 1 } },
+  { type: 'sections', name: 'Progress by section', icon: 'listChecks', desc: 'How far along each toggle or heading is, like subjects to revise', w: 3, h: 4, group: 'Track', config: { next: 3 } },
+  { type: 'table', name: 'Table', icon: 'table', desc: 'A table from a page, with a total and the next due dates', w: 4, h: 3, group: 'Track', config: { table: 0 } },
+  { type: 'system', name: 'System', icon: 'cpu', desc: 'CPU, memory and disk in use', w: 2, h: 3, group: 'Track', config: {} },
   { type: 'dashboard', name: 'Dashboard', icon: 'layout-dashboard', desc: 'A whole dashboard page in one panel', w: 8, h: 6, group: 'More', config: {} },
   { type: 'page', name: 'Shortcut', icon: 'link', desc: 'Opens one of your pages', w: 2, h: 1, group: 'More', config: {} },
-  { type: 'clock', name: 'Clock', icon: 'clock', desc: 'Time and date', w: 3, h: 2, group: 'More', config: { seconds: false, style: 'digital' } },
+  { type: 'clock', name: 'Clock', icon: 'clock', desc: 'Time and date', w: 3, h: 2, group: 'More', config: { seconds: false, style: 'ring' } },
+  { type: 'weather', name: 'Weather', icon: 'cloudSun', desc: 'Now and the next days where you are', w: 5, h: 3, group: 'More', config: { days: 4 } },
+  { type: 'daylight', name: 'Daylight', icon: 'sunrise', desc: "The sun's path today, with sunrise and sunset", w: 3, h: 2, group: 'More', config: {} },
   { type: 'text', name: 'Heading', icon: 'type', desc: 'A title, rule or reminder in big type', w: 4, h: 2, group: 'More', config: { text: '', size: 28, weight: 650 } },
   { type: 'image', name: 'Picture', icon: 'image', desc: 'A reference image or photo', w: 3, h: 3, group: 'More', config: { src: null, fit: 'cover' } }
 ]
@@ -231,25 +238,6 @@ function HabitsWidget(): JSX.Element {
   )
 }
 
-function CalendarWidget(): JSX.Element {
-  const weekStart = useData((d) => d.settings.weekStart)
-  const tasks = useData((d) => d.tasks)
-  const t = today()
-  const ym = t.slice(0, 7)
-  const start = weekStartOf(`${ym}-01`, weekStart)
-  const days = Array.from({ length: 42 }, (_, i) => addDays(start, i))
-  const due = new Set(Object.values(tasks).filter((x) => !x.done && x.due).map((x) => x.due))
-  const [y, m] = ym.split('-').map(Number)
-  return (
-    <div className="w-cal">
-      <div className="w-label">{MONTHS_LONG[m - 1]} {y}</div>
-      <div className="w-cal-grid">
-        {Array.from({ length: 7 }, (_, i) => <span key={i} className="w-cal-dow">{DAYS_SHORT[(i + weekStart) % 7][0]}</span>)}
-        {days.map((k) => <span key={k} className={`w-cal-day ${k.slice(0, 7) !== ym ? 'other' : ''} ${k === t ? 'today' : ''} ${due.has(k) ? 'dot' : ''}`}>{parseDay(k).getDate()}</span>)}
-      </div>
-    </div>
-  )
-}
 
 function AnalogClock({ now, seconds }: { now: Date; seconds: boolean }): JSX.Element {
   const s = now.getSeconds()
@@ -379,8 +367,14 @@ export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfi
     case 'tasks': return <TasksWidget cfg={c} />
     case 'habits': return <HabitsWidget />
     case 'database': return c.dbId ? <div className="w-scroll"><DatabaseView dbId={c.dbId} viewId={c.viewId || undefined} embedded /></div> : <Missing text="Choose a database in the panel settings." />
-    case 'calendar': return <CalendarWidget />
-    case 'clock': return <ClockWidget cfg={c} />
+    case 'calendar': return <MonthWidget cfg={c} />
+    case 'clock': return c.style === 'ring' ? <RingClock cfg={c} /> : <ClockWidget cfg={c} />
+    case 'weather': return <WeatherWidget cfg={c} />
+    case 'daylight': return <DaylightWidget cfg={c} />
+    case 'system': return <SystemWidget cfg={c} />
+    case 'timer': return <TimerWidget cfg={c} setConfig={setConfig} />
+    case 'sections': return <SectionsPanel cfg={c} />
+    case 'table': return <TablePanel cfg={c} />
     case 'note': return <NoteWidget w={w} setConfig={setConfig} />
     case 'countdown': return <CountdownWidget cfg={c} />
     case 'focus': return <FocusWidget />
@@ -401,11 +395,14 @@ export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfi
 export function widgetTitle(w: AnyWidget, d: AppData): string {
   if (w.title !== undefined && w.title !== null) return w.title
   switch (w.type) {
-    case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': case 'image': case 'text': case 'dashboard': case 'week': return ''
+    case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': case 'image': case 'text': case 'dashboard': case 'week':
+    case 'calendar': case 'weather': case 'daylight': case 'system': case 'timer': return ''
+    case 'sections': return w.config.section || d.pages[w.config.pageId]?.title || 'Progress'
+    case 'table': return d.pages[w.config.pageId]?.title || 'Table'
     case 'chart': return w.config.source === 'value' ? d.values[w.config.valueId]?.name ?? 'Chart' : w.config.source === 'focus' ? 'Focus minutes' : w.config.source === 'habits' ? 'Habits done' : w.config.source === 'metric' ? d.metrics[w.config.metricId]?.name ?? 'Tracker' : 'Tasks done'
     case 'tasks': return { today: 'Today', overdue: 'Overdue', upcoming: 'Next 7 days', all: 'Open tasks' }[w.config.filter as string] ?? 'Tasks'
     case 'database': return d.pages[w.config.dbId]?.title || 'Database'
-    case 'pageview': return d.pages[w.config.pageId]?.title || 'Page'
+    case 'pageview': return (w.config.today ? 'Today · ' : '') + (w.config.section || d.pages[w.config.pageId]?.title || 'Page')
     case 'checklist': return w.config.section || d.pages[w.config.pageId]?.title || 'Checklist'
     case 'agenda': return 'Agenda'
     default: return widgetDef(w.type).name
@@ -416,18 +413,64 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
 const setBlock = (pageId: string, blockId: string, fn: (b: Block) => void): void =>
   updatePage(pageId, (p) => { const b = p.blocks.find((x) => x.id === blockId); if (b) fn(b) }, 'wblock:' + blockId)
 
-/** Blocks under a heading, up to the next heading of the same or higher level. */
+/** Blocks under a heading (up to the next heading of the same or higher level) or inside a toggle. */
 export function sectionBlocks(blocks: Block[], section?: string | null): Block[] {
   if (!section) return blocks
   const lvl = (b: Block): number => (b.type === 'h1' ? 1 : b.type === 'h2' ? 2 : b.type === 'h3' ? 3 : 0)
-  const i = blocks.findIndex((b) => lvl(b) && b.text.trim() === section)
-  if (i < 0) return []
   const out: Block[] = []
+  // Every heading or toggle with that name counts (Notion pages often repeat a heading).
+  blocks.forEach((h, i) => {
+    if (!((lvl(h) || h.type === 'toggle') && h.text.trim() === section)) return
+    const ind = h.indent ?? 0
+    for (let j = i + 1; j < blocks.length; j++) {
+      const b = blocks[j]
+      if (h.type === 'toggle') { if ((b.indent ?? 0) <= ind) break }
+      else if (lvl(b) && lvl(b) <= lvl(h) && (b.indent ?? 0) <= ind) break
+      out.push(b)
+    }
+  })
+  return out
+}
+
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+const dayAt = (text: string): number => {
+  const m = /^\s*([a-z]+)/i.exec(text)
+  return m ? WEEKDAYS.indexOf(m[1].toLowerCase()) : -1
+}
+
+/** Only today's part: a heading or a paragraph that starts with today's weekday, and what follows it. */
+export function todayBlocks(blocks: Block[], date = new Date()): Block[] {
+  const want = date.getDay()
+  const lvl = (b: Block): number => (b.type === 'h1' ? 1 : b.type === 'h2' ? 2 : b.type === 'h3' ? 3 : 0)
+  const i = blocks.findIndex((b) => b.type !== 'todo' && dayAt(b.text) === want)
+  if (i < 0) return []
+  const start = blocks[i]
+  const ind = start.indent ?? 0
+  const out: Block[] = lvl(start) ? [] : [start]
   for (let j = i + 1; j < blocks.length; j++) {
-    if (lvl(blocks[j]) && lvl(blocks[j]) <= lvl(blocks[i]) && (blocks[j].indent ?? 0) <= (blocks[i].indent ?? 0)) break
-    out.push(blocks[j])
+    const b = blocks[j]
+    if ((b.indent ?? 0) < ind) break
+    if (lvl(start) ? lvl(b) && lvl(b) <= lvl(start) : lvl(b) || b.type === 'divider' || /^\s*[\u2E3B\u2014\u2013-]{1,3}\s*$/.test(b.text) || dayAt(b.text) >= 0) break
+    out.push(b)
   }
   return out
+}
+
+function scoped(page: Page, cfg: Record<string, any>): Block[] {
+  const b = sectionBlocks(page.blocks, cfg.section)
+  return cfg.today ? todayBlocks(b) : b
+}
+
+function SectionsPanel({ cfg }: { cfg: Record<string, any> }): JSX.Element {
+  const page = useData((d) => (cfg.pageId ? d.pages[cfg.pageId] : undefined))
+  if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
+  return <SectionsWidget cfg={cfg} blocks={sectionBlocks(page.blocks, cfg.section)} pageId={page.id} />
+}
+
+function TablePanel({ cfg }: { cfg: Record<string, any> }): JSX.Element {
+  const page = useData((d) => (cfg.pageId ? d.pages[cfg.pageId] : undefined))
+  if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
+  return <TableWidget cfg={cfg} block={page.blocks.filter((b) => b.type === 'table')[Number(cfg.table) || 0]} />
 }
 
 
@@ -479,32 +522,32 @@ function visibleBlocks(blocks: Block[]): Block[] {
 function PageViewWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const page = useData((d) => (cfg.pageId ? d.pages[cfg.pageId] : undefined))
   if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
-  let blocks = visibleBlocks(sectionBlocks(page.blocks, cfg.section))
+  let blocks = visibleBlocks(scoped(page, cfg))
   if (cfg.hideChecked) blocks = blocks.filter((b) => !(b.type === 'todo' && b.checked))
   let n = 0
   return (
     <div className="w-pageview">
       <div className="w-scroll">
         {blocks.map((b) => { n = b.type === 'number' ? n + 1 : 0; return <MiniBlock key={b.id} b={b} pageId={page.id} n={n} /> })}
-        {blocks.length === 0 && <div className="muted small pad">Nothing here.</div>}
+        {blocks.length === 0 && <div className="muted small pad">{cfg.today ? 'Nothing for today.' : 'Nothing here.'}</div>}
       </div>
     </div>
   )
 }
 
-function collectTodos(d: AppData, pageId: string, subpages: boolean, section?: string | null): { b: Block; pageId: string }[] {
+function collectTodos(d: AppData, pageId: string, subpages: boolean, cfg: Record<string, any>): { b: Block; pageId: string }[] {
   const p = d.pages[pageId]
   if (!p || p.deletedAt) return []
-  const own = sectionBlocks(p.blocks, section).filter((b) => b.type === 'todo' && b.text.trim()).map((b) => ({ b, pageId }))
+  const own = scoped(p, cfg).filter((b) => b.type === 'todo' && b.text.trim()).map((b) => ({ b, pageId }))
   if (!subpages) return own
-  return [...own, ...p.children.flatMap((c) => collectTodos(d, c, true))]
+  return [...own, ...p.children.flatMap((c) => collectTodos(d, c, true, {}))]
 }
 
 function ChecklistWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const d = useData((x) => x)
   const page = cfg.pageId ? d.pages[cfg.pageId] : undefined
   if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
-  const all = collectTodos(d, page.id, !!cfg.subpages, cfg.section)
+  const all = collectTodos(d, page.id, !!cfg.subpages, cfg)
   const done = all.filter((x) => x.b.checked).length
   const list = cfg.hideChecked ? all.filter((x) => !x.b.checked) : all
   return (

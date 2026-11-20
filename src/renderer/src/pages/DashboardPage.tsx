@@ -39,15 +39,16 @@ const patchWidget = (pageId: string, id: string, fn: (w: Widget) => void, key?: 
   act((d) => { const w = d.pages[pageId]?.widgets?.find((x) => x.id === id); if (w) fn(w) }, { key })
 
 /** Widget picker grouped by kind. Used by dashboards and the desktop. */
-export function WidgetGallery({ onPick }: { onPick: (type: WidgetType) => void }): JSX.Element {
+export function WidgetGallery({ onPick, extra }: { onPick: (type: WidgetType) => void; extra?: JSX.Element }): JSX.Element {
   const groups = [...new Set(WIDGETS.map((w) => w.group))]
   return (
     <div className="widget-gallery-groups">
+      {extra}
       {groups.map((g) => (
         <div key={g}>
           <div className="section-label">{g}</div>
           <div className="widget-gallery">
-            {WIDGETS.filter((w) => w.group === g).map((w) => (
+            {WIDGETS.filter((w) => w.group === g && w.type !== 'dashboard').map((w) => (
               <button key={w.type} className="widget-pick glass" onClick={() => onPick(w.type)}>
                 <span className="widget-pick-icon"><Icon name={w.icon} size={18} /></span>
                 <span className="strong">{w.name}</span>
@@ -199,7 +200,6 @@ export function DashboardGrid({ pageId, bare }: { pageId: string; bare?: boolean
             <input type="range" min={48} max={120} value={rowH} onChange={(e) => updatePage(pageId, (p) => { p.view = { ...(p.view ?? {}), rowH: Number(e.target.value) } }, 'rowh:' + pageId)} />
           </>}
           <div className="spacer" />
-          {isDesktop && <Button small kind="ghost" icon="monitor" title="Pin this whole dashboard to your desktop" onClick={() => addDesktopWidget('dashboard', { config: { pageId }, style: { material: 'clear', header: false, padding: 0 }, w: 900, h: 600 })}>Pin to desktop</Button>}
           <Button small kind={editing ? 'primary' : 'default'} icon={editing ? 'check' : 'layout'} onClick={() => act((dd) => { const p = dd.pages[pageId]; p.view = { ...(p.view ?? {}), editing: !editing } }, { history: false })}>{editing ? 'Done' : 'Edit layout'}</Button>
         </div>
       )}

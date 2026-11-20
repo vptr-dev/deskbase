@@ -6,7 +6,8 @@ import { createBackup, dataDir, listBackups, loadData, parseImport, readBackup, 
 import { checkForUpdates, getStatus, initUpdater, installUpdate } from './updater'
 import { registerAi } from './ai'
 import { importNotionExport, importNotionPages, listNotionPages, notionDbPath } from './notion'
-import { attachDesktopHost, closeAllWidgets, deskBounds, deskClose, deskDrag, deskDragEnd, deskEdit, deskMenu, deskPrepare, deskShow, deskUpdate, listDisplays, type DeskSpec } from './desktop'
+import { findPlace, sysStats, weather } from './sysinfo'
+import { attachDesktopHost, closeAllWidgets, deskBounds, deskClose, deskDrag, deskDragEnd, deskEdit, deskFocus, deskMenu, deskPrepare, deskShow, deskUpdate, listDisplays, type DeskSpec } from './desktop'
 
 type Material = 'mica' | 'acrylic' | 'none'
 
@@ -80,8 +81,15 @@ function saveWinState(w: BrowserWindow): void {
 
 // ---------- preferences needed before the renderer loads ----------
 const prefsFile = (): string => path.join(app.getPath('userData'), 'shell-prefs.json')
-interface ShellPrefs { material: Material; theme: 'system' | 'light' | 'dark'; closeToTray: boolean; quickAddHotkey: boolean; desktop: boolean }
-const DEFAULT_PREFS: ShellPrefs = { material: 'mica', theme: 'system', closeToTray: false, quickAddHotkey: true, desktop: false }
+interface ShellPrefs { material: Material; theme: 'system' | 'light' | 'dark'; closeToTray: boolean; quickAddHotkey: boolean; desktop: boolean; autostartSet: boolean }
+const DEFAULT_PREFS: ShellPrefs = { material: 'mica', theme: 'system', closeToTray: false, quickAddHotkey: true, desktop: false, autostartSet: false }
+
+/** Panels belong on the desktop from sign-in: start with Windows (in the tray) unless turned off once. */
+function defaultAutostart(): void {
+  if (!app.isPackaged || !isWin || readPrefs().autostartSet) return
+  try { app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] }) } catch { /* not supported */ }
+  writePrefs({ autostartSet: true })
+}
 function readPrefs(): ShellPrefs {
   try {
     return { ...DEFAULT_PREFS, ...JSON.parse(fs.readFileSync(prefsFile(), 'utf8')) }
@@ -175,11 +183,17 @@ function createWindow(): void {
   if (app.isPackaged) setTimeout(() => checkForUpdates(), 4000)
 }
 // ---------- tray & quick add ----------
+/** Brings the app window in front of other windows (Windows refuses focus() from the tray otherwise). */
 function showWindow(): void {
   if (!mainWindow) return
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
-  mainWindow.focus()
+  if (isWin) {
+    mainWindow.setAlwaysOnTop(true)
+    mainWindow.moveTop()
+    mainWindow.focus()
+    setTimeout(() => mainWindow?.setAlwaysOnTop(false), 80)
+  } else mainWindow.focus()
 }
 
 function openQuickAdd(): void {
@@ -289,15 +303,18 @@ function registerIpc(): void {
   ipcMain.handle('app:notify', (_e, title: string, body: string) => {
     if (Notification.isSupported()) {
       const n = new Notification({ title, body, silent: false })
-      n.on('click', () => { mainWindow?.show(); mainWindow?.focus() })
+      n.on('click', () => showWindow())
       n.show()
     }
   })
 
   ipcMain.handle('app:loginItem', (_e, on?: boolean) => {
-    if (typeof on === 'boolean' && app.isPackaged) app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] })
-    return app.getLoginItemSettings().openAtLogin
+    if (typeof on === 'boolean' && app.isPackaged) { app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] }); writePrefs({ autostartSet: true }) }
+    return app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin
   })
+  ipcMain.handle('sys:stats', (_e, drive?: string) => sysStats(drive))
+  ipcMain.handle('net:places', (_e, q: string) => findPlace(String(q ?? '')))
+  ipcMain.handle('net:weather', (_e, lat: number, lon: number, f: boolean) => weather(Number(lat), Number(lon), !!f))
   ipcMain.handle('app:setShell', async (_e, p: { closeToTray?: boolean; quickAddHotkey?: boolean }) => {
     const next: Partial<ShellPrefs> = {}
     if (typeof p.closeToTray === 'boolean') next.closeToTray = p.closeToTray
@@ -328,6 +345,7 @@ function registerIpc(): void {
   ipcMain.handle('desk:dragEnd', (_e, id: string) => deskDragEnd(id))
   ipcMain.handle('desk:bounds', (_e, id: string) => deskBounds(id))
   ipcMain.handle('desk:menu', (_e, id: string, items) => deskMenu(id, items))
+  ipcMain.handle('desk:focus', (_e, id: string) => deskFocus(id))
   ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
 
@@ -356,6 +374,7 @@ if (!app.requestSingleInstanceLock()) {
     // Same id as the first releases, so the taskbar pin, notifications and the sign-in entry carry over.
     if (isWin) app.setAppUserModelId('com.vptrdev.planner')
     refreshLoginItem()
+    defaultAutostart()
     registerIpc()
     registerAi()
     createWindow()

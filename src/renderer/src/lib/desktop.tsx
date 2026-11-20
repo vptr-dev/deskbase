@@ -70,6 +70,41 @@ export function patchDesk(id: string, fn: (w: DeskWidget) => void, key?: string)
   act((d) => { const w = d.desktop.widgets.find((x) => x.id === id); if (w) fn(w) }, { key })
 }
 
+/**
+ * A ready-made column of panels at the right edge of the main screen: clock and daylight, the month,
+ * the weather, system use and four quick timers. Every piece is its own panel.
+ */
+export async function addDeskSet(): Promise<void> {
+  const displays = await api.displays().catch(() => [])
+  const main = displays.find((d) => d.primary) ?? displays[0]
+  const area = main?.workArea ?? { x: 0, y: 0, width: window.screen.width, height: window.screen.height }
+  const gap = 12
+  const tile = Math.max(170, Math.min(260, Math.floor((area.height - 48 - gap * 3) / 4.2)))
+  const wide = tile * 2 + gap
+  const low = Math.round(tile * 0.92)
+  const x0 = area.x + area.width - 24 - wide
+  let y = area.y + 24
+  const t = Math.floor((tile - gap) / 2)
+  const items: { type: WidgetType; x: number; y: number; w: number; h: number; config?: Record<string, any> }[] = []
+  items.push({ type: 'clock', x: x0, y, w: tile, h: tile, config: { style: 'ring' } })
+  items.push({ type: 'daylight', x: x0 + tile + gap, y, w: tile, h: tile })
+  y += tile + gap
+  items.push({ type: 'calendar', x: x0, y, w: wide, h: low, config: { list: true } })
+  y += low + gap
+  items.push({ type: 'weather', x: x0, y, w: wide, h: low, config: { days: 4 } })
+  y += low + gap
+  items.push({ type: 'system', x: x0, y, w: tile, h: tile })
+  ;[1, 5, 15, 30].forEach((m, i) => items.push({ type: 'timer', x: x0 + tile + gap + (i % 2) * (t + gap), y: y + Math.floor(i / 2) * (t + gap), w: t, h: t, config: { minutes: m } }))
+  act((d) => {
+    d.desktop.enabled = true
+    for (const it of items) {
+      const def = widgetDef(it.type)
+      d.desktop.widgets.push({ id: uid(), type: it.type, config: { ...(def.config ?? {}), ...(it.config ?? {}) }, style: {}, layer: 'desktop', space: d.desktop.active, createdAt: Date.now(), x: it.x, y: it.y, w: it.w, h: it.h })
+    }
+  })
+  toast('Panels added to your desktop')
+}
+
 /** Where a new widget goes: next to the others on the main screen, without overlapping. */
 async function freePlace(w: number, h: number): Promise<{ x: number; y: number }> {
   const displays = await api.displays().catch(() => [])
@@ -84,14 +119,15 @@ async function freePlace(w: number, h: number): Promise<{ x: number; y: number }
 }
 
 const SIZE: Partial<Record<WidgetType, [number, number]>> = {
-  clock: [300, 150], countdown: [220, 170], stat: [220, 170], progress: [220, 220], value: [300, 190], quickadd: [380, 76], page: [260, 80],
-  focus: [300, 170], text: [420, 150], image: [320, 320], week: [560, 150], calendar: [300, 330], chart: [380, 260]
+  clock: [260, 260], countdown: [220, 170], stat: [220, 170], progress: [220, 220], value: [300, 190], quickadd: [380, 76], page: [260, 80],
+  focus: [300, 170], text: [420, 150], image: [320, 320], week: [560, 150], calendar: [560, 270], chart: [380, 260],
+  weather: [560, 270], daylight: [260, 260], system: [260, 260], timer: [128, 128], sections: [320, 420], table: [440, 260], tasks: [320, 300]
 }
 
 export async function addDesktopWidget(type: WidgetType, init: Partial<DeskWidget> = {}): Promise<string> {
   const def = widgetDef(type)
   const [w, h] = init.w && init.h ? [init.w, init.h] : SIZE[type] ?? [Math.max(240, def.w * 80), Math.max(140, def.h * 76)]
-  const pos = await freePlace(w, h)
+  const pos = typeof init.x === 'number' && typeof init.y === 'number' ? { x: init.x, y: init.y } : await freePlace(w, h)
   const id = uid()
   act((d) => {
     d.desktop.enabled = true
@@ -110,6 +146,8 @@ async function showMenu(id: string, editable: boolean): Promise<void> {
   const d = getData()
   const page = typeof w.config.pageId === 'string' ? d.pages[w.config.pageId] : undefined
   const allLocked = activePanels(d.desktop).every((x) => x.locked)
+  const st = fullStyle(d.desktop.style, w.style)
+  const touching = touchingPanels(w).length > 1
   const items: DeskMenuItem[] = [
     ...(editable ? [
       { id: 'cut', label: 'Cut', role: 'cut' },
@@ -120,12 +158,13 @@ async function showMenu(id: string, editable: boolean): Promise<void> {
     { id: 'lock', label: w.locked ? 'Unlock movement' : 'Lock movement' },
     { id: 'edit', label: 'Edit panel…' },
     ...(page?.source?.kind === 'notion' ? [{ id: 'refresh', label: 'Refresh from Notion' }] : []),
+    ...(w.type === 'timer' ? [
+      { id: 'timer-reset', label: 'Reset timer' },
+      { id: 'timer-len', label: 'Length', submenu: [1, 2, 5, 10, 15, 20, 25, 30, 45, 60, 90].map((n) => ({ id: 'timer:' + n, label: n + ' min', checked: Number(w.config.minutes || 5) === n })) }
+    ] as DeskMenuItem[] : []),
     { id: 'sep1', label: '', type: 'separator' },
-    { id: 'layer', label: 'Stay', submenu: [
-      { id: 'layer:desktop', label: 'On the desktop', checked: w.layer === 'desktop' },
-      { id: 'layer:normal', label: 'Like a window', checked: w.layer === 'normal' },
-      { id: 'layer:top', label: 'Always on top', checked: w.layer === 'top' }
-    ] },
+    ...(w.group ? [{ id: 'ungroup', label: 'Separate from group' }] : touching ? [{ id: 'group', label: 'Combine with touching panels' }] : []),
+    ...(widgetTitle(w, d) ? [{ id: 'header', label: 'Show title', checked: st.header }] : []),
     { id: 'click', label: 'Click-through', checked: !!(w.config.clickThrough) },
     { id: 'sep2', label: '', type: 'separator' },
     { id: 'arrange', label: editing ? 'Done arranging' : 'Arrange panels' },
@@ -156,6 +195,27 @@ export function runCommand(id: string, cmd: string): void {
   switch (cmd) {
     case 'edit': useDesk.setState({ selected: id }); openView('@desktop'); break
     case 'lock': patchDesk(id, (x) => { x.locked = !x.locked }); break
+    case 'header': {
+      const on = fullStyle(getData().desktop.style, w.style).header
+      patchDesk(id, (x) => { x.style = { ...x.style, header: !on } })
+      break
+    }
+    case 'group': {
+      const ids = touchingPanels(w).map((x) => x.id)
+      const gid = getData().desktop.widgets.find((x) => ids.includes(x.id) && x.group)?.group ?? uid()
+      act((d) => { for (const x of d.desktop.widgets) if (ids.includes(x.id) || (x.group && d.desktop.widgets.some((y) => ids.includes(y.id) && y.group === x.group))) x.group = gid })
+      toast(`${ids.length} panels now move together`)
+      break
+    }
+    case 'ungroup':
+      act((d) => {
+        const g = w.group
+        for (const x of d.desktop.widgets) if (x.id === id) x.group = null
+        const rest = d.desktop.widgets.filter((x) => x.group === g)
+        if (rest.length < 2) for (const x of rest) x.group = null
+      })
+      break
+    case 'timer-reset': patchDesk(id, (x) => { x.config.endsAt = null; x.config.left = null }); break
     case 'refresh':
       if (typeof w.config.pageId === 'string') refreshFromNotion([w.config.pageId]).catch(() => toast('Could not refresh from Notion'))
       break
@@ -175,8 +235,22 @@ export function runCommand(id: string, cmd: string): void {
     case 'hide': patchDesk(id, (x) => { x.hidden = true }); toast('Panel hidden. Show it again from the Desktop page.', { undo: true }); break
     case 'remove': act((d) => { d.desktop.widgets = d.desktop.widgets.filter((x) => x.id !== id) }); toast('Panel removed', { undo: true }); break
     default:
-      if (cmd.startsWith('layer:')) patchDesk(id, (x) => { x.layer = cmd.slice(6) as DeskWidget['layer'] })
+      if (cmd.startsWith('timer:')) patchDesk(id, (x) => { x.config.minutes = Number(cmd.slice(6)) || 5; x.config.endsAt = null; x.config.left = null })
   }
+}
+
+/** This panel and every panel that touches it (directly or through others), in the workspace on screen. */
+export function touchingPanels(w: DeskWidget): DeskWidget[] {
+  const list = activePanels().filter((x) => !x.hidden)
+  const near = (a: DeskWidget, b: DeskWidget): boolean => {
+    const t = 24
+    const overlapX = a.x < b.x + b.w + t && b.x < a.x + a.w + t
+    const overlapY = a.y < b.y + b.h + t && b.y < a.y + a.h + t
+    return overlapX && overlapY
+  }
+  const out = [w]
+  for (let i = 0; i < out.length; i++) for (const x of list) if (!out.includes(x) && near(out[i], x)) out.push(x)
+  return out
 }
 
 // ---------- the widget inside its window ----------
@@ -193,28 +267,55 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
   const title = widgetTitle(w, data)
   const movable = editing || !w.locked
 
+  // Drag anywhere on a panel. On buttons and links it starts once the pointer has moved a little,
+  // so a plain click still clicks; text fields never drag.
   const drag = (e: React.PointerEvent, mode: 'move' | 'resize'): void => {
     if (e.button !== 0 || !movable) return
     const t = e.target as HTMLElement
-    if (mode === 'move' && !editing && t.closest('button, input, textarea, select, a, label, .check')) return
-    e.preventDefault()
+    if (mode === 'move' && !editing && t.closest('input, textarea, select, [contenteditable="true"]')) return
+    const soft = mode === 'move' && !editing && !!t.closest('button, a, label, .check, .mb-todo')
     e.stopPropagation()
+    const sx = e.screenX
+    const sy = e.screenY
+    const pid = e.pointerId
     const el = e.currentTarget as HTMLElement
-    el.setPointerCapture(e.pointerId)
-    api.desk.drag(id, 'start', e.screenX, e.screenY, mode, e.altKey, grid)
-    doc.documentElement.classList.add('dw-dragging')
-    const move = (ev: PointerEvent): void => api.desk.drag(id, 'move', ev.screenX, ev.screenY, mode, ev.altKey, grid)
-    const up = async (): Promise<void> => {
-      el.removeEventListener('pointermove', move)
-      el.removeEventListener('pointerup', up)
-      el.removeEventListener('pointercancel', up)
-      doc.documentElement.classList.remove('dw-dragging')
-      const b = await api.desk.dragEnd(id)
-      if (b) patchDesk(id, (x) => { x.x = b.x; x.y = b.y; x.w = b.width; x.h = b.height })
+    const win = doc.defaultView ?? window
+    let started = false
+    const begin = (alt: boolean): void => {
+      started = true
+      try { el.setPointerCapture(pid) } catch { /* pointer already gone */ }
+      api.desk.drag(id, 'start', sx, sy, mode, alt, grid)
+      doc.documentElement.classList.add('dw-dragging')
     }
-    el.addEventListener('pointermove', move)
-    el.addEventListener('pointerup', up)
-    el.addEventListener('pointercancel', up)
+    if (!soft) { e.preventDefault(); begin(e.altKey) }
+    const move = (ev: PointerEvent): void => {
+      if (!started) { if (Math.hypot(ev.screenX - sx, ev.screenY - sy) < 5) return; begin(ev.altKey) }
+      api.desk.drag(id, 'move', ev.screenX, ev.screenY, mode, ev.altKey, grid)
+    }
+    const up = async (): Promise<void> => {
+      win.removeEventListener('pointermove', move)
+      win.removeEventListener('pointerup', up)
+      win.removeEventListener('pointercancel', up)
+      if (!started) return
+      doc.documentElement.classList.remove('dw-dragging')
+      if (soft) {
+        const swallow = (ce: Event): void => { ce.stopPropagation(); ce.preventDefault() }
+        win.addEventListener('click', swallow, { capture: true, once: true })
+        setTimeout(() => win.removeEventListener('click', swallow, { capture: true }), 60)
+      }
+      const moved = await api.desk.dragEnd(id)
+      if (moved.length) {
+        act((d) => {
+          for (const b of moved) {
+            const x = d.desktop.widgets.find((y) => y.id === b.id)
+            if (x) { x.x = b.x; x.y = b.y; x.w = b.width; x.h = b.height }
+          }
+        })
+      }
+    }
+    win.addEventListener('pointermove', move)
+    win.addEventListener('pointerup', up)
+    win.addEventListener('pointercancel', up)
   }
 
   return (
@@ -224,10 +325,18 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
         data-theme={st.theme === 'auto' ? undefined : st.theme}
         style={widgetVars(st)}
         onContextMenu={(e) => { e.preventDefault(); showMenu(id, !!(e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) }}
-        onPointerDown={(e) => { if (editing) useDesk.setState({ selected: id }) ; if (!st.header || editing) drag(e, 'move') }}
+        onPointerDown={(e) => {
+          if (editing) useDesk.setState({ selected: id })
+          // Panels don't take focus on a click; a text field asks for it so you can type.
+          if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) {
+            const field = e.target as HTMLElement
+            api.desk.focus(id).then(() => field.focus()).catch(() => {})
+          }
+          drag(e, 'move')
+        }}
       >
         {st.header && title && (
-          <div className="dw-head" onPointerDown={(e) => drag(e, 'move')}>
+          <div className="dw-head">
             <span className="widget-title ellipsis">{title}</span>
           </div>
         )}
@@ -252,8 +361,8 @@ function specOf(w: DeskWidget, base: WidgetStyle): DeskSpec {
   const st = fullStyle(base, w.style, surfaceMaterial(getData().settings.look, true))
   return {
     id: w.id, x: w.x, y: w.y, w: w.w, h: w.h, displayId: w.config.displayId ?? null,
-    material: st.material === 'auto' ? 'glass' : st.material, layer: w.layer, radius: st.radius, clickThrough: !!w.config.clickThrough,
-    title: widgetTitle(w, getData()) || widgetDef(w.type).name
+    material: st.material === 'auto' ? 'glass' : st.material, layer: 'desktop', radius: st.radius, clickThrough: !!w.config.clickThrough,
+    title: widgetTitle(w, getData()) || widgetDef(w.type).name, group: w.group ?? null
   }
 }
 const same = (a: DeskSpec, b: DeskSpec): boolean => JSON.stringify(a) === JSON.stringify(b)

@@ -63,6 +63,8 @@ export const DEFAULT_LOOK: Look = {
   preset: 'glass',
   surface: 'glass',
   panelSurface: 'same',
+  border: 60,
+  borderWidth: 1,
   radius: 16,
   blur: 28,
   shine: 70,
@@ -106,6 +108,16 @@ export const DEFAULT_DESKTOP: Desktop = { enabled: true, spaces: [MAIN_SPACE], a
 
 export const COLORS = ['#0a84ff', '#5e5ce6', '#bf5af2', '#ff375f', '#ff453a', '#ff9f0a', '#e5b000', '#30d158', '#00c7be', '#40c8e0', '#8e8e93', '#a2845e']
 
+/** New data follows the system clock: 24-hour unless the locale writes 12-hour times. */
+function localUses24h(): boolean {
+  try {
+    const hc = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hourCycle
+    return hc === 'h23' || hc === 'h24'
+  } catch {
+    return false
+  }
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   accent: '#0a84ff',
@@ -116,7 +128,9 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarWidth: 248,
   sidebarCollapsed: false,
   weekStart: 1,
-  use24h: false,
+  use24h: localUses24h(),
+  place: null,
+  fahrenheit: false,
   startPage: 'last',
   lastPage: null,
   focusMinutes: 25,
@@ -298,6 +312,8 @@ export function normalizeLook(raw: any): Look {
     preset: typeof l.preset === 'string' ? l.preset : D.preset,
     surface: SURFACES.includes(l.surface) ? l.surface : D.surface,
     panelSurface: l.panelSurface === 'same' || SURFACES.includes(l.panelSurface) ? l.panelSurface : 'same',
+    border: num(l.border, 0, 100, D.border),
+    borderWidth: num(l.borderWidth, 0, 3, D.borderWidth),
     radius: num(l.radius, 0, 32, D.radius),
     blur: num(l.blur, 0, 80, D.blur),
     shine: num(l.shine, 0, 100, D.shine),
@@ -325,6 +341,9 @@ function normalizeSettings(raw: any): Settings {
   delete s.widget
   s.look = normalizeLook(raw?.look)
   s.notionSync = s.notionSync !== false
+  const pl = raw?.place
+  s.place = pl && typeof pl === 'object' && Number.isFinite(pl.lat) && Number.isFinite(pl.lon) ? { name: String(pl.name ?? '').slice(0, 80), lat: Number(pl.lat), lon: Number(pl.lon) } : null
+  s.fahrenheit = s.fahrenheit === true
   s.backdrop = BACKDROPS.some((b) => b.id === s.backdrop) ? s.backdrop : 'sky'
   return s
 }
@@ -380,11 +399,13 @@ function normalizeDesktop(raw: any): Desktop {
         config: obj(w.config),
         x: num(w.x, -100000, 100000, 0),
         y: num(w.y, -100000, 100000, 0),
-        w: num(w.w, -1, 20000, 0),
-        h: num(w.h, -1, 20000, 0),
+        // Panels are always a set size now (no full-screen panels).
+        w: Number(w.w) > 0 ? num(w.w, 120, 20000, 300) : 900,
+        h: Number(w.h) > 0 ? num(w.h, 64, 20000, 200) : 600,
         style: normalizeStyle(w.style, true),
-        layer: ['desktop', 'normal', 'top'].includes(w.layer) ? w.layer : 'desktop',
+        layer: 'desktop',
         locked: Boolean(w.locked),
+        group: typeof w.group === 'string' && w.group ? w.group : null,
         hidden: Boolean(w.hidden),
         space: known.has(w.space) ? w.space : active,
         createdAt: Number(w.createdAt) || Date.now()

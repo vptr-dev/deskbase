@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react'
-import { useData } from '../store'
+import { setSettings, useData } from '../store'
+import type { Place } from '../types'
+
+const setSettingsPlace = (p: Place): void => setSettings((s) => { s.place = p })
+const setFahrenheit = (f: boolean): void => setSettings((s) => { s.fahrenheit = f })
 import type { DeskMaterial, Page, WidgetStyle } from '../types'
 import { STATS, type AnyWidget, widgetTitle } from './Widgets'
 import { createValue } from './Values'
@@ -7,6 +11,7 @@ import { Button, Segmented, Toggle } from './ui'
 import { Icon } from './Icon'
 import { pickImageData } from '../lib/image'
 import { FONT_CHOICES } from '../lib/look'
+import { PlaceSearch } from './PanelKit'
 
 export function Field({ label, children, sub }: { label: string; children: ReactNode; sub?: string }): JSX.Element {
   return (
@@ -51,7 +56,16 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   const flagProps = db?.props.filter((p) => ['status', 'select', 'multi', 'checkbox'].includes(p.type)) ?? []
   const flagProp = flagProps.find((p) => p.id === c.prop)
   const page = c.pageId ? d.pages[c.pageId] : undefined
-  const headings = page ? page.blocks.filter((b) => ['h1', 'h2', 'h3'].includes(b.type) && b.text.trim()).map((b) => b.text.trim()) : []
+  const headings = page ? page.blocks.filter((b) => ['h1', 'h2', 'h3', 'toggle'].includes(b.type) && b.text.trim()).map((b) => b.text.trim()) : []
+  const tables = page ? page.blocks.filter((b) => b.type === 'table' && b.rows?.length) : []
+  const table = tables[Number(c.table) || 0]
+  const placeField = (
+    <Field label="Place" sub={c.place ? '' : d.settings.place ? `Same as other panels: ${d.settings.place.name}` : ''}>
+      {c.place && <span className="chip">{c.place.name}</span>}
+      {c.place && <Button small kind="ghost" onClick={() => set('place', null)}>Use the shared place</Button>}
+      <PlaceSearch compact onPick={(p) => (d.settings.place ? set('place', p) : setSettingsPlace(p))} />
+    </Field>
+  )
 
   const valuePicker = (
     <Field label="Value">
@@ -85,7 +99,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
     </>
   )
   const sectionPicker = page && headings.length > 0 && (
-    <Field label="Section" sub="Only what's under one heading">
+    <Field label="Section" sub="Only what's under one heading or toggle">
       <select className="input input-sm grow" value={c.section ?? ''} onChange={(e) => set('section', e.target.value || null)}>
         <option value="">Whole page</option>
         {[...new Set(headings)].map((h) => <option key={h} value={h}>{h}</option>)}
@@ -153,14 +167,76 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
       {(w.type === 'pageview' || w.type === 'checklist') && <>
         <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs.filter((p) => p.type === 'doc')} onChange={(v) => patch((x) => { x.config.pageId = v; x.config.section = null })} /></Field>
         {sectionPicker}
+        <Field label="Only today" sub="The part that starts with today's weekday"><Toggle checked={!!c.today} onChange={(v) => set('today', v)} /></Field>
         {w.type === 'checklist' && <Field label="Include subpages"><Toggle checked={!!c.subpages} onChange={(v) => set('subpages', v)} /></Field>}
         <Field label="Hide checked items"><Toggle checked={!!c.hideChecked} onChange={(v) => set('hideChecked', v)} /></Field>
         {page?.source?.kind === 'notion' && <div className="field-note"><Icon name="refresh" size={13} /> This page comes from Notion and refreshes on its own.</div>}
       </>}
       {w.type === 'dashboard' && <Field label="Dashboard"><PagePicker value={c.pageId ?? ''} pages={docs.filter((p) => p.type === 'dashboard')} onChange={(v) => set('pageId', v)} /></Field>}
       {w.type === 'clock' && <>
-        <Field label="Style"><Segmented small value={c.style ?? 'digital'} onChange={(v) => set('style', v)} options={[{ value: 'digital', label: 'Digital' }, { value: 'big', label: 'Stacked' }, { value: 'analog', label: 'Analog' }]} /></Field>
-        <Field label="Seconds"><Toggle checked={!!c.seconds} onChange={(v) => set('seconds', v)} /></Field>
+        <Field label="Style"><Segmented small value={c.style ?? 'digital'} onChange={(v) => set('style', v)} options={[{ value: 'ring', label: 'Ring' }, { value: 'digital', label: 'Digital' }, { value: 'big', label: 'Stacked' }, { value: 'analog', label: 'Analog' }]} /></Field>
+        {c.style === 'ring' ? <Field label="Date"><Toggle checked={c.date !== false} onChange={(v) => set('date', v)} /></Field> : <Field label="Seconds"><Toggle checked={!!c.seconds} onChange={(v) => set('seconds', v)} /></Field>}
+      </>}
+      {w.type === 'calendar' && <>
+        <Field label="Today's list"><Toggle checked={c.list !== false} onChange={(v) => set('list', v)} /></Field>
+        <Field label="Month name"><Toggle checked={c.title !== false} onChange={(v) => set('title', v)} /></Field>
+      </>}
+      {w.type === 'weather' && <>
+        {placeField}
+        <Field label="Days ahead"><Segmented small value={Number(c.days ?? 4)} onChange={(v) => set('days', v)} options={[0, 3, 4, 5, 6].map((n) => ({ value: n, label: n ? String(n) : 'None' }))} /></Field>
+        <Field label="Chance of rain"><Toggle checked={!!c.rain} onChange={(v) => set('rain', v)} /></Field>
+        <Field label="Units"><Segmented small value={d.settings.fahrenheit ? 'f' : 'c'} onChange={(v) => setFahrenheit(v === 'f')} options={[{ value: 'c', label: '°C' }, { value: 'f', label: '°F' }]} /></Field>
+      </>}
+      {w.type === 'daylight' && <>
+        {placeField}
+        <Field label="Other time" sub="Sunrise or sunset under the horizon"><Toggle checked={c.other !== false} onChange={(v) => set('other', v)} /></Field>
+        <Field label="Place name"><Toggle checked={!!c.showPlace} onChange={(v) => set('showPlace', v)} /></Field>
+      </>}
+      {w.type === 'system' && <>
+        <Field label="Show">
+          <label className="row gap-xs small"><Toggle checked={c.cpu !== false} onChange={(v) => set('cpu', v)} />CPU</label>
+          <label className="row gap-xs small"><Toggle checked={c.ram !== false} onChange={(v) => set('ram', v)} />Memory</label>
+          <label className="row gap-xs small"><Toggle checked={c.disk !== false} onChange={(v) => set('disk', v)} />Disk</label>
+        </Field>
+        <Field label="Look"><Segmented small value={c.look ?? 'rings'} onChange={(v) => set('look', v)} options={[{ value: 'rings', label: 'Rings' }, { value: 'bars', label: 'Bars' }]} /></Field>
+        <Field label="Details"><Toggle checked={!!c.details} onChange={(v) => set('details', v)} /></Field>
+        <Field label="Disk"><input className="input input-sm w-60" maxLength={1} placeholder="C" value={c.drive ?? ''} onChange={(e) => set('drive', e.target.value.replace(/[^a-z]/gi, '').toUpperCase())} /><input className="input input-sm w-80" placeholder="SSD" value={c.diskLabel ?? ''} onChange={(e) => set('diskLabel', e.target.value)} /></Field>
+      </>}
+      {w.type === 'timer' && <>
+        <Field label="Minutes"><input className="input input-sm w-80" type="number" min={1} max={600} value={c.minutes ?? 5} onChange={(e) => patch((x) => { x.config.minutes = Math.max(1, Math.min(600, Number(e.target.value) || 1)); x.config.endsAt = null; x.config.left = null })} /></Field>
+        <Field label="Label"><input className="input input-sm grow" placeholder="Optional" value={c.label ?? ''} onChange={(e) => set('label', e.target.value)} /></Field>
+      </>}
+      {(w.type === 'sections' || w.type === 'table') && (
+        <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs.filter((p) => p.type === 'doc' && (w.type === 'sections' || p.blocks.some((b) => b.type === 'table')))} onChange={(v) => patch((x) => { x.config.pageId = v; x.config.section = null; x.config.table = 0; x.config.sumCol = -1; x.config.dayCol = -1 })} /></Field>
+      )}
+      {w.type === 'sections' && <>
+        {sectionPicker}
+        <Field label="Show next" sub="To-dos when you open a section"><Segmented small value={Number(c.next ?? 3)} onChange={(v) => set('next', v)} options={[1, 3, 5, 8].map((n) => ({ value: n, label: String(n) }))} /></Field>
+        <Field label="Overall %"><Toggle checked={c.total !== false} onChange={(v) => set('total', v)} /></Field>
+      </>}
+      {w.type === 'table' && page && <>
+        {tables.length > 1 && (
+          <Field label="Table">
+            <select className="input input-sm grow" value={Number(c.table) || 0} onChange={(e) => patch((x) => { x.config.table = Number(e.target.value); x.config.sumCol = -1; x.config.dayCol = -1 })}>
+              {tables.map((t, i) => <option key={t.id} value={i}>{(t.rows?.[0] ?? []).filter(Boolean).join(', ') || `Table ${i + 1}`}</option>)}
+            </select>
+          </Field>
+        )}
+        {table && <>
+          <Field label="Total of">
+            <select className="input input-sm" value={c.sumCol ?? -1} onChange={(e) => set('sumCol', Number(e.target.value))}>
+              <option value={-1}>No total</option>
+              {(table.rows?.[0] ?? []).map((h, i) => <option key={i} value={i}>{h || `Column ${i + 1}`}</option>)}
+            </select>
+            <input className="input input-sm w-60" placeholder="£" value={c.prefix ?? ''} onChange={(e) => set('prefix', e.target.value.slice(0, 3))} />
+          </Field>
+          <Field label="Day of month" sub="Sort by the next date in this column">
+            <select className="input input-sm" value={c.dayCol ?? -1} onChange={(e) => set('dayCol', Number(e.target.value))}>
+              <option value={-1}>None</option>
+              {(table.rows?.[0] ?? []).map((h, i) => <option key={i} value={i}>{h || `Column ${i + 1}`}</option>)}
+            </select>
+          </Field>
+        </>}
       </>}
       {w.type === 'countdown' && <>
         <Field label="What"><input className="input input-sm" value={c.title ?? ''} placeholder="Trip, launch, birthday…" onChange={(e) => set('title', e.target.value)} /></Field>

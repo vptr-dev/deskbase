@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Desktop panels behave like desktop skins: they sit under every window, clicking one never brings it forward, and they no longer stay on top. Typing in a panel and its right-click menu still work. They remain normal windows, so desktop effects like falling snow still land on them.
+- Every card is its own panel. A full-screen dashboard from earlier versions is split into separate panels you can move one by one.
+- New panels: ring clock, sunrise and sunset, weather (no account or key, set your place in Settings), system use (CPU, memory, disk), one-click timers, study progress by section, and table totals with the next charge date.
+- Month panel with a Today list beside the calendar.
+- Desk set: one click adds a column with clock, daylight, month, weather, system and 1, 5, 15 and 30 minute timers, each a separate panel.
+- Combine panels: right-click to join touching panels into a group that moves together, or separate them again.
+- Drag a panel from anywhere, buttons included; a click still works as a click.
+- Page panels can show only today's part of a page, for example today's plan or today's workout.
+- Borders follow the style: a Borders strength slider and border width (none, thin, medium, thick) in Appearance, for the app and the panels.
+- Deskbase starts with Windows by default (turn it off in Settings), and opening the app brings its window to the front.
+- Time format follows your system clock for new setups.
+- Fixed panel layouts at small sizes: quick add, week numbers, system rings and more now scale with the panel.
+
 ## 0.7.0 — 2026-11-19
 
 - One look everywhere: windows, cards and desktop panels share the same surface. The new default is clear glass with a light edge (the 0.5 desktop look), in light and dark.

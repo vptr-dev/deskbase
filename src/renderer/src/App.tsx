@@ -31,7 +31,7 @@ import { ValuesDialog } from './components/Values'
 import { applyImport, refreshFromNotion } from './lib/importer'
 import { isDesktop } from './lib/api'
 import { applyCustomCss, applyLook } from './lib/look'
-import { addDesktopWidget, addSpace, runCommand, startDesktop, switchSpace } from './lib/desktop'
+import { addDeskSet, addDesktopWidget, addSpace, runCommand, startDesktop, switchSpace } from './lib/desktop'
 
 // Browser preview only: lets an import result be applied from the dev console for testing.
 if (!isDesktop) (window as any).__deskApplyImport = applyImport
@@ -271,10 +271,9 @@ function useNotionSync(): void {
 function useDesktopWidgets(): void {
   const ready = useApp((s) => s.ready)
   useEffect(() => (ready ? startDesktop() : undefined), [ready])
-  // Unpackaged runs only: lets automated checks drive the desktop panels.
+  // Unpackaged runs and the browser preview only: lets automated checks drive the app.
   useEffect(() => {
-    if (!isDesktop) return
-    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, runCommand, addSpace, switchSpace } }).catch(() => {})
+    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, addDeskSet, runCommand, addSpace, switchSpace, applyImport, api } }).catch(() => {})
   }, [])
 }
 

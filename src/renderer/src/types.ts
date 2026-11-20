@@ -111,6 +111,7 @@ export type WidgetType =
   | 'value' | 'chart' | 'progress' | 'tasks' | 'habits' | 'database' | 'calendar' | 'clock'
   | 'note' | 'countdown' | 'focus' | 'quickadd' | 'stat' | 'page' | 'goals'
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
+  | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
 export interface Widget {
   id: string
   type: WidgetType
@@ -168,6 +169,8 @@ export interface DeskWidget {
   layer: DeskLayer
   locked?: boolean
   hidden?: boolean
+  /** panels sharing a group id move together */
+  group?: string | null
   /** workspace this panel belongs to */
   space: string
   createdAt: number
@@ -200,6 +203,10 @@ export interface Look {
   /** surface of the app and, unless panelSurface says otherwise, the desktop panels */
   surface: Surface
   panelSurface: 'same' | Surface
+  /** border strength 0-100 for windows, cards and panels */
+  border: number
+  /** border width in px (0 hides borders) */
+  borderWidth: number
   radius: number
   /** blur of glass panels in px */
   blur: number
@@ -384,8 +391,13 @@ export interface FocusSession {
 }
 
 
+/** A place for weather and daylight. */
+export interface Place { name: string; lat: number; lon: number }
 export interface Settings {
   theme: 'system' | 'light' | 'dark'
+  /** where weather and daylight panels look, unless a panel picks its own place */
+  place: Place | null
+  fahrenheit: boolean
   accent: string
   material: 'mica' | 'acrylic' | 'none'
   fontSize: number

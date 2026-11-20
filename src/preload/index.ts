@@ -24,6 +24,9 @@ const api = {
     return () => ipcRenderer.removeListener('app:openPage', fn)
   },
   showMain: () => ipcRenderer.invoke('app:showMain'),
+  sysStats: (drive?: string) => ipcRenderer.invoke('sys:stats', drive),
+  places: (q: string) => ipcRenderer.invoke('net:places', q),
+  weather: (lat: number, lon: number, f: boolean) => ipcRenderer.invoke('net:weather', lat, lon, f),
   desk: {
     active: (on: boolean, spaces?: { id: string; name: string }[], current?: string) => ipcRenderer.invoke('desk:active', on, spaces, current),
     prepare: (spec: unknown) => ipcRenderer.invoke('desk:prepare', spec),
@@ -35,6 +38,7 @@ const api = {
     dragEnd: (id: string) => ipcRenderer.invoke('desk:dragEnd', id),
     bounds: (id: string) => ipcRenderer.invoke('desk:bounds', id),
     menu: (id: string, items: unknown) => ipcRenderer.invoke('desk:menu', id, items),
+    focus: (id: string) => ipcRenderer.invoke('desk:focus', id),
     onClosed: (cb: (id: string) => void) => {
       const fn = (_e: unknown, id: string): void => cb(id)
       ipcRenderer.on('desk:closed', fn)

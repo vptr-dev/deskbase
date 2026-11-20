@@ -145,6 +145,8 @@ export function AppearancePage(): JSX.Element {
 
       <Section title="Surface" icon="layers">
         <SurfacePick value={l.surface} onChange={(v) => setLook({ surface: v })} />
+        <Row label="Borders" sub="Edges of windows, cards and panels"><Slider value={l.border} min={0} max={100} unit="%" onChange={(v) => setLook({ border: v }, 'border')} /></Row>
+        <Row label="Border width"><Segmented small value={l.borderWidth} onChange={(v) => setLook({ borderWidth: v })} options={[{ value: 0, label: 'None' }, { value: 1, label: 'Thin' }, { value: 1.5, label: 'Medium' }, { value: 2, label: 'Thick' }]} /></Row>
         <Row label="Desktop panels" sub="Give the panels on your desktop their own surface">
           <Segmented small value={l.panelSurface} onChange={(v) => setLook({ panelSurface: v })} options={[{ value: 'same', label: 'Same' }, ...SURFACES.map((o) => ({ value: o.value, label: o.name }))]} />
         </Row>
@@ -212,7 +214,7 @@ export function AppearancePage(): JSX.Element {
           <Row label="Blur"><Slider value={l.blur} min={0} max={80} unit="px" onChange={(v) => setLook({ blur: v }, 'blur')} /></Row>
           <Row label="Color through glass"><Slider value={l.saturation} min={100} max={220} unit="%" onChange={(v) => setLook({ saturation: v }, 'sat')} /></Row>
         </>}
-        <Row label="Edge shine"><Slider value={l.shine} min={0} max={100} unit="%" onChange={(v) => setLook({ shine: v }, 'shine')} /></Row>
+        <Row label="Top highlight"><Slider value={l.shine} min={0} max={100} unit="%" onChange={(v) => setLook({ shine: v }, 'shine')} /></Row>
         <Row label="Shadow depth"><Slider value={l.shadow} min={0} max={100} unit="%" onChange={(v) => setLook({ shadow: v }, 'shadow')} /></Row>
       </Section>
 

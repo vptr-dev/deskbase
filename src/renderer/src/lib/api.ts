@@ -41,6 +41,9 @@ export interface Bridge {
   displays(): Promise<DisplayInfo[]>
   onOpenPage(cb: (id: string) => void): () => void
   showMain(): Promise<void>
+  sysStats(drive?: string): Promise<SysStats>
+  places(q: string): Promise<Place[]>
+  weather(lat: number, lon: number, fahrenheit: boolean): Promise<any>
   desk: {
     active(on: boolean, spaces?: { id: string; name: string }[], current?: string): Promise<void>
     prepare(spec: DeskSpec): Promise<Rect>
@@ -49,9 +52,10 @@ export interface Bridge {
     close(id: string): Promise<void>
     edit(on: boolean): Promise<void>
     drag(id: string, phase: 'start' | 'move', x: number, y: number, mode: 'move' | 'resize', free: boolean, grid: number): void
-    dragEnd(id: string): Promise<Rect | null>
+    dragEnd(id: string): Promise<(Rect & { id: string })[]>
     bounds(id: string): Promise<Rect | null>
     menu(id: string, items: DeskMenuItem[]): Promise<string | null>
+    focus(id: string): Promise<void>
     onClosed(cb: (id: string) => void): () => void
     onCommand(cb: (id: string, cmd: string) => void): () => void
   }
@@ -185,6 +189,17 @@ const browserBridge: Bridge = {
   },
   onOpenPage: () => () => {},
   showMain: async () => {},
+  // Preview stand-ins: fixed numbers, no network.
+  sysStats: async () => ({ cpu: 29, ram: 61, ramUsed: 9.8e9, ramTotal: 16e9, disk: 63, diskFree: 180e9, diskTotal: 480e9, uptime: 36000 }),
+  places: async (q: string) => (q.trim() ? [{ name: q.trim(), region: '', country: 'Preview', lat: 52.33, lon: -0.18 }] : []),
+  weather: async () => {
+    const day = (i: number): string => new Date(Date.now() + i * 864e5).toISOString().slice(0, 10)
+    const days = Array.from({ length: 7 }, (_, i) => day(i))
+    return {
+      current: { temperature_2m: 7, apparent_temperature: 5, weather_code: 45, is_day: 1, wind_speed_10m: 9, relative_humidity_2m: 93 },
+      daily: { time: days, weather_code: [45, 2, 0, 3, 2, 61, 1], temperature_2m_max: [6, 9, 8, 8, 7, 10, 9], temperature_2m_min: [1, -2, 1, 1, 2, 4, 3], sunrise: days.map((d) => d + 'T07:28'), sunset: days.map((d) => d + 'T16:04'), precipitation_probability_max: [20, 5, 0, 10, 15, 70, 10] }
+    }
+  },
   desk: {
     active: async () => {},
     prepare: async (s) => ({ x: s.x, y: s.y, width: s.w, height: s.h }),
@@ -193,9 +208,10 @@ const browserBridge: Bridge = {
     close: async () => {},
     edit: async () => {},
     drag: () => {},
-    dragEnd: async () => null,
+    dragEnd: async () => [],
     bounds: async () => null,
     menu: async () => null,
+    focus: async () => {},
     onClosed: () => () => {},
     onCommand: () => () => {}
   },
@@ -219,5 +235,7 @@ export const isDesktop = Boolean((window as any).api)
 
 export interface Rect { x: number; y: number; width: number; height: number }
 export interface DisplayInfo { id: number; label: string; primary: boolean; width: number; height: number; scale: number; bounds: Rect; workArea: Rect }
-export interface DeskSpec { id: string; x: number; y: number; w: number; h: number; displayId?: number | null; material: 'glass' | 'blur' | 'acrylic' | 'tint' | 'clear'; layer: 'desktop' | 'normal' | 'top'; radius: number; clickThrough: boolean; title: string }
+export interface DeskSpec { id: string; x: number; y: number; w: number; h: number; displayId?: number | null; material: 'glass' | 'blur' | 'acrylic' | 'tint' | 'clear'; layer: 'desktop' | 'normal' | 'top'; radius: number; clickThrough: boolean; title: string; group?: string | null }
+export interface SysStats { cpu: number; ram: number; ramUsed: number; ramTotal: number; disk: number; diskFree: number; diskTotal: number; uptime: number }
+export interface Place { name: string; region: string; country: string; lat: number; lon: number }
 export interface DeskMenuItem { id: string; label: string; checked?: boolean; type?: 'separator'; role?: 'cut' | 'copy' | 'paste'; submenu?: { id: string; label: string; checked?: boolean }[] }
