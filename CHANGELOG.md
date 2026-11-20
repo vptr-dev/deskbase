@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.13.0 — 2026-11-20
+
 - Blur and Frosted panels have rounded corners: they blur what is behind them inside their own shape instead of Windows blurring a square around them. How much they blur is a setting of its own (Background → Blur amount).
 - Settings is one page with an index on the side; click a heading to go there. Appearance is no longer in Settings.
 - Appearance has two places, App and Desktop panels, each with its own index on the side. Everything about how desktop panels look (looks, background, edges, text and titles, spacing, snapping) is under Desktop panels.
