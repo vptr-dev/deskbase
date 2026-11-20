@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0 — 2026-11-20
+
 - New window buttons drawn by the app: they match light and dark mode and every surface, and no longer leave filled corners with blur or frosted.
 - Back and forward are instant, and big pages open many times faster (a large Notion page went from about 2 seconds to under a tenth of a second).
 - The desktop panels have their own look, apart from the app: nine ready-made looks (clear glass, blur, frosted, outline, solid, midnight, paper, minimal or matching the app) and settings for background, tint, borders, border width, border color, corners, text color and title style, in Appearance and on the Desktop page.
