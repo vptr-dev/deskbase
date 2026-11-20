@@ -24,6 +24,15 @@ const api = {
     return () => ipcRenderer.removeListener('app:openPage', fn)
   },
   showMain: () => ipcRenderer.invoke('app:showMain'),
+  win: {
+    control: (action: 'min' | 'max' | 'close') => ipcRenderer.invoke('win:control', action),
+    isMax: () => ipcRenderer.invoke('win:isMax'),
+    onMax: (cb: (max: boolean) => void) => {
+      const fn = (_e: unknown, max: boolean): void => cb(max)
+      ipcRenderer.on('win:max', fn)
+      return () => ipcRenderer.removeListener('win:max', fn)
+    }
+  },
   sysStats: (drive?: string) => ipcRenderer.invoke('sys:stats', drive),
   places: (q: string) => ipcRenderer.invoke('net:places', q),
   weather: (lat: number, lon: number, f: boolean) => ipcRenderer.invoke('net:weather', lat, lon, f),

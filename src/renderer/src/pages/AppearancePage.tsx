@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react'
-import { setSettings, toast, useData } from '../store'
+import { act, setSettings, toast, useData } from '../store'
 import type { Look, Settings, Surface } from '../types'
 import { ACCENTS, BACKDROPS, DEFAULT_LOOK, normalizeLook } from '../lib/defaults'
 import { FONT_CHOICES, PRESETS, exportTheme, parseTheme, type ThemePreset } from '../lib/look'
@@ -7,6 +7,9 @@ import { api } from '../lib/api'
 import { pickImageData } from '../lib/image'
 import { Button, Checkbox, Segmented, Toggle } from '../components/ui'
 import { Icon } from '../components/Icon'
+import { BORDER_WIDTHS, ColorField, DeskLookPicker, TITLE_STYLES } from '../components/WidgetConfig'
+import { fullStyle } from '../lib/widgetStyle'
+import type { DeskMaterial, WidgetStyle } from '../types'
 
 function Section({ title, icon, children, aside }: { title: string; icon: string; children: ReactNode; aside?: ReactNode }): JSX.Element {
   return (
@@ -108,6 +111,35 @@ function SurfacePick({ value, onChange }: { value: Surface; onChange: (v: Surfac
   )
 }
 
+const PANEL_BACKGROUNDS: { value: DeskMaterial; label: string }[] = [
+  { value: 'auto', label: 'Match app' }, { value: 'glass', label: 'Glass' }, { value: 'blur', label: 'Blur' },
+  { value: 'acrylic', label: 'Frosted' }, { value: 'tint', label: 'Solid' }, { value: 'clear', label: 'None' }
+]
+
+/** The desktop panels' own look, apart from the app window. Edits the shared panel style. */
+function DesktopLook(): JSX.Element {
+  const raw = useData((d) => d.desktop.style)
+  const st = fullStyle(undefined, raw, 'auto')
+  const set = (p: Partial<WidgetStyle>, key?: string): void => act((d) => { d.desktop.style = { ...d.desktop.style, ...p } }, key ? { key: 'desklook:' + key } : undefined)
+  return (
+    <Section title="Desktop panels" icon="monitor">
+      <p className="muted small">The panels on your desktop have their own look. Pick one, then fine-tune it. Each panel can still change its own style on the Desktop page.</p>
+      <DeskLookPicker style={st} onPick={(p) => set(p)} />
+      <Row label="Background"><Segmented small value={st.material} onChange={(v) => set({ material: v })} options={PANEL_BACKGROUNDS} /></Row>
+      {st.material !== 'clear' && <>
+        <Row label="Tint"><ColorField value={st.tint} onChange={(v) => set({ tint: v }, 'tint')} auto="Theme" /></Row>
+        <Row label="Tint strength"><Slider value={st.opacity} min={0} max={100} unit="%" onChange={(v) => set({ opacity: v }, 'opacity')} /></Row>
+        <Row label="Borders"><Slider value={st.border} min={0} max={100} unit="%" onChange={(v) => set({ border: v }, 'border')} /></Row>
+        <Row label="Border width"><Segmented small value={st.borderWidth} onChange={(v) => set({ borderWidth: v })} options={BORDER_WIDTHS} /></Row>
+        <Row label="Border color"><ColorField value={st.borderColor} onChange={(v) => set({ borderColor: v }, 'bc')} auto="Auto" /></Row>
+      </>}
+      <Row label="Corners"><Slider value={st.radius} min={0} max={40} unit="px" onChange={(v) => set({ radius: v }, 'radius')} /></Row>
+      <Row label="Text color"><ColorField value={st.text} onChange={(v) => set({ text: v }, 'text')} auto="Theme" /></Row>
+      <Row label="Titles"><Segmented small value={st.header ? st.titleStyle : 'off'} onChange={(v) => set(v === 'off' ? { header: false } : { header: true, titleStyle: v as WidgetStyle['titleStyle'] })} options={[...TITLE_STYLES, { value: 'off' as any, label: 'Hidden' }]} /></Row>
+    </Section>
+  )
+}
+
 export function AppearancePage(): JSX.Element {
   const s = useData((d) => d.settings)
   const l = s.look
@@ -145,12 +177,11 @@ export function AppearancePage(): JSX.Element {
 
       <Section title="Surface" icon="layers">
         <SurfacePick value={l.surface} onChange={(v) => setLook({ surface: v })} />
-        <Row label="Borders" sub="Edges of windows, cards and panels"><Slider value={l.border} min={0} max={100} unit="%" onChange={(v) => setLook({ border: v }, 'border')} /></Row>
+        <Row label="Borders" sub="Edges of the app window and its cards"><Slider value={l.border} min={0} max={100} unit="%" onChange={(v) => setLook({ border: v }, 'border')} /></Row>
         <Row label="Border width"><Segmented small value={l.borderWidth} onChange={(v) => setLook({ borderWidth: v })} options={[{ value: 0, label: 'None' }, { value: 1, label: 'Thin' }, { value: 1.5, label: 'Medium' }, { value: 2, label: 'Thick' }]} /></Row>
-        <Row label="Desktop panels" sub="Give the panels on your desktop their own surface">
-          <Segmented small value={l.panelSurface} onChange={(v) => setLook({ panelSurface: v })} options={[{ value: 'same', label: 'Same' }, ...SURFACES.map((o) => ({ value: o.value, label: o.name }))]} />
-        </Row>
       </Section>
+
+      <DesktopLook />
 
       <Section title="Color" icon="droplet">
         <Row label="Mode"><Segmented small value={s.theme} onChange={(v) => set((x) => { x.theme = v })} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} /></Row>

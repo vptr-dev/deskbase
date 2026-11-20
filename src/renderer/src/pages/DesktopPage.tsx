@@ -6,7 +6,7 @@ import { addDeskSet, addDesktopWidget, addSpace, patchDesk, runCommand, setDeskE
 import { fullStyle, surfaceMaterial, widgetClass, widgetVars } from '../lib/widgetStyle'
 import { DEFAULT_WIDGET_STYLE } from '../lib/defaults'
 import { WidgetBody, widgetDef, widgetTitle } from '../components/Widgets'
-import { StyleFields, TitleField, WidgetConfigFields, Field } from '../components/WidgetConfig'
+import { DeskLookPicker, StyleFields, TitleField, WidgetConfigFields, Field } from '../components/WidgetConfig'
 import { Button, Modal, Segmented, Toggle } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
 import { initialConfig, WidgetGallery } from './DashboardPage'
@@ -197,6 +197,7 @@ function DefaultStyle(): JSX.Element {
         <Button small kind="ghost" icon="restore" onClick={() => act((d) => { d.desktop.style = { ...DEFAULT_WIDGET_STYLE } })}>Reset</Button>
       </div>
       <p className="muted small">Panels use this unless you change their own style.</p>
+      <DeskLookPicker style={fullStyle(undefined, desk.style, 'auto')} onPick={(p) => act((d) => { d.desktop.style = { ...d.desktop.style, ...p } })} />
       <StyleFields desktop style={desk.style} set={(p) => act((d) => { d.desktop.style = { ...d.desktop.style, ...p } }, { key: 'deskstyle' })} />
       <div className="form-grid">
         <Field label="Snap while moving"><Toggle checked={desk.snap} onChange={(v) => act((d) => { d.desktop.snap = v })} /></Field>

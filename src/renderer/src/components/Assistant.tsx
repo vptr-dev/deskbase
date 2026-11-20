@@ -275,6 +275,7 @@ export function AssistantPanel(): JSX.Element | null {
         <button className="icon-btn no-drag" title="New chat" onClick={() => act((d) => { d.assistant.messages = [] }, { history: false })}><Icon name="edit" size={14} /></button>
         <button className="icon-btn no-drag" title="Assistant settings" onClick={() => setOverlay('settings', 'assistant')}><Icon name="settings" size={14} /></button>
         <button className="icon-btn no-drag" title="Close (Ctrl+J)" onClick={toggleAssistant}><Icon name="x" size={14} /></button>
+        <div className="caption-space" />
       </div>
 
       <div className="assistant-list" ref={listRef}>

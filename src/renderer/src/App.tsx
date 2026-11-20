@@ -32,6 +32,7 @@ import { applyImport, refreshFromNotion } from './lib/importer'
 import { isDesktop } from './lib/api'
 import { applyCustomCss, applyLook } from './lib/look'
 import { addDeskSet, addDesktopWidget, addSpace, runCommand, startDesktop, switchSpace } from './lib/desktop'
+import { WindowControls } from './components/WindowControls'
 
 // Browser preview only: lets an import result be applied from the dev console for testing.
 if (!isDesktop) (window as any).__deskApplyImport = applyImport
@@ -47,7 +48,14 @@ useApp.subscribe((s, prev) => {
     fwd.length = 0
   }
 })
-const go = (id: string): void => { if (isView(id)) openView(id); else openPage(id) }
+let instantTimer = 0
+/** Back and forward show the page at once, without the entrance animation. */
+const go = (id: string): void => {
+  document.documentElement.dataset.nav = 'instant'
+  clearTimeout(instantTimer)
+  instantTimer = window.setTimeout(() => { delete document.documentElement.dataset.nav }, 500)
+  if (isView(id)) openView(id); else openPage(id)
+}
 function goBack(): void {
   const id = back.pop()
   const cur = useApp.getState().current
@@ -403,6 +411,7 @@ function MainApp(): JSX.Element {
         </div>
       </main>
       <AssistantPanel />
+      <WindowControls />
       {overlay === 'search' && <CommandPalette />}
       {overlay === 'notionImport' && <NotionImportDialog />}
       {overlay === 'newPage' && <NewPageDialog />}

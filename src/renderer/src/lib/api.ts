@@ -41,6 +41,11 @@ export interface Bridge {
   displays(): Promise<DisplayInfo[]>
   onOpenPage(cb: (id: string) => void): () => void
   showMain(): Promise<void>
+  win: {
+    control(action: 'min' | 'max' | 'close'): Promise<void>
+    isMax(): Promise<boolean>
+    onMax(cb: (max: boolean) => void): () => void
+  }
   sysStats(drive?: string): Promise<SysStats>
   places(q: string): Promise<Place[]>
   weather(lat: number, lon: number, fahrenheit: boolean): Promise<any>
@@ -189,6 +194,7 @@ const browserBridge: Bridge = {
   },
   onOpenPage: () => () => {},
   showMain: async () => {},
+  win: { control: async () => {}, isMax: async () => false, onMax: () => () => {} },
   // Preview stand-ins: fixed numbers, no network.
   sysStats: async () => ({ cpu: 29, ram: 61, ramUsed: 9.8e9, ramTotal: 16e9, disk: 63, diskFree: 180e9, diskTotal: 480e9, uptime: 36000 }),
   places: async (q: string) => (q.trim() ? [{ name: q.trim(), region: '', country: 'Preview', lat: 52.33, lon: -0.18 }] : []),

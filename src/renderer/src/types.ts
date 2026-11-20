@@ -149,6 +149,12 @@ export interface WidgetStyle {
   padding: number
   /** border strength 0-100 */
   border: number
+  /** border width in px (desktop panels) */
+  borderWidth: number
+  /** border color; '' is a light edge on glass and a line on solid */
+  borderColor: string
+  /** title: small caps, plain or large */
+  titleStyle: 'caps' | 'plain' | 'large'
   shadow: boolean
   header: boolean
   align: 'start' | 'center'

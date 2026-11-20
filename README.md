@@ -12,7 +12,7 @@ Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com
 
 - **Desktop panels** that sit under your windows: tasks, pages (or just today's part), timers, clock, sunrise and sunset, weather, system use, study progress, table totals, month and more. Move, resize, lock and group them.
 - **Workspaces**, each with its own panel layout.
-- **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts and colors.
+- **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts and colors, with a separate look for the desktop panels.
 - **Pages, to-dos, databases, habits, journal and goals**, with **Notion import**.
 
 ## Your data

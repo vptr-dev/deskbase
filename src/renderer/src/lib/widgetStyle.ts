@@ -11,10 +11,12 @@ export function widgetVars(st: WidgetStyle): CSSProperties {
     '--w-radius': st.radius + 'px',
     '--w-pad': st.padding + 'px',
     '--w-border': String(st.border / 100),
+    '--w-bw': st.borderWidth + 'px',
     '--w-alpha': String(st.opacity / 100),
     '--w-zoom': String(st.scale / 100)
   }
   if (st.tint) v['--w-tint'] = st.tint
+  if (st.borderColor) v['--w-bc'] = st.borderColor
   if (st.accent) {
     const dark = st.theme === 'dark' || (st.theme === 'auto' && document.documentElement.dataset.theme === 'dark')
     v['--accent'] = st.accent
@@ -49,4 +51,4 @@ export function fullStyle(base: Partial<WidgetStyle> | undefined, own: Partial<W
 }
 
 /** Class names for a widget's look. */
-export const widgetClass = (st: WidgetStyle): string => `mat-${st.material} ${st.shadow ? 'w-shadow' : ''} ${st.align === 'center' ? 'w-center' : ''} ${st.header ? '' : 'w-nohead'}`
+export const widgetClass = (st: WidgetStyle): string => `mat-${st.material} ${st.shadow ? 'w-shadow' : ''} ${st.align === 'center' ? 'w-center' : ''} ${st.header ? '' : 'w-nohead'} w-title-${st.titleStyle}`

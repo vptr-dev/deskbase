@@ -12,6 +12,7 @@ import { Icon } from './Icon'
 import { pickImageData } from '../lib/image'
 import { FONT_CHOICES } from '../lib/look'
 import { PlaceSearch } from './PanelKit'
+import { fullStyle, widgetClass, widgetVars } from '../lib/widgetStyle'
 
 export function Field({ label, children, sub }: { label: string; children: ReactNode; sub?: string }): JSX.Element {
   return (
@@ -300,6 +301,45 @@ const MATERIALS: { value: DeskMaterial; label: string; icon: string }[] = [
   { value: 'clear', label: 'None', icon: 'eye-off' }
 ]
 
+export const BORDER_WIDTHS = [{ value: 0, label: 'None' }, { value: 1, label: 'Thin' }, { value: 1.5, label: 'Medium' }, { value: 2.5, label: 'Thick' }]
+export const TITLE_STYLES: { value: WidgetStyle['titleStyle']; label: string }[] = [{ value: 'caps', label: 'Small caps' }, { value: 'plain', label: 'Plain' }, { value: 'large', label: 'Large' }]
+
+/** Ready-made looks for every desktop panel (they set the shared panel style). */
+export const DESK_LOOKS: { id: string; name: string; style: Partial<WidgetStyle> }[] = [
+  { id: 'match', name: 'Match app', style: { material: 'auto', tint: '', opacity: 50, border: 60, borderWidth: 1, borderColor: '', radius: 18, text: '', titleStyle: 'caps', header: true } },
+  { id: 'glass', name: 'Clear glass', style: { material: 'glass', tint: '', opacity: 42, border: 70, borderWidth: 1, borderColor: '', radius: 18, text: '', titleStyle: 'caps', header: true } },
+  { id: 'blur', name: 'Blur', style: { material: 'blur', tint: '', opacity: 30, border: 50, borderWidth: 1, borderColor: '', radius: 18, text: '', titleStyle: 'caps', header: true } },
+  { id: 'frosted', name: 'Frosted', style: { material: 'acrylic', tint: '', opacity: 55, border: 40, borderWidth: 1, borderColor: '', radius: 20, text: '', titleStyle: 'plain', header: true } },
+  { id: 'outline', name: 'Outline', style: { material: 'glass', tint: '', opacity: 0, border: 85, borderWidth: 1.5, borderColor: '', radius: 16, text: '', titleStyle: 'caps', header: true } },
+  { id: 'solid', name: 'Solid', style: { material: 'tint', tint: '', opacity: 100, border: 30, borderWidth: 1, borderColor: '', radius: 16, text: '', titleStyle: 'plain', header: true } },
+  { id: 'midnight', name: 'Midnight', style: { material: 'tint', tint: '#0d1224', opacity: 80, border: 35, borderWidth: 1, borderColor: '#7c8cff', radius: 22, text: '#e9ecff', titleStyle: 'large', header: true } },
+  { id: 'paper', name: 'Paper', style: { material: 'tint', tint: '#fbf8f1', opacity: 95, border: 45, borderWidth: 1, borderColor: '#d9cfbd', radius: 10, text: '#2b2620', titleStyle: 'plain', header: true } },
+  { id: 'minimal', name: 'Minimal', style: { material: 'clear', tint: '', opacity: 0, border: 0, borderWidth: 0, borderColor: '', radius: 18, text: '', titleStyle: 'caps', header: false } }
+]
+
+/** Preset cards for the desktop look; `style` is the current shared panel style. */
+export function DeskLookPicker({ style, onPick }: { style: WidgetStyle; onPick: (p: Partial<WidgetStyle>) => void }): JSX.Element {
+  const active = DESK_LOOKS.find((l) => Object.entries(l.style).every(([k, v]) => (style as any)[k] === v))?.id
+  return (
+    <div className="desk-looks">
+      {DESK_LOOKS.map((l) => {
+        const st = fullStyle(style, l.style, 'glass')
+        return (
+          <button key={l.id} className={`desk-look ${active === l.id ? 'active' : ''}`} onClick={() => onPick(l.style)}>
+            <span className="desk-look-scene">
+              <span className={`dw ${widgetClass(st)}`} style={widgetVars(st)}>
+                {st.header && <span className="dw-head"><span className="widget-title">Today</span></span>}
+                <span className="desk-look-lines"><i /><i /><i /></span>
+              </span>
+            </span>
+            <span className="desk-look-name">{l.name}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Look of a widget. `inherit` shows which values come from the shared default style. */
 export function StyleFields({ style, set, desktop, inherit }: { style: WidgetStyle; set: (patch: Partial<WidgetStyle>) => void; desktop?: boolean; inherit?: Partial<WidgetStyle> }): JSX.Element {
   const own = (k: keyof WidgetStyle): string => (inherit && inherit[k] !== undefined ? 'own' : '')
@@ -319,6 +359,8 @@ export function StyleFields({ style, set, desktop, inherit }: { style: WidgetSty
         <Field label="Tint"><ColorField value={style.tint} onChange={(v) => set({ tint: v })} auto="Theme" /></Field>
         <Field label="Tint strength"><input type="range" min={0} max={100} value={style.opacity} onChange={(e) => set({ opacity: Number(e.target.value) })} /><span className="muted small w-40">{style.opacity}%</span></Field>
         <Field label="Border"><input type="range" min={0} max={100} value={style.border} onChange={(e) => set({ border: Number(e.target.value) })} /><span className="muted small w-40">{style.border}%</span></Field>
+        {desktop && <Field label="Border width"><Segmented small value={style.borderWidth} onChange={(v) => set({ borderWidth: v })} options={BORDER_WIDTHS} /></Field>}
+        <Field label="Border color"><ColorField value={style.borderColor} onChange={(v) => set({ borderColor: v })} auto="Auto" /></Field>
       </>}
       <Field label="Corners"><input type="range" min={0} max={40} value={style.radius} onChange={(e) => set({ radius: Number(e.target.value) })} /><span className="muted small w-40">{style.radius}px</span></Field>
       <Field label="Padding"><input type="range" min={0} max={40} value={style.padding} onChange={(e) => set({ padding: Number(e.target.value) })} /><span className="muted small w-40">{style.padding}px</span></Field>
@@ -334,6 +376,7 @@ export function StyleFields({ style, set, desktop, inherit }: { style: WidgetSty
       </Field>
       <Field label="Theme"><Segmented small value={style.theme} onChange={(v) => set({ theme: v })} options={[{ value: 'auto', label: 'Auto' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} /></Field>
       <Field label="Title bar"><Toggle checked={style.header} onChange={(v) => set({ header: v })} /></Field>
+      {style.header && <Field label="Title style"><Segmented small value={style.titleStyle} onChange={(v) => set({ titleStyle: v })} options={TITLE_STYLES} /></Field>}
       <Field label="Align"><Segmented small value={style.align} onChange={(v) => set({ align: v })} options={[{ value: 'start', label: 'Left' }, { value: 'center', label: 'Center' }]} /></Field>
       {style.material === 'tint' && <Field label="Shadow"><Toggle checked={style.shadow} onChange={(v) => set({ shadow: v })} /></Field>}
     </div>

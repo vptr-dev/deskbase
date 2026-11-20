@@ -109,14 +109,6 @@ function loadRenderer(w: BrowserWindow, hash?: string): void {
   else w.loadFile(path.join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
 }
 
-function overlayColors(): { color: string; symbolColor: string; height: number } {
-  return {
-    color: '#00000000',
-    symbolColor: nativeTheme.shouldUseDarkColors ? '#e8e8ec' : '#1d1d22',
-    height: 40
-  }
-}
-
 function createWindow(): void {
   const prefs = readPrefs()
   nativeTheme.themeSource = prefs.theme
@@ -134,8 +126,8 @@ function createWindow(): void {
     title: 'Deskbase',
     ...(app.isPackaged ? {} : { icon: path.join(__dirname, '../../build/icon.png') }),
     autoHideMenuBar: true,
+    // No native caption buttons: the app draws its own (WindowControls) so they follow the theme.
     titleBarStyle: 'hidden',
-    titleBarOverlay: isWin ? overlayColors() : undefined,
     trafficLightPosition: { x: 14, y: 13 },
     backgroundColor: material === 'none' ? (nativeTheme.shouldUseDarkColors ? '#1c1c20' : '#f3f3f5') : '#00000000',
     ...(isWin && material !== 'none' ? { backgroundMaterial: material } : {}),
@@ -173,9 +165,9 @@ function createWindow(): void {
     }
   })
 
-  nativeTheme.on('updated', () => {
-    if (isWin && mainWindow) mainWindow.setTitleBarOverlay(overlayColors())
-  })
+  const sendMax = (): void => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('win:max', mainWindow.isMaximized()) }
+  mainWindow.on('maximize', sendMax)
+  mainWindow.on('unmaximize', sendMax)
 
   loadRenderer(mainWindow)
 
@@ -286,7 +278,6 @@ function registerIpc(): void {
   ipcMain.handle('app:setTheme', (_e, theme: 'system' | 'light' | 'dark') => {
     nativeTheme.themeSource = theme
     writePrefs({ theme })
-    if (isWin && mainWindow) mainWindow.setTitleBarOverlay(overlayColors())
     return nativeTheme.shouldUseDarkColors
   })
 
@@ -329,6 +320,13 @@ function registerIpc(): void {
   })
   ipcMain.handle('app:displays', () => listDisplays())
   ipcMain.handle('app:showMain', () => showWindow())
+  ipcMain.handle('win:isMax', () => !!mainWindow?.isMaximized())
+  ipcMain.handle('win:control', (_e, action: string) => {
+    if (!mainWindow) return
+    if (action === 'min') mainWindow.minimize()
+    else if (action === 'max') { if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize() }
+    else if (action === 'close') mainWindow.close()
+  })
   ipcMain.handle('desk:active', async (_e, on: boolean, spaces?: { id: string; name: string }[], current?: string) => {
     const nextSpaces = Array.isArray(spaces) ? spaces.slice(0, 30).map((s) => ({ id: String(s.id), name: String(s.name).slice(0, 60) })) : deskSpaces
     const changed = JSON.stringify(nextSpaces) !== JSON.stringify(deskSpaces) || (current ?? activeSpace) !== activeSpace

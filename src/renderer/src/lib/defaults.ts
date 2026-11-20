@@ -3,7 +3,7 @@ import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 8
+export const SCHEMA = 9
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -98,6 +98,9 @@ export const DEFAULT_WIDGET_STYLE: WidgetStyle = {
   scale: 100,
   padding: 14,
   border: 60,
+  borderWidth: 1,
+  borderColor: '',
+  titleStyle: 'caps',
   shadow: false,
   header: true,
   align: 'start',
@@ -369,6 +372,9 @@ export function normalizeStyle(raw: any, partial = false): Partial<WidgetStyle> 
   if (has('scale')) out.scale = num(r.scale, 60, 200, 100)
   if (has('padding')) out.padding = num(r.padding, 0, 40, d.padding)
   if (has('border')) out.border = num(r.border, 0, 100, d.border)
+  if (has('borderWidth')) out.borderWidth = num(r.borderWidth, 0, 4, d.borderWidth)
+  if (has('borderColor')) out.borderColor = color(r.borderColor, '')
+  if (has('titleStyle')) out.titleStyle = r.titleStyle === 'plain' || r.titleStyle === 'large' ? r.titleStyle : 'caps'
   if (has('shadow')) out.shadow = r.shadow === undefined ? d.shadow : Boolean(r.shadow)
   if (has('header')) out.header = r.header === undefined ? d.header : Boolean(r.header)
   if (has('align')) out.align = r.align === 'center' ? 'center' : 'start'

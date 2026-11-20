@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 8
+export const CURRENT_SCHEMA = 9
 
 type Raw = Record<string, any>
 
@@ -169,6 +169,14 @@ const migrations: Record<number, (d: Raw) => Raw> = {
     }
     return { ...d, desktop: { ...desktop, widgets: out } }
   }
+}
+
+// 8 → 9: desktop panels get their own border width, border color and title style.
+migrations[8] = (d) => {
+  const desktop = d.desktop && typeof d.desktop === 'object' ? d.desktop : null
+  if (!desktop) return d
+  const style = desktop.style && typeof desktop.style === 'object' ? desktop.style : {}
+  return { ...d, desktop: { ...desktop, style: { borderWidth: 1, borderColor: '', titleStyle: 'caps', ...style } } }
 }
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
