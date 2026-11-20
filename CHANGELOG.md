@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.16.0 — 2026-11-20
+
 - Mail: connect Gmail, iCloud, Yahoo, Fastmail or any IMAP inbox with an app password. An Inbox panel shows the unread count and the latest messages; click one to open it in the browser (Gmail opens the message itself).
 - Todoist: connect with your API token. A Todoist panel shows what is due today, this week or everything, and checks tasks off in Todoist.
 - Now playing: a panel with what Spotify, your browser or any player is playing, with the cover, progress and play, pause, next and previous. No setup.
