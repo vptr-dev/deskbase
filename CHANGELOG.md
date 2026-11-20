@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.0 — 2026-11-20
+
 - Desktop panels behave like desktop skins: they sit under every window, clicking one never brings it forward, and they no longer stay on top. Typing in a panel and its right-click menu still work. They remain normal windows, so desktop effects like falling snow still land on them.
 - Every card is its own panel. A full-screen dashboard from earlier versions is split into separate panels you can move one by one.
 - New panels: ring clock, sunrise and sunset, weather (no account or key, set your place in Settings), system use (CPU, memory, disk), one-click timers, study progress by section, and table totals with the next charge date.
