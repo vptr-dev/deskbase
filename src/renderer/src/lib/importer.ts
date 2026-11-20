@@ -35,7 +35,7 @@ function addRow(d: AppData, dbId: string, r: ImportRow, order: number): void {
     createdAt: now, updatedAt: now, deletedAt: null, blocks: r.blocks.length ? renew(r.blocks) : [{ id: uid(), type: 'p', text: '' }],
     expanded: false, view: {}, rowOf: dbId, props: { ...r.props }, rowOrder: order,
     ...(r.cover ? { cover: r.cover } : {}), ...(r.fullWidth ? { fullWidth: true } : {}),
-    ...(r.notionId ? { source: { kind: 'notion' as const, id: r.notionId, syncedAt: now } } : {})
+    ...(r.notionId ? { source: { kind: 'notion' as const, id: r.notionId, syncedAt: now, ...(r.via ? { via: r.via } : {}) } } : {})
   }
 }
 
@@ -46,7 +46,7 @@ function addPage(d: AppData, ip: ImportPage, parent: string | null, at?: number)
   p.expanded = false
   if (ip.cover) p.cover = ip.cover
   if (ip.fullWidth) p.fullWidth = true
-  if (ip.notionId) p.source = { kind: 'notion', id: ip.notionId, syncedAt: Date.now() }
+  if (ip.notionId) p.source = { kind: 'notion', id: ip.notionId, syncedAt: Date.now(), ...(ip.via ? { via: ip.via } : {}) }
   if (ip.type === 'database' && ip.db) p.db = clone(ip.db)
   d.pages[p.id] = p
   const list = parent ? d.pages[parent].children : d.rootOrder
@@ -148,7 +148,8 @@ function mergeBlocks(old: Block[], next: Block[]): Block[] {
   })
   const out = renew(next)
   walkBlocks(out, (b) => {
-    if (b.type === 'todo' && !b.checked && checked.has(norm(b.text))) b.checked = true
+    // To-dos from the Notion API send their checks to Notion, so Notion has the latest.
+    if (b.type === 'todo' && !b.nid && !b.checked && checked.has(norm(b.text))) b.checked = true
     const k = b.type + norm(b.text)
     if ((b.type === 'toggle' || b.type.startsWith('toggle-')) && open.has(k)) b.open = open.get(k)
   })
@@ -173,7 +174,7 @@ function mergeDb(d: AppData, p: Page, ip: ImportPage): void {
       }
     }
   }
-  for (const v of ip.db!.views) if (!db.views.some((x) => x.id === v.id)) db.views.push(clone(v))
+  if (!ip.via || !db.views.length) for (const v of ip.db!.views) if (!db.views.some((x) => x.id === v.id)) db.views.push(clone(v))
   p.db = db
   const rows = new Map(Object.values(d.pages).filter((r) => r.rowOf === p.id && !r.deletedAt && r.source?.id).map((r) => [r.source!.id, r]))
   const orders = Object.values(d.pages).filter((r) => r.rowOf === p.id).map((r) => r.rowOrder ?? 0)
@@ -185,9 +186,9 @@ function mergeDb(d: AppData, p: Page, ip: ImportPage): void {
     if (r.icon) row.icon = emojiToIcon(r.icon, 'file-text')
     row.props = { ...(row.props ?? {}), ...r.props }
     for (const k of Object.keys(row.props)) if (k.startsWith('n_') && !(k in r.props) && ip.db!.props.some((x) => x.id === k)) delete row.props[k]
-    row.blocks = mergeBlocks(row.blocks, r.blocks.length ? r.blocks : [{ id: uid(), type: 'p', text: '' }])
+    if (!r.keepBlocks) row.blocks = mergeBlocks(row.blocks, r.blocks.length ? r.blocks : [{ id: uid(), type: 'p', text: '' }])
     if (r.cover) row.cover = r.cover
-    row.source = { kind: 'notion', id: r.notionId!, syncedAt: Date.now() }
+    row.source = { kind: 'notion', id: r.notionId!, syncedAt: Date.now(), ...((r.via ?? row.source?.via) ? { via: r.via ?? row.source?.via } : {}) }
     row.updatedAt = Date.now()
   })
 }
@@ -206,7 +207,8 @@ function updateTree(d: AppData, pageId: string, ip: ImportPage): number {
     const have = new Set(Object.values(d.tasks).filter((t) => t.pageId === pageId).map((t) => norm(t.title)))
     addTasks(d, pageId, { ...ip, tasks: ip.tasks.filter((t) => !have.has(norm(t.title))) })
   }
-  p.source = { kind: 'notion', id: ip.notionId ?? p.source?.id ?? '', syncedAt: Date.now() }
+  const via = ip.via ?? p.source?.via
+  p.source = { kind: 'notion', id: ip.notionId ?? p.source?.id ?? '', syncedAt: Date.now(), ...(via ? { via } : {}) }
   p.updatedAt = Date.now()
   const live = (): string[] => p.children.filter((c) => d.pages[c] && !d.pages[c].deletedAt)
   const byNotion = new Map(live().filter((c) => d.pages[c].source?.id).map((c) => [d.pages[c].source!.id, c]))
@@ -236,18 +238,45 @@ export async function refreshFromNotion(pageIds?: string[], quiet = false): Prom
   const synced = Object.values(d0.pages).filter((p) => p.source?.kind === 'notion' && !p.deletedAt && !p.rowOf && (!p.parentId || !d0.pages[p.parentId]?.source))
   const targets = pageIds ? pageIds.map((id) => d0.pages[id]).filter((p): p is Page => Boolean(p?.source)) : synced
   if (!targets.length) return 0
-  if (!(await api.notion.available())) { if (!quiet) toast('The Notion app was not found on this computer', { kind: 'error' }); return 0 }
-  const res = await api.notion.importPages(targets.map((p) => p.source!.id))
+  const live = new Set(d0.connections.filter((c) => c.kind === 'notion' && !c.off).map((c) => c.id))
+  const groups = new Map<string, Page[]>()
+  for (const p of targets) {
+    const via = p.source!.via
+    if (via && !live.has(via)) continue
+    const k = via ?? ''
+    if (!groups.has(k)) groups.set(k, [])
+    groups.get(k)!.push(p)
+  }
   let n = 0
-  act((d) => {
-    for (const ip of res.pages) {
-      const target = targets.find((p) => p.source!.id === ip.notionId)
-      if (target) n += updateTree(d, target.id, ip)
+  for (const [via, list] of groups) {
+    let res: ImportResult
+    try {
+      if (via) res = await api.conn.notionImport(via, list.map((p) => p.source!.id))
+      else {
+        if (!(await api.notion.available())) { if (!quiet) toast('The Notion app was not found on this computer', { kind: 'error' }); continue }
+        res = await api.notion.importPages(list.map((p) => p.source!.id))
+      }
+    } catch (e: any) {
+      if (!quiet) toast(e?.message ?? 'Could not reach Notion', { kind: 'error' })
+      continue
     }
-    resolveNotionRefs(d)
-  }, { history: false })
+    act((d) => {
+      for (const ip of res.pages) {
+        const target = list.find((p) => p.source!.id === ip.notionId)
+        if (target) n += updateTree(d, target.id, ip)
+      }
+      resolveNotionRefs(d)
+    }, { history: false })
+  }
   if (!quiet) toast(n ? `Updated ${n} page${n === 1 ? '' : 's'} from Notion` : 'Nothing to update from Notion')
   return n
+}
+
+/** Adds pages shared with a Notion connection, or updates them when they are already here. */
+export async function syncFromNotionApi(connId: string, ids: string[]): Promise<ImportResult> {
+  const res = await api.conn.notionImport(connId, ids)
+  if (res.pages.length) applyImport(res)
+  return res
 }
 
 export function describeImport(r: ImportResult): string {

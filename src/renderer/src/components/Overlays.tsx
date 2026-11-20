@@ -125,6 +125,7 @@ export function CommandPalette(): JSX.Element {
       { id: 'c-desktop', icon: 'monitor', title: 'Desktop', sub: 'Panels and workspaces', run: () => openView('@desktop') },
       { id: 'c-look', icon: 'palette', title: 'Appearance', sub: 'Themes, surface, fonts', run: () => openView('@appearance') },
       { id: 'c-assistant', icon: 'sparkle', title: 'Assistant', sub: 'Chats', run: () => openView('@assistant') },
+      { id: 'c-connections', icon: 'plug', title: 'Connections', sub: 'Calendars, feeds, GitHub, Notion', run: () => openView('@connections') },
       ...(['glass', 'blur', 'frosted', 'solid'] as const).map((v) => ({ id: 'c-surface-' + v, icon: 'layers', title: 'Surface: ' + v[0].toUpperCase() + v.slice(1), run: () => setSettings((x) => { x.look = { ...x.look, surface: v } }) })),
       { id: 'c-values', icon: 'gem', title: 'Values and rules', sub: 'Your own numbers', run: () => setOverlay('values') },
       { id: 'c-quickadd', icon: 'square-check-big', title: 'Quick add task', sub: 'Ctrl Shift Space', run: () => setOverlay('quickAdd') },

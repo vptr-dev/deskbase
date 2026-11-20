@@ -87,6 +87,14 @@ const api = {
       return () => ipcRenderer.removeListener('ai:chunk', fn)
     }
   },
+  conn: {
+    secrets: () => ipcRenderer.invoke('conn:secrets'),
+    setSecret: (id: string, value: string | null) => ipcRenderer.invoke('conn:setSecret', id, value),
+    fetch: (spec: unknown, force?: boolean) => ipcRenderer.invoke('conn:fetch', spec, force),
+    notionList: (id: string) => ipcRenderer.invoke('conn:notionList', id),
+    notionImport: (id: string, ids: string[]) => ipcRenderer.invoke('conn:notionImport', id, ids),
+    notionPush: (id: string, op: unknown) => ipcRenderer.invoke('conn:notionPush', id, op)
+  },
   notion: {
     available: () => ipcRenderer.invoke('notion:available'),
     list: () => ipcRenderer.invoke('notion:list'),

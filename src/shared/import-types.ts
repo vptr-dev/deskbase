@@ -6,6 +6,8 @@ export interface ImportTask { title: string; done: boolean; due?: string | null;
 export interface ImportPage {
   /** id in the Notion app, when imported from it (used to refresh the page later) */
   notionId?: string
+  /** the Notion connection it came through (Notion API) */
+  via?: string
   title: string
   icon: string
   type: PageType
@@ -23,6 +25,9 @@ export interface ImportPage {
 /** A database row: a page of its own with property values keyed by property id. */
 export interface ImportRow {
   notionId?: string
+  via?: string
+  /** the row's page content was not read; keep what is here */
+  keepBlocks?: boolean
   title: string
   icon: string
   props: Record<string, any>

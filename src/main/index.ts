@@ -1,3 +1,4 @@
+import { registerConnections } from './connections'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, shell, Tray } from 'electron'
 import fs from 'fs'
 import os from 'os'
@@ -403,6 +404,7 @@ if (!app.requestSingleInstanceLock()) {
     defaultAutostart()
     registerIpc()
     registerAi()
+    registerConnections()
     createWindow()
     applyTray()
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })

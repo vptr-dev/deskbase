@@ -41,20 +41,20 @@ const json = (s: string | null | undefined, fallback: any): any => {
   try { return JSON.parse(s) } catch { return fallback }
 }
 
-const isEmoji = (s: unknown): s is string => typeof s === 'string' && s.length > 0 && s.length <= 8 && !/^https?:|^\//.test(s)
+export const isEmoji = (s: unknown): s is string => typeof s === 'string' && s.length > 0 && s.length <= 8 && !/^https?:|^\//.test(s)
 
 // ---------- colors ----------
 const COLOR_NAMES = new Set(['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'])
 
 /** Notion's "red" / "red_background" as a block's text color or background. */
-function colorOf(c: unknown): { color?: string; bg?: string } {
+export function colorOf(c: unknown): { color?: string; bg?: string } {
   if (typeof c !== 'string') return {}
   const name = c.replace(/_background$/, '')
   if (!COLOR_NAMES.has(name)) return {}
   return c.endsWith('_background') ? { bg: name } : { color: name }
 }
 
-const OPTION_HEX: Record<string, string> = {
+export const OPTION_HEX: Record<string, string> = {
   default: '#8e8e93', gray: '#8e8e93', brown: '#a2845e', orange: '#ff9f0a', yellow: '#e5b000',
   green: '#30d158', blue: '#0a84ff', purple: '#bf5af2', pink: '#ff375f', red: '#ff453a'
 }
@@ -68,7 +68,7 @@ function notionIdIn(link: string): string | null {
 }
 
 /** Files Notion keeps for itself can't be shown outside it; anything else on the web can. */
-const publicUrl = (u: unknown): u is string =>
+export const publicUrl = (u: unknown): u is string =>
   typeof u === 'string' && /^https?:\/\//i.test(u) && !/prod-files-secure|secure\.notion-static\.com|file\.notion\.so|X-Amz-Signature/i.test(u)
 
 const coverUrl = (c: unknown): string | null => {
@@ -78,7 +78,7 @@ const coverUrl = (c: unknown): string | null => {
 }
 
 /** Property ids safe to use as keys anywhere (Notion's look like "P>tC"). */
-const propId = (k: string): string => (k === 'title' ? 'title' : 'n_' + Array.from(k).map((ch) => (/[a-z0-9]/i.test(ch) ? ch : '_' + ch.charCodeAt(0).toString(36))).join(''))
+export const propId = (k: string): string => (k === 'title' ? 'title' : 'n_' + Array.from(k).map((ch) => (/[a-z0-9]/i.test(ch) ? ch : '_' + ch.charCodeAt(0).toString(36))).join(''))
 
 const day = (ms: unknown): string | undefined => {
   const n = Number(ms)

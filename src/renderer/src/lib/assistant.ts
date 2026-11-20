@@ -8,6 +8,7 @@ import { markdownToBlocks } from '../../../shared/markdown'
 import { act, addTask, getData, openPage, setTaskDone, toast, upsert, useApp } from '../store'
 import type { AppData, AssistantChat, AssistantMessage, AssistantSettings, Page, PageType } from '../types'
 import { api } from './api'
+import { useFeeds } from './connections'
 import { COLORS, newPage, typeInfo } from './defaults'
 import { addOption, addRow, cellValue, datedRows, propText, rowsOf, setRowProp } from './db'
 import { pageToMarkdown } from './exporters'
@@ -101,7 +102,7 @@ To read something that is not shown here, reply with only a fenced code block wh
 {"name":"search","args":{"query":"…"}}  pages, tasks and database rows that mention it
 {"name":"read_page","args":{"page":"page title"}}  a page's content (a database lists its rows)
 {"name":"list_tasks","args":{"filter":"today|overdue|week|undated|done|all","page":"optional page title"}}
-{"name":"calendar","args":{"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}}  tasks, dated rows and deadlines between two days
+{"name":"calendar","args":{"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}}  tasks, dated rows, deadlines and calendar events between two days
 Never guess what a page says; look it up.`
 
 const ACTION_TEXT = (auto: boolean): string => `## Making changes
@@ -201,6 +202,7 @@ function runTool(d: AppData, c: AiToolCall): string {
       for (const x of Object.values(d.tasks)) if (live(x.pageId) && x.due && x.due >= from && x.due <= to) items.push([x.due, `${x.due}${x.time ? ' ' + x.time : ''} task ${x.done ? '(done) ' : ''}[${x.id}] ${x.title}`])
       for (const r of datedRows(d.pages)) if (r.due >= from && r.due <= to) items.push([r.due, `${r.due} ${r.db}: ${r.title}${r.done ? ' (done)' : ''}`])
       for (const c2 of d.countdowns) if (c2.date >= from && c2.date <= to) items.push([c2.date, `${c2.date} deadline: ${c2.title}`])
+      for (const cn of d.connections) if (cn.kind === 'calendar' && !cn.off) for (const e of useFeeds.getState().results[cn.id]?.events ?? []) if (e.start <= to && (e.end ?? e.start) >= from) items.push([e.start, `${e.start}${e.allDay ? '' : ' ' + e.time + (e.endTime ? '-' + e.endTime : '')} event (${cn.name || 'calendar'}): ${e.title}${e.location ? ' at ' + e.location : ''}`])
       items.sort((x, y) => x[0].localeCompare(y[0]))
       return items.length ? `${from} to ${to}:\n${items.map((x) => '- ' + x[1]).join('\n')}` : `Nothing between ${from} and ${to}.`
     }

@@ -7,17 +7,19 @@ import { habitDoneOn } from '../lib/habits'
 import { Button, Empty, Segmented } from '../components/ui'
 import { QuickAdd, TaskRow, useTaskDrawer } from '../components/TaskItems'
 import { MOODS } from './JournalPage'
+import { type CalEvent, eventsByDay, useCalendarEvents } from '../lib/connections'
+import { EventRow } from '../components/PanelKit5'
 
 function defaultListId(): string {
   const d = getData()
   return Object.values(d.pages).find((p) => p.type === 'tasks' && !p.deletedAt)?.id ?? Object.values(d.pages).find((p) => !p.deletedAt)?.id ?? ''
 }
 
-function Agenda({ byDay, onOpen }: { byDay: Record<string, Task[]>; onOpen: (id: string) => void }): JSX.Element {
+function Agenda({ byDay, evBy, onOpen }: { byDay: Record<string, Task[]>; evBy: Record<string, CalEvent[]>; onOpen: (id: string) => void }): JSX.Element {
   const [days, setDays] = useState(30)
   const t = today()
   const overdue = Object.entries(byDay).filter(([k]) => k < t).flatMap(([, v]) => v).filter((x) => !x.done).sort((a, b) => (a.due ?? '').localeCompare(b.due ?? ''))
-  const keys = Array.from({ length: days }, (_, i) => addDays(t, i)).filter((k) => byDay[k]?.length)
+  const keys = Array.from({ length: days }, (_, i) => addDays(t, i)).filter((k) => byDay[k]?.length || evBy[k]?.length)
   const sortDay = (list: Task[]): Task[] => [...list].sort((a, b) => Number(a.done) - Number(b.done) || (a.time ?? '99').localeCompare(b.time ?? '99'))
   return (
     <div className="agenda">
@@ -31,7 +33,8 @@ function Agenda({ byDay, onOpen }: { byDay: Record<string, Task[]>; onOpen: (id:
       {keys.map((k) => (
         <section key={k} className="agenda-day">
           <div className={`agenda-head ${k === t ? 'accent' : ''}`}><span className="strong">{friendlyDay(k)}</span><span className="muted small">{longDate(k)}</span></div>
-          <div className="task-list glass">{sortDay(byDay[k]).map((x) => <TaskRow key={x.id} task={x} showPage onOpen={onOpen} />)}</div>
+          {!!evBy[k]?.length && <div className="cal-events glass">{evBy[k].map((e) => <EventRow key={e.id + e.conn} e={e} />)}</div>}
+          {!!byDay[k]?.length && <div className="task-list glass">{sortDay(byDay[k]).map((x) => <TaskRow key={x.id} task={x} showPage onOpen={onOpen} />)}</div>}
         </section>
       ))}
       {days < 365 && <div className="center"><Button small kind="ghost" onClick={() => setDays(days < 90 ? 90 : 365)}>Show more</Button></div>}
@@ -59,6 +62,8 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
     }
   })
   const [selected, setSelected] = useState(today())
+  const events = useCalendarEvents()
+  const evBy = useMemo(() => eventsByDay(events), [events])
   const [, openTask, drawer] = useTaskDrawer()
 
   const byDay = useMemo(() => {
@@ -99,19 +104,25 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
           <Button small kind="ghost" icon="right" title="Next" onClick={() => move(1)} />
         </>}
       </div>
-      {mode === 'agenda' ? <Agenda byDay={byDay} onOpen={openTask} /> : (
+      {mode === 'agenda' ? <Agenda byDay={byDay} evBy={evBy} onOpen={openTask} /> : (
       <div className="cal-layout">
         <div className={`cal-grid glass ${mode}`}>
           {heads.map((h) => <div key={h} className="cal-head">{h}</div>)}
           {days.map((k) => {
             const items = byDay[k] ?? []
+            const evs = evBy[k] ?? []
+            const cap = mode === 'week' ? 12 : 3
+            const shownEv = evs.slice(0, cap)
+            const room = Math.max(0, cap - shownEv.length)
+            const more = evs.length + items.length - shownEv.length - Math.min(room, items.length)
             const inMonth = mode === 'week' || parseDay(k).getMonth() === d.getMonth()
             return (
               <div key={k} role="button" tabIndex={0} className={`cal-cell ${inMonth ? '' : 'other'} ${k === today() ? 'today' : ''} ${k === selected ? 'selected' : ''} ${dropOn === k ? 'drop' : ''}`} onClick={() => setSelected(k)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(k) } }} {...dropProps(k)}>
                 <div className="cal-num">{parseDay(k).getDate()}{moodBy[k] ? <span className="cal-mood"><Icon name={MOODS[moodBy[k]]} size={12} /></span> : null}</div>
                 <div className="cal-items">
-                  {items.slice(0, mode === 'week' ? 12 : 3).map((t) => <div key={t.id} draggable title={t.title} onDragStart={(e) => { e.dataTransfer.setData('text/task', t.id); e.dataTransfer.effectAllowed = 'move' }} onDoubleClick={(e) => { e.stopPropagation(); openTask(t.id) }} className={`cal-item ${t.done ? 'done' : ''} ${!t.done && k < today() ? 'over' : ''}`}>{t.time ? t.time + ' ' : ''}{t.title}</div>)}
-                  {items.length > (mode === 'week' ? 12 : 3) && <div className="cal-more">+{items.length - (mode === 'week' ? 12 : 3)} more</div>}
+                  {shownEv.map((e) => <div key={e.id + e.conn} className="cal-item cal-event" style={{ '--ev': e.color } as React.CSSProperties} title={[e.title, e.location].filter(Boolean).join(' · ')}>{e.allDay || e.start !== k ? '' : e.time + ' '}{e.title}</div>)}
+                  {items.slice(0, room).map((t) => <div key={t.id} draggable title={t.title} onDragStart={(e) => { e.dataTransfer.setData('text/task', t.id); e.dataTransfer.effectAllowed = 'move' }} onDoubleClick={(e) => { e.stopPropagation(); openTask(t.id) }} className={`cal-item ${t.done ? 'done' : ''} ${!t.done && k < today() ? 'over' : ''}`}>{t.time ? t.time + ' ' : ''}{t.title}</div>)}
+                  {more > 0 && <div className="cal-more">+{more} more</div>}
                 </div>
               </div>
             )
@@ -119,6 +130,7 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
         </div>
         <div className="cal-side glass">
           <div className="strong">{longDate(selected)}</div>
+          {!!evBy[selected]?.length && <div className="cal-events">{evBy[selected].map((e) => <EventRow key={e.id + e.conn} e={e} />)}</div>}
           <QuickAdd pageId={defaultListId()} defaults={{ due: selected }} placeholder="Add task on this day" />
           <div className="task-list">
             {selTasks.length ? selTasks.map((t) => <TaskRow key={t.id} task={t} showPage draggable onOpen={openTask} />) : <div className="muted small pad">Nothing scheduled</div>}

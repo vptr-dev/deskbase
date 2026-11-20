@@ -23,6 +23,8 @@ import { Marks, findBlock } from './Blocks'
 import { plainText } from '../lib/links'
 import { CalculatorWidget, NetworkWidget, RecentWidget } from './PanelKit3'
 import { ActivityWidget, DbChartWidget, DeadlinesWidget } from './PanelKit4'
+import { EventsWidget, FeedWidget, GitHubWidget } from './PanelKit5'
+import { eventsByDay, useCalendarEvents } from '../lib/connections'
 
 /** Partial widget used by both dashboards and desktop widgets. */
 export type AnyWidget = Pick<Widget, 'id' | 'type' | 'config' | 'title'>
@@ -56,6 +58,9 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'system', name: 'System', icon: 'cpu', desc: 'CPU, memory and disk as rings, bars, numbers or a graph', w: 2, h: 3, group: 'Track', config: {} },
   { type: 'dbchart', name: 'Database chart', icon: 'chart-pie', desc: 'Rows of a database as a donut, bars or a line, split by any property', w: 3, h: 3, group: 'Track', config: { kind: 'donut', fn: 'count' } },
   { type: 'activity', name: 'Activity', icon: 'grid', desc: 'Every day you got things done as a heatmap, with your streak', w: 4, h: 2, group: 'Track', config: { source: 'all', weeks: 20 } },
+  { type: 'events', name: 'Events', icon: 'calendarSync', desc: 'What is next on your Google, Outlook or Apple calendars', w: 3, h: 4, group: 'Plan', config: { days: 14, count: 8 } },
+  { type: 'feed', name: 'News feed', icon: 'rss', desc: 'The latest posts from a blog, news site or channel', w: 3, h: 4, group: 'More', config: { count: 6, summary: true } },
+  { type: 'github', name: 'GitHub', icon: 'pr', desc: 'Open issues and pull requests', w: 4, h: 4, group: 'Work', config: { show: 'all', count: 8 } },
   { type: 'deadlines', name: 'Coming up', icon: 'hourglass', desc: 'Deadlines, due tasks and dated rows with the days left', w: 3, h: 3, group: 'Plan', config: { days: 60, count: 6 } },
   { type: 'network', name: 'Network', icon: 'wifi', desc: 'Download and upload speed with a live graph', w: 3, h: 2, group: 'Track', config: { graph: true } },
   { type: 'battery', name: 'Battery', icon: 'battery', desc: 'Charge left and time remaining', w: 2, h: 2, group: 'Track', config: { look: 'ring' } },
@@ -414,6 +419,9 @@ export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfi
     case 'dbchart': return <DbChartWidget cfg={c} />
     case 'activity': return <ActivityWidget cfg={c} />
     case 'deadlines': return <DeadlinesWidget cfg={c} />
+    case 'events': return <EventsWidget cfg={c} />
+    case 'feed': return <FeedWidget cfg={c} />
+    case 'github': return <GitHubWidget cfg={c} />
     case 'calculator': return <CalculatorWidget cfg={c} setConfig={setConfig} />
     case 'recent': return <RecentWidget cfg={c} />
     case 'timer': return <TimerWidget cfg={c} setConfig={setConfig} />
@@ -446,6 +454,9 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
     case 'dbchart': return d.pages[w.config.dbId]?.title || 'Chart'
     case 'activity': return 'Activity'
     case 'deadlines': return 'Coming up'
+    case 'events': return 'Events'
+    case 'feed': { const cn = d.connections.find((x) => x.id === w.config.conn) ?? d.connections.find((x) => x.kind === 'rss'); return cn?.name || 'News' }
+    case 'github': { const cn = d.connections.find((x) => x.id === w.config.conn) ?? d.connections.find((x) => x.kind === 'github'); return cn?.name || 'GitHub' }
     case 'table': return d.pages[w.config.pageId]?.title || 'Table'
     case 'chart': return w.config.source === 'value' ? d.values[w.config.valueId]?.name ?? 'Chart' : w.config.source === 'focus' ? 'Focus minutes' : w.config.source === 'habits' ? 'Habits done' : w.config.source === 'metric' ? d.metrics[w.config.metricId]?.name ?? 'Tracker' : 'Tasks done'
     case 'tasks': return { today: 'Today', overdue: 'Overdue', upcoming: 'Next 7 days', all: 'Open tasks' }[w.config.filter as string] ?? 'Tasks'
@@ -717,6 +728,8 @@ function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const dated = useMemo(() => datedRows(pages).filter((r) => !r.done), [pages])
   const lateRows = dated.filter((r) => r.doable && r.due < t)
   const keys = Array.from({ length: days }, (_, i) => addDays(t, i))
+  const events = useCalendarEvents()
+  const evBy = useMemo(() => (cfg.events === false ? {} : eventsByDay(events)), [events, cfg.events])
   const fmtTime = (s?: string | null): string => {
     if (!s) return ''
     if (use24h) return s
@@ -741,10 +754,12 @@ function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
       {keys.map((k) => {
         const list = Object.values(tasks).filter((x) => live(x) && x.due === k).sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'))
         const rs = dated.filter((r) => r.due === k)
+        const es = evBy[k] ?? []
         return (
           <div key={k} className="ag-day">
             <div className={`ag-head ${k === t ? 'today' : ''}`}>{k === t ? 'Today' : friendlyDay(k)}</div>
-            {list.length || rs.length ? <>{list.map(row)}{rs.map(rowItem)}</> : <div className="ag-empty">Nothing planned</div>}
+            {es.map((e) => <button key={e.id + e.conn} className="ag-row ag-event" onClick={() => { if (e.url) void api.openExternal(e.url) }} title={e.location ?? e.title}><span className="ag-time">{e.allDay || e.start !== k ? '' : fmtTime(e.time)}</span><span className="ellipsis"><i className="ag-dot" style={{ background: e.color }} />{e.title}</span></button>)}
+            {list.length || rs.length ? <>{list.map(row)}{rs.map(rowItem)}</> : !es.length && <div className="ag-empty">Nothing planned</div>}
           </div>
         )
       })}

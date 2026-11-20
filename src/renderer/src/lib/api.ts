@@ -1,3 +1,4 @@
+import { type ConnSpec, type FeedResult, feedUrl, githubItems, parseFeed, parseIcs } from '../../../shared/feeds'
 import { download } from './util'
 import { migrate } from '../../../main/migrations'
 import { type AiConfig, type AiProvider, type ChatMessage, type ChatOptions, PROVIDERS, listOpenAiModels, providerInfo, streamOllama, streamOpenAi } from '../../../shared/ai-core'
@@ -79,6 +80,14 @@ export interface Bridge {
     abort(id: string): Promise<void>
     onChunk(cb: (id: string, text: string, thinking?: boolean) => void): () => void
   }
+  conn: {
+    secrets(): Promise<string[]>
+    setSecret(id: string, value: string | null): Promise<string[]>
+    fetch(spec: ConnSpec, force?: boolean): Promise<FeedResult>
+    notionList(id: string): Promise<NotionPageInfo[]>
+    notionImport(id: string, ids: string[]): Promise<ImportResult>
+    notionPush(id: string, op: { kind: 'todo'; block: string; checked: boolean } | { kind: 'checkbox'; page: string; prop: string; value: boolean }): Promise<void>
+  }
   notion: {
     available(): Promise<boolean>
     list(): Promise<NotionPageInfo[]>
@@ -91,6 +100,36 @@ export interface Bridge {
     install(): Promise<void>
     onStatus(cb: (s: UpdateStatus) => void): () => void
   }
+}
+
+// Browser preview: feeds are fetched straight from the page (works for servers that allow it).
+const CONN_KEY = 'deskbase:conn'
+const webSecrets = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(CONN_KEY) ?? '{}') } catch { return {} } }
+const webConn: Bridge['conn'] = {
+  secrets: async () => Object.keys(webSecrets()),
+  setSecret: async (id, value) => { const s = webSecrets(); if (value) s[id] = value; else delete s[id]; localStorage.setItem(CONN_KEY, JSON.stringify(s)); return Object.keys(s) },
+  fetch: async (spec) => {
+    try {
+      if (spec.kind === 'notion') throw new Error('Notion connections work in the desktop app.')
+      if (spec.kind === 'github') {
+        const tok = webSecrets()[spec.id]
+        const h: Record<string, string> = { Accept: 'application/vnd.github+json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }
+        const get = async (p: string): Promise<any> => { const r = await fetch('https://api.github.com' + p, { headers: h }); if (!r.ok) throw new Error(`GitHub answered ${r.status}`); return r.json() }
+        const items = spec.repos.length ? (await Promise.all(spec.repos.map(async (r) => githubItems(await get(`/repos/${r}/issues?state=open&per_page=40&sort=updated`), r)))).flat() : githubItems(await get('/issues?filter=all&state=open&per_page=60'))
+        items.sort((a, b) => (b.date ?? 0) - (a.date ?? 0))
+        return { ok: true, at: Date.now(), title: spec.repos.join(', '), items }
+      }
+      const r = await fetch(feedUrl(spec.url))
+      if (!r.ok) throw new Error(`The server answered ${r.status}.`)
+      const body = await r.text()
+      if (spec.kind === 'calendar') { const now = Date.now(); const x = parseIcs(body, now - 62 * 86400000, now + 400 * 86400000); return { ok: true, at: now, title: x.title, events: x.events } }
+      const x = parseFeed(body)
+      return { ok: true, at: Date.now(), title: x.title, items: x.items.slice(0, 80) }
+    } catch (e: any) { return { ok: false, at: Date.now(), error: e?.message ?? 'Could not load it' } }
+  },
+  notionList: async () => { throw new Error('Notion connections work in the desktop app.') },
+  notionImport: async () => { throw new Error('Notion connections work in the desktop app.') },
+  notionPush: async () => {}
 }
 
 const KEY = 'deskbase:data'
@@ -267,6 +306,7 @@ const browserBridge: Bridge = {
     onCommand: () => () => {}
   },
   ai: webAi,
+  conn: webConn,
   notion: {
     available: async () => false,
     list: async () => [],

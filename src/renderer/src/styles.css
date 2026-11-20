@@ -2323,3 +2323,48 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 .preset-edit { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px; background: var(--card); border: var(--border-w, 1px) solid var(--card-border); }
 .w-320 { width: 320px; max-width: 100%; }
 .section-label.mt { margin-top: 20px; }
+
+/* ---------- connections ---------- */
+.page-connections { padding-top: 22px; max-width: 900px; }
+.conn-list { display: flex; flex-direction: column; gap: 8px; }
+.conn-card { border-radius: 12px; background: var(--card); border: var(--border-w, 1px) solid var(--card-border); }
+.conn-card.off { opacity: 0.7; }
+.conn-head { display: flex; align-items: center; gap: 4px; padding: 8px 10px 8px 12px; }
+.conn-head-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; }
+.conn-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; }
+.conn-body { padding: 2px 16px 14px; border-top: 1px solid var(--line); }
+.conn-body .set-control { flex-wrap: wrap; justify-content: flex-end; }
+.conn-body .set-label { max-width: 46%; }
+.conn-preview { margin-top: 12px; display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 10px; background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.conn-add { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.conn-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; border-radius: 12px; text-align: left; background: var(--card); border: var(--border-w, 1px) dashed var(--card-border); transition: background var(--dur), border-color var(--dur); }
+.conn-tile:hover { background: var(--hover); border-color: var(--accent); }
+.conn-tile .ic { color: var(--accent-ink); }
+.conn-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; text-align: center; }
+.link-btn { color: var(--accent-ink); text-align: left; }
+.link-btn:hover { text-decoration: underline; }
+.notion-sync { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.notion-sync .input { margin: 2px 0 6px; }
+.row.end { justify-content: flex-end; }
+
+/* events, feeds and GitHub */
+.event-row { display: flex; align-items: flex-start; gap: 9px; width: 100%; padding: 5px 6px; border-radius: 8px; text-align: left; min-width: 0; }
+.event-row:not(:disabled):hover { background: var(--hover); }
+.event-row:disabled { cursor: default; opacity: 1; }
+.event-bar { width: 3px; align-self: stretch; border-radius: 2px; flex-shrink: 0; }
+.event-time { width: 74px; flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.events-panel { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; height: 100%; }
+.events-day-head { font-size: 11.5px; font-weight: 600; color: var(--muted); margin: 0 6px 2px; }
+.events-day-head.accent { color: var(--accent-ink); }
+.feed-panel { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; height: 100%; }
+.feed-row { display: flex; align-items: flex-start; gap: 9px; width: 100%; padding: 6px 8px; border-radius: 8px; text-align: left; min-width: 0; }
+.feed-row:hover { background: var(--hover); }
+.feed-row .strong-ish { font-weight: 550; line-height: 1.3; }
+.feed-summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 2px 0; line-height: 1.35; }
+.gh-state { margin-top: 2px; flex-shrink: 0; }
+.gh-state.open { color: #30d158; } .gh-state.draft { color: var(--muted); } .gh-state.merged { color: #bf5af2; } .gh-state.closed { color: #ff453a; }
+.gh-comments { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.cal-item.cal-event { background: color-mix(in srgb, var(--ev) 18%, transparent); box-shadow: inset 2px 0 0 var(--ev); }
+.cal-events { display: flex; flex-direction: column; gap: 1px; padding: 4px; border-radius: 10px; }
+.agenda-day .cal-events { margin-bottom: 6px; }
+.ag-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }

@@ -72,6 +72,8 @@ export interface Block {
   style?: string
   /** what a button does */
   action?: { kind: 'link' | 'page' | 'todos'; target: string }
+  /** to-dos from the Notion API: the Notion block id, for sending checks back */
+  nid?: string
 }
 
 export interface Page {
@@ -110,7 +112,8 @@ export interface Page {
   template?: boolean
 }
 
-export interface PageSource { kind: 'notion'; id: string; syncedAt: number }
+/** `via`: the Notion connection it comes through (the API); missing for the Notion app import */
+export interface PageSource { kind: 'notion'; id: string; syncedAt: number; via?: string }
 
 // ---------- databases ----------
 export type PropType = 'text' | 'number' | 'select' | 'multi' | 'status' | 'date' | 'checkbox' | 'url' | 'progress' | 'relation' | 'rollup' | 'formula'
@@ -160,7 +163,7 @@ export type WidgetType =
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
   | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
   | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'launcher' | 'search' | 'quote' | 'battery'
-  | 'network' | 'calculator' | 'recent' | 'dbchart' | 'activity' | 'deadlines'
+  | 'network' | 'calculator' | 'recent' | 'dbchart' | 'activity' | 'deadlines' | 'events' | 'feed' | 'github'
 export interface Widget {
   id: string
   type: WidgetType
@@ -550,6 +553,23 @@ export interface AppData {
   values: Record<string, TrackedValue>
   rules: ValueRule[]
   desktop: Desktop
+  connections: Connection[]
   /** data from removed features, kept so nothing is ever lost */
   legacy?: Record<string, any>
+}
+
+// ---------- connections ----------
+export type ConnectionKind = 'notion' | 'calendar' | 'rss' | 'github'
+export interface Connection {
+  id: string
+  kind: ConnectionKind
+  name: string
+  /** calendar (ICS) or feed address */
+  url: string
+  color: string
+  /** GitHub: owner/name of each repository; none = what is assigned to you */
+  repos: string[]
+  createdAt: number
+  /** paused: not fetched or shown */
+  off?: boolean
 }

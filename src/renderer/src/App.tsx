@@ -31,6 +31,8 @@ import { NotionImportDialog } from './components/NotionImport'
 import { ValuesDialog } from './components/Values'
 import { HistoryDialog } from './components/History'
 import { applyImport, refreshFromNotion } from './lib/importer'
+import { loadFeed, startConnections, useFeeds } from './lib/connections'
+import { ConnectionsPage } from './pages/ConnectionsPage'
 import { isDesktop } from './lib/api'
 import { applyCustomCss, applyLook } from './lib/look'
 import { addDeskSet, addDesktopWidget, addSpace, runCommand, startDesktop, switchSpace } from './lib/desktop'
@@ -282,12 +284,19 @@ function useNotionSync(): void {
     if (!on || !ready || !isDesktop) return
     const run = (): void => {
       const d = getData()
-      if (Object.values(d.pages).some((p) => p.source?.kind === 'notion' && !p.deletedAt)) refreshFromNotion(undefined, true).catch(() => {})
+      // Pages from the Notion app; pages from a Notion connection refresh with the connection.
+      const ids = Object.values(d.pages).filter((p) => p.source?.kind === 'notion' && !p.source.via && !p.deletedAt && !p.rowOf && (!p.parentId || !d.pages[p.parentId]?.source)).map((p) => p.id)
+      if (ids.length) refreshFromNotion(ids, true).catch(() => {})
     }
     const first = setTimeout(run, 4000)
     const id = setInterval(run, 30 * 60 * 1000)
     return () => { clearTimeout(first); clearInterval(id) }
   }, [on, ready])
+}
+
+function useConnections(): void {
+  const ready = useApp((s) => s.ready)
+  useEffect(() => (ready ? startConnections() : undefined), [ready])
 }
 
 function useDesktopWidgets(): void {
@@ -296,7 +305,7 @@ function useDesktopWidgets(): void {
   useEffect(() => (ready ? watchHistory() : undefined), [ready])
   // Unpackaged runs and the browser preview only: lets automated checks drive the app.
   useEffect(() => {
-    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, addDeskSet, runCommand, addSpace, switchSpace, applyImport, api, openView, setOverlay, openPage } }).catch(() => {})
+    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, addDeskSet, runCommand, addSpace, switchSpace, applyImport, api, openView, setOverlay, openPage, useFeeds, loadFeed } }).catch(() => {})
   }, [])
 }
 
@@ -382,6 +391,7 @@ function MainApp(): JSX.Element {
   useShortcuts()
   useTicker()
   useNotionSync()
+  useConnections()
   useDesktopWidgets()
   if (!ready) return <div className="boot" />
   const view = isView(current) ? current : null
@@ -395,7 +405,7 @@ function MainApp(): JSX.Element {
           {collapsed && <button className="icon-btn no-drag" title="Show sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = false })}><Icon name="sidebar" size={16} /></button>}
           <button className="icon-btn no-drag" title="Back (Ctrl+[)" onClick={goBack}><Icon name="left" size={15} stroke={2} /></button>
           <button className="icon-btn no-drag" title="Forward (Ctrl+])" onClick={goForward}><Icon name="right" size={15} stroke={2} /></button>
-          {view ? <div className="crumbs"><span className="crumb"><Icon name={view === '@desktop' ? 'monitor' : view === '@assistant' ? 'sparkle' : 'palette'} size={14} /> {view === '@desktop' ? 'Desktop' : view === '@assistant' ? 'Assistant' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
+          {view ? <div className="crumbs"><span className="crumb"><Icon name={view === '@desktop' ? 'monitor' : view === '@assistant' ? 'sparkle' : view === '@connections' ? 'plug' : 'palette'} size={14} /> {view === '@desktop' ? 'Desktop' : view === '@assistant' ? 'Assistant' : view === '@connections' ? 'Connections' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
           <div className="spacer" />
           <FocusMini />
           <SaveIndicator />
@@ -428,7 +438,7 @@ function MainApp(): JSX.Element {
           {!assistantOpen && tabCount < 2 && <div className="caption-space" />}
         </header>
         <div className="scroll">
-          {view === '@desktop' ? <DesktopPage key="desktop" /> : view === '@appearance' ? <AppearancePage key="appearance" /> : view === '@assistant' ? <AssistantPage key="assistant" /> : page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
+          {view === '@desktop' ? <DesktopPage key="desktop" /> : view === '@appearance' ? <AppearancePage key="appearance" /> : view === '@assistant' ? <AssistantPage key="assistant" /> : view === '@connections' ? <ConnectionsPage key="connections" /> : page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
             <StartView />
           )}
         </div>

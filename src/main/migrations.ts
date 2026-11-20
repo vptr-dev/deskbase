@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 14
+export const CURRENT_SCHEMA = 15
 
 type Raw = Record<string, any>
 
@@ -222,6 +222,9 @@ migrations[13] = (d) => {
   const chats = messages.length ? [{ id, title: first ? String(first.content).slice(0, 48) : 'Chat', createdAt: Number(messages[0].at) || Date.now(), updatedAt: Number(messages[messages.length - 1].at) || Date.now(), messages }] : []
   return { ...d, assistant: { chats, active: chats.length ? id : null } }
 }
+
+// 14 → 15: connections (calendar feeds, news feeds, GitHub, the Notion API). Starts empty.
+migrations[14] = (d) => ({ ...d, connections: Array.isArray(d.connections) ? d.connections : [] })
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

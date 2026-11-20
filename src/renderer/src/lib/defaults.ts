@@ -1,9 +1,9 @@
-import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
+import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, Connection, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 14
+export const SCHEMA = 15
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -225,7 +225,8 @@ export function freshData(): AppData {
     countdowns: [],
     values: {},
     rules: [],
-    desktop: { ...DEFAULT_DESKTOP, spaces: [{ ...MAIN_SPACE }], style: { ...DEFAULT_WIDGET_STYLE }, widgets: [] }
+    desktop: { ...DEFAULT_DESKTOP, spaces: [{ ...MAIN_SPACE }], style: { ...DEFAULT_WIDGET_STYLE }, widgets: [] },
+    connections: []
   }
 }
 
@@ -260,6 +261,16 @@ export const DEFAULT_PRESETS: AssistantPreset[] = [
   { id: 'brainstorm', name: 'Brainstorm', icon: 'lightbulb', instructions: 'Give many varied ideas quickly as a list, then say which three look best and why.' }
 ]
 export const DEFAULT_AI_SETTINGS: AssistantSettings = { instructions: '', access: 'ask', temperature: null, length: 'normal', effort: 'medium', presets: [] }
+
+const CONN_KINDS = ['notion', 'calendar', 'rss', 'github']
+function normalizeConnections(raw: any): Connection[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((c) => c && typeof c === 'object' && typeof c.id === 'string' && CONN_KINDS.includes(c.kind)).map((c) => ({
+    id: c.id, kind: c.kind, name: typeof c.name === 'string' ? c.name : '', url: typeof c.url === 'string' ? c.url : '',
+    color: typeof c.color === 'string' ? c.color : '#0a84ff', repos: Array.isArray(c.repos) ? c.repos.filter((r: any) => typeof r === 'string') : [],
+    createdAt: Number(c.createdAt) || Date.now(), ...(c.off ? { off: true } : {})
+  }))
+}
 
 function normalizeAssistant(raw: any): AppData['assistant'] {
   const r = obj(raw)
@@ -304,7 +315,8 @@ export function normalize(raw: any): AppData {
     countdowns: Array.isArray(raw.countdowns) ? raw.countdowns.filter((c: any) => c && typeof c === 'object' && c.id).map((c: any) => ({ title: '', date: '', color: '#0a84ff', ...c, icon: emojiToIcon(c.icon, 'calendar') })) : [],
     values: obj(raw.values),
     rules: Array.isArray(raw.rules) ? raw.rules.filter((r: any) => r && typeof r === 'object' && r.id && r.valueId) : [],
-    desktop: normalizeDesktop(raw.desktop)
+    desktop: normalizeDesktop(raw.desktop),
+    connections: normalizeConnections(raw.connections)
   }
   for (const k of ['tasks', 'habits', 'journal', 'goals', 'metrics'] as const) {
     ;(d as any)[k] = obj(raw[k])

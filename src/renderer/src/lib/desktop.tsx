@@ -180,7 +180,7 @@ const SIZE: Partial<Record<WidgetType, [number, number]>> = {
   focus: [300, 170], text: [420, 150], image: [320, 320], week: [560, 150], calendar: [560, 270], chart: [380, 260],
   weather: [560, 270], daylight: [260, 260], system: [260, 260], timer: [128, 128], sections: [320, 420], table: [440, 260], tasks: [320, 300],
   worldclock: [300, 240], stopwatch: [260, 220], timeleft: [300, 230], moon: [300, 150], launcher: [360, 130], search: [420, 64], quote: [420, 140], battery: [180, 180],
-  dbchart: [320, 260], activity: [440, 200], deadlines: [300, 320]
+  dbchart: [320, 260], activity: [440, 200], deadlines: [300, 320], events: [300, 340], feed: [320, 380], github: [380, 360]
 }
 
 /** The size a new panel of this type starts at. */

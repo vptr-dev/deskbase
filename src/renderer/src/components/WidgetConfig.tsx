@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { setSettings, useData } from '../store'
+import { openView, setSettings, useData } from '../store'
 import type { Place } from '../types'
 
 const setSettingsPlace = (p: Place): void => setSettings((s) => { s.place = p })
@@ -156,7 +156,9 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         <Field label="From"><PagePicker value={c.pageId ?? ''} pages={lists} empty="All lists" onChange={(v) => set('pageId', v)} /></Field>
         <Field label="Quick add"><Toggle checked={c.quickAdd !== false} onChange={(v) => set('quickAdd', v)} /></Field>
       </>}
-      {w.type === 'agenda' && <Field label="Days"><Segmented small value={c.days ?? 5} onChange={(v) => set('days', v)} options={[3, 5, 7, 14].map((n) => ({ value: n, label: String(n) }))} /></Field>}
+      {w.type === 'agenda' && <><Field label="Days"><Segmented small value={c.days ?? 5} onChange={(v) => set('days', v)} options={[3, 5, 7, 14].map((n) => ({ value: n, label: String(n) }))} /></Field>
+        <Field label="Calendar events"><Toggle checked={c.events !== false} onChange={(v) => set('events', v)} /></Field></>}
+      {(w.type === 'events' || w.type === 'feed' || w.type === 'github') && <ConnFields type={w.type} c={c} set={set} />}
       {w.type === 'database' && <>{dbPicker(false)}
         {db && (
           <Field label="View">
@@ -587,4 +589,30 @@ export function StyleFields({ style, set, desktop, inherit, part }: { style: Wid
       </>}
     </div>
   )
+}
+
+function ConnFields({ type, c, set }: { type: 'events' | 'feed' | 'github'; c: Record<string, any>; set: (k: string, v: any) => void }): JSX.Element {
+  const kind = type === 'events' ? 'calendar' : type === 'feed' ? 'rss' : 'github'
+  const conns = useData((d) => d.connections.filter((x) => x.kind === kind))
+  const name = (x: { name: string; url: string; repos: string[] }): string => x.name || x.repos.join(', ') || x.url.replace(/^https?:\/\//, '').slice(0, 40) || 'Untitled'
+  return <>
+    {!conns.length && <div className="field-note"><Icon name="plug" size={13} /> <button className="link-btn" onClick={() => openView('@connections')}>Add a connection</button></div>}
+    {type === 'events' && conns.length > 1 && (
+      <Field label="Calendars">
+        {conns.map((x) => { const on = !c.conns?.length || c.conns.includes(x.id); return <Chip key={x.id} on={on} label={name(x)} onChange={(v) => { const all = c.conns?.length ? c.conns : conns.map((y) => y.id); const next = v ? [...all, x.id] : all.filter((id: string) => id !== x.id); set('conns', next.length === conns.length ? [] : next) }} /> })}
+      </Field>
+    )}
+    {type !== 'events' && conns.length > 1 && (
+      <Field label={type === 'feed' ? 'Feed' : 'Account'}>
+        <select className="input input-sm" value={c.conn ?? ''} onChange={(e) => set('conn', e.target.value || undefined)}>
+          <option value="">{name(conns[0])}</option>
+          {conns.slice(1).map((x) => <option key={x.id} value={x.id}>{name(x)}</option>)}
+        </select>
+      </Field>
+    )}
+    {type === 'events' && <Field label="Looking ahead"><Segmented small value={String(c.days ?? 14)} onChange={(v) => set('days', Number(v))} options={[{ value: '1', label: 'Today' }, { value: '7', label: 'Week' }, { value: '14', label: '2 weeks' }, { value: '31', label: 'Month' }]} /></Field>}
+    {type === 'github' && <Field label="Show"><Segmented small value={c.show ?? 'all'} onChange={(v) => set('show', v)} options={[{ value: 'all', label: 'Both' }, { value: 'issues', label: 'Issues' }, { value: 'prs', label: 'Pull requests' }]} /></Field>}
+    {type === 'feed' && <Field label="Summaries"><Toggle checked={c.summary !== false} onChange={(v) => set('summary', v)} /></Field>}
+    <Field label="How many"><Segmented small value={String(c.count ?? (type === 'feed' ? 6 : 8))} onChange={(v) => set('count', Number(v))} options={['4', '6', '8', '12'].map((n) => ({ value: n, label: n }))} /></Field>
+  </>
 }

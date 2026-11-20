@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Connections page: add, check, pause and remove connections to calendars, news feeds, GitHub and Notion. Each shows when it was last checked and what came in.
+- Calendars from Google, Outlook or Apple through their ICS link: events (repeating ones included) show on the Calendar page, in the Agenda panel and in a new Events panel, each calendar in its own color. The assistant sees them too.
+- News feeds: any RSS or Atom feed in a News feed panel, with summaries.
+- GitHub: open issues and pull requests of chosen repositories, or everything assigned to you with a token, in a GitHub panel.
+- Notion through an integration token: add pages and databases shared with it and they stay in sync every 15 minutes (or Refresh now). Checking a to-do or a checkbox property here checks it in Notion too.
+- Tokens are encrypted on this computer and never go into exports.
+
 ## 0.14.0 — 2026-11-20
 
 - Assistant page with every chat on the side: search them, rename, pin and delete. The side panel (Ctrl J) shows the same chats over any page and can open as a page.

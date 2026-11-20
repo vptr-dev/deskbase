@@ -10,6 +10,7 @@ function tabLook(page: string | null, pages: Record<string, Page>): { title: str
   if (page === '@desktop') return { title: 'Desktop', icon: 'monitor' }
   if (page === '@appearance') return { title: 'Appearance', icon: 'palette' }
   if (page === '@assistant') return { title: 'Assistant', icon: 'sparkle' }
+  if (page === '@connections') return { title: 'Connections', icon: 'plug' }
   const p = page && !isView(page) ? pages[page] : undefined
   if (!p || p.deletedAt) return { title: 'New tab', icon: 'grid' }
   return { title: p.title || 'Untitled', icon: p.icon || typeInfo(p.type).icon, color: p.iconColor || undefined }
