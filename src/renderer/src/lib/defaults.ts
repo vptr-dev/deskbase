@@ -2,7 +2,8 @@ import type { AppData, DbSchema, Desktop, Look, Page, PageType, Settings, Widget
 import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
-export const SCHEMA = 6
+/** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
+export const SCHEMA = 8
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
