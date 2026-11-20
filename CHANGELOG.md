@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.12.0 — 2026-11-20
+
 - Desktop panels are now part of the desktop, like Rainmeter skins: no taskbar buttons, not in Alt+Tab, left alone by window tools such as Snowhush, and still there after Show desktop. If Explorer restarts they come back on their own. Panels that had been hidden by closing them from the taskbar are shown again.
 - The app is called Deskbase everywhere in Windows.
 - Panels that lost their page after a Notion page was imported again find it again, and importing a page that is already here updates it in place instead of adding a copy (extra copies from earlier imports go to the trash).
