@@ -30,10 +30,16 @@ win:
       arch: [x64]
   icon: build/icon.png
   artifactName: Deskbase-Setup-${version}.${ext}
+# Assisted installer: welcome page with build/installerSidebar.bmp, choose a folder, finish with
+# "Run Deskbase". Per user, so updates install without an admin prompt.
+# Artwork: powershell -NoProfile -File scripts/installer-art.ps1
 nsis:
-  oneClick: true
+  oneClick: false
   perMachine: false
-  allowToChangeInstallationDirectory: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  runAfterFinish: true
+  uninstallDisplayName: Deskbase
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
   createStartMenuShortcut: true

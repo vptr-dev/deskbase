@@ -2,48 +2,32 @@
 
 <h1 align="center">Deskbase</h1>
 
-<p align="center">Your pages, tasks and notes as glass panels on the Windows desktop.<br>Local-first, fully styleable, with Notion import.</p>
+<p align="center">Your pages, tasks and notes as panels on the Windows desktop.</p>
 
 ## Install
 
-Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest) and run it. The app updates itself: new versions download in the background and install the next time you restart it.
-
-> Windows may show a SmartScreen notice the first time because the installer is not code-signed. Choose **More info → Run anyway**.
+Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
 
 ## What's inside
 
-- **Desktop panels**: tasks, checklists, any page or just today's part of it, a scratchpad, quick add, timers, agenda, week and month views, goals, habits, numbers, charts, deadlines, ring clock, sunrise and sunset, weather, system use, study progress, table totals, headings and pictures, each in its own window under your other windows. Drag from anywhere, resize, snap, lock, click-through, and combine touching panels into groups that move together.
-- **Workspaces**: each one keeps its own panel layout. Switch from the sidebar, the Desktop page or the tray.
-- **One surface everywhere**: clear glass, blur, frosted or solid for the whole app, or only for the desktop panels, in light and dark. Each panel can also have its own corners, tint, border, padding, size, font, text color and accent. Right-click a panel to lock it in place.
-- **Appearance**: themes, accent, gradient or picture backgrounds, glass strength, blur, shadows, corner roundness, fonts, spacing, motion, page transitions and custom CSS. Export and share themes.
-- **Pages** in a nested sidebar with a block editor: headings, to-dos, lists, toggles, quotes, callouts, code, tables and `/` commands.
-- **Notion import** from the Notion app on your computer or an export, with pages that keep refreshing.
-- **To-dos** with natural-language quick add, due dates, repeats, priorities, subtasks, tags and reminders.
-- **Databases** with table, board, gallery, list and calendar views; **dashboards** you lay out yourself.
-- **Habits, journal, goals, calendar, focus timer, trackers and values** that change on their own from rules.
-- An optional **assistant** that runs locally (Ollama) or with your own API key.
-- Undo/redo everywhere, command palette (`Ctrl K`), keyboard shortcuts (`Ctrl /`).
+- **Desktop panels** that sit under your windows: tasks, pages (or just today's part), timers, clock, sunrise and sunset, weather, system use, study progress, table totals, month and more. Move, resize, lock and group them.
+- **Workspaces**, each with its own panel layout.
+- **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts and colors.
+- **Pages, to-dos, databases, habits, journal and goals**, with **Notion import**.
 
 ## Your data
 
-Everything stays on your computer in `%APPDATA%\Deskbase\data`. Nothing is sent anywhere.
-
-- Saved automatically and written atomically, so a crash can't leave a half-written file.
-- A backup is made every day (the last 20 are kept), plus one before every import, restore or data upgrade.
-- Updates never touch your data. When a new version changes the data format, it upgrades your file in place after backing it up.
-- Export everything to JSON (and import it again), export tasks to CSV, or any page to Markdown.
+Everything stays on your computer in `%APPDATA%\Deskbase\data`, saved automatically with daily backups. Weather panels look up only the place you set.
 
 ## Development
 
 ```bash
 npm install
-npm run dev        # run the app with hot reload
-npm run dev:web    # UI only, in a browser (data in localStorage)
+npm run dev        # app with hot reload
+npm run dev:web    # UI only, in a browser
 npm run typecheck
-npm run dist       # build an installer into dist/
+npm run release -- patch   # or minor / major
 ```
-
-Releasing: `npm run release -- patch` (or `minor` / `major`) bumps the version, tags it and pushes. GitHub Actions builds the installer and publishes the release; installed apps pick it up automatically.
 
 ## License
 

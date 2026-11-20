@@ -24,3 +24,16 @@ jobs:
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install notes and remove older releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed "s/{version}/$version/g" .github/release-notes.md > notes.md
+          gh release edit "$GITHUB_REF_NAME" --title "Deskbase $version" --notes-file notes.md --latest
+          # Only the newest release is kept; older releases are deleted (their git tags stay).
+          gh release list --limit 200 --json tagName -q '.[].tagName' | grep -vxF "$GITHUB_REF_NAME" | while read -r tag; do
+            gh release delete "$tag" --yes
+          done

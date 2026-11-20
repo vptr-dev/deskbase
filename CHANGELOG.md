@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- New installer: a welcome page, choose the install folder, and start Deskbase when it finishes. It always installs for your account only.
+
 ## 0.8.0 — 2026-11-20
 
 - Desktop panels behave like desktop skins: they sit under every window, clicking one never brings it forward, and they no longer stay on top. Typing in a panel and its right-click menu still work. They remain normal windows, so desktop effects like falling snow still land on them.
