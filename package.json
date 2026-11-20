@@ -1,7 +1,7 @@
 {
   "name": "deskbase",
   "productName": "Deskbase",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Your desktop, organized: pages, tasks and notes as glass panels on your screen.",
   "main": "./out/main/index.js",
   "author": "vptr-dev",

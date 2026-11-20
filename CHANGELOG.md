@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.1 — 2026-11-20
+
 - New installer: a welcome page, choose the install folder, and start Deskbase when it finishes. It always installs for your account only.
 
 ## 0.8.0 — 2026-11-20
