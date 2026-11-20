@@ -94,6 +94,21 @@ function resolveNotionRefs(d: AppData): void {
       b.cols?.forEach(fix)
     }
   }
+  // Relations: the linked database and the linked rows.
+  for (const p of Object.values(d.pages)) {
+    if (p.deletedAt) continue
+    for (const pr of p.db?.props ?? []) if (pr.type === 'relation' && pr.relation?.startsWith('notion:')) pr.relation = bySource.get(pr.relation.slice(7)) ?? null
+    if (p.rowOf && p.props) {
+      const rels = d.pages[p.rowOf]?.db?.props.filter((x) => x.type === 'relation') ?? []
+      for (const r of rels) {
+        const v = p.props[r.id]
+        if (!Array.isArray(v) || !v.some((x) => typeof x === 'string' && x.startsWith('notion:'))) continue
+        const ids = v.map((x: string) => (x.startsWith('notion:') ? bySource.get(x.slice(7)) : x)).filter((x): x is string => !!x)
+        if (ids.length) p.props[r.id] = ids
+        else delete p.props[r.id]
+      }
+    }
+  }
   for (const p of Object.values(d.pages)) if (!p.deletedAt && p.blocks.some(function has(b: Block): boolean { return Boolean(b.ref?.startsWith('notion:')) || Boolean(b.cols?.some((c) => c.some(has))) })) fix(p.blocks)
 }
 

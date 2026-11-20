@@ -29,10 +29,12 @@ import type { Page } from './types'
 import { AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
 import { NotionImportDialog } from './components/NotionImport'
 import { ValuesDialog } from './components/Values'
+import { HistoryDialog } from './components/History'
 import { applyImport, refreshFromNotion } from './lib/importer'
 import { isDesktop } from './lib/api'
 import { applyCustomCss, applyLook } from './lib/look'
 import { addDeskSet, addDesktopWidget, addSpace, runCommand, startDesktop, switchSpace } from './lib/desktop'
+import { watchHistory } from './lib/history'
 import { WindowControls } from './components/WindowControls'
 import { renameLinks } from './lib/links'
 import { Backlinks, imageFromFile } from './components/Blocks'
@@ -291,9 +293,10 @@ function useNotionSync(): void {
 function useDesktopWidgets(): void {
   const ready = useApp((s) => s.ready)
   useEffect(() => (ready ? startDesktop() : undefined), [ready])
+  useEffect(() => (ready ? watchHistory() : undefined), [ready])
   // Unpackaged runs and the browser preview only: lets automated checks drive the app.
   useEffect(() => {
-    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, addDeskSet, runCommand, addSpace, switchSpace, applyImport, api } }).catch(() => {})
+    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, addDeskSet, runCommand, addSpace, switchSpace, applyImport, api, openView, setOverlay, openPage } }).catch(() => {})
   }, [])
 }
 
@@ -406,12 +409,14 @@ function MainApp(): JSX.Element {
                 { label: page.cover ? 'Remove cover' : 'Add cover', icon: 'grid', onClick: () => updatePage(page.id, (p) => { p.cover = p.cover ? null : randomCover() }) },
                 { label: 'Full width', checked: !!page.fullWidth, onClick: () => updatePage(page.id, (p) => { p.fullWidth = !p.fullWidth }) },
                 { label: 'Lock page', checked: !!page.locked, onClick: () => updatePage(page.id, (p) => { p.locked = !p.locked }) },
+                { label: page.rowOf ? 'Template for new rows' : 'Use as a template', checked: !!page.template, onClick: () => updatePage(page.id, (p) => { p.template = !p.template || undefined }) },
                 ...(page.type !== 'doc' ? [{ label: 'Show notes area', checked: !!page.view?.notes, onClick: () => updatePage(page.id, (p) => { p.view = { ...(p.view ?? {}), notes: !p.view?.notes } }) }] : []),
                 { divider: true, label: '' },
                 { label: 'Add subpage', icon: 'plus', onClick: () => setOverlay('newPage', { parentId: page.id }) },
                 { label: 'Duplicate', icon: 'copy', onClick: () => duplicatePage(page.id) },
                 { label: 'Move to…', icon: 'folder', onClick: () => setOverlay('movePage', { pageId: page.id }) },
                 { label: 'Export as Markdown', icon: 'download', onClick: () => exportPageMarkdown(page.id) },
+                { label: 'Page history', icon: 'history', onClick: () => setOverlay('history', { pageId: page.id }) },
                 ...(page.source?.kind === 'notion' ? [{ label: 'Refresh from Notion', icon: 'refresh', onClick: () => { refreshFromNotion([page.id]) } }] : []),
                 ...(isDesktop && page.type === 'doc' ? [{ label: 'Show on desktop', icon: 'monitor', onClick: () => { addDesktopWidget(page.blocks.some((b) => b.type === 'todo') ? 'checklist' : 'pageview', { config: { pageId: page.id, hideChecked: true }, w: 340, h: 420 }) } }] : []),
                 { divider: true, label: '' },
@@ -439,6 +444,7 @@ function MainApp(): JSX.Element {
       {overlay === 'movePage' && <MovePageDialog />}
       {overlay === 'quickAdd' && <QuickAddDialog />}
       {overlay === 'values' && <ValuesDialog />}
+      {overlay === 'history' && <HistoryDialog />}
       <Toasts />
       <Confetti />
     </div>

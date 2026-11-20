@@ -2,17 +2,74 @@ import { createRoot, type Root } from 'react-dom/client'
 import { create } from 'zustand'
 import { act, getData, openView, toast, useApp, useData } from '../store'
 import type { DeskWidget, WidgetStyle, WidgetType } from '../types'
-import { api, type DeskMenuItem, type DeskSpec, isDesktop } from './api'
+import { api, type DeskMenuItem, type DeskSpec, type Backdrop, type DisplayInfo, isDesktop } from './api'
+import { useEffect, useState } from 'react'
 import { uid } from './util'
 import { refreshFromNotion } from './importer'
 import { fullStyle, surfaceMaterial, widgetClass, widgetVars } from './widgetStyle'
 import { WidgetBody, widgetDef, widgetTitle } from '../components/Widgets'
 import { DocContext } from '../components/ui'
 import { Icon } from '../components/Icon'
+import { DESK_LOOKS } from '../components/WidgetConfig'
 
 // ---------- shared UI state ----------
-interface DeskUi { editing: boolean; selected: string | null }
+interface DeskUi { editing: boolean; selected: string | null; adding?: boolean }
 export const useDesk = create<DeskUi>(() => ({ editing: false, selected: null }))
+
+// ---------- frost ----------
+// Windows 11 blurs a window's whole rectangle, ignoring its rounded shape, so Blur and Frosted panels
+// blur what is behind them themselves (a small picture of the desktop, taken every few seconds).
+interface WallState { wp: Backdrop | null; displays: DisplayInfo[] }
+export const useWall = create<WallState>(() => ({ wp: null, displays: [] }))
+const frosted = (m: string): boolean => m === 'blur' || m === 'acrylic'
+
+async function loadWall(): Promise<void> {
+  try {
+    const [r, displays] = await Promise.all([api.desk.backdrop(useWall.getState().wp?.stamp), api.displays()])
+    const same = JSON.stringify(displays) === JSON.stringify(useWall.getState().displays)
+    if (r && 'same' in r) { if (!same) useWall.setState({ displays }); return }
+    useWall.setState({ wp: r && r.displays.length ? r : null, displays })
+  } catch { /* keep what we have */ }
+}
+
+/** Where a panel's window is on screen, live while it is dragged. */
+function useScreenPos(doc: Document, x: number, y: number): { x: number; y: number } {
+  const [pos, setPos] = useState({ x, y })
+  useEffect(() => {
+    const win = doc.defaultView
+    if (!win) return
+    let raf = 0
+    const read = (): void => setPos((p) => (p.x === win.screenX && p.y === win.screenY ? p : { x: win.screenX, y: win.screenY }))
+    const loop = (): void => { read(); if (doc.documentElement.classList.contains('dw-dragging')) raf = win.requestAnimationFrame(loop); else raf = 0 }
+    const t = win.setInterval(() => { read(); if (!raf && doc.documentElement.classList.contains('dw-dragging')) loop() }, 300)
+    read()
+    return () => { win.clearInterval(t); if (raf) win.cancelAnimationFrame(raf) }
+  }, [doc, x, y])
+  return pos
+}
+
+function Frost({ doc, w, material, radius, amount: blur }: { doc: Document; w: DeskWidget; material: string; radius: number; amount: number }): JSX.Element | null {
+  const wp = useWall((s) => s.wp)
+  const displays = useWall((s) => s.displays)
+  const sat = useData((d) => d.settings.look.saturation)
+  const pos = useScreenPos(doc, w.x, w.y)
+  if (!wp || !frosted(material) || !displays.length) return null
+  const cx = pos.x + w.w / 2
+  const cy = pos.y + w.h / 2
+  const d = displays.find((x) => cx >= x.bounds.x && cx < x.bounds.x + x.bounds.width && cy >= x.bounds.y && cy < x.bounds.y + x.bounds.height) ?? displays.find((x) => x.primary) ?? displays[0]
+  const img = wp.displays.find((x) => x.id === d.id)
+  if (!img) return null
+  const amount = Math.round((blur ?? 28) * (material === 'acrylic' ? 1.8 : 1))
+  return (
+    <div className="dw-frost" style={{ borderRadius: radius }} aria-hidden>
+      <div className="dw-frost-img" style={{
+        left: d.bounds.x - pos.x, top: d.bounds.y - pos.y, width: d.bounds.width, height: d.bounds.height,
+        backgroundImage: `url("${img.url}")`, backgroundSize: '100% 100%',
+        filter: `blur(${amount}px) saturate(${(sat || 160) / 100})`
+      }} />
+    </div>
+  )
+}
 
 export function setDeskEditing(on: boolean): void {
   useDesk.setState({ editing: on })
@@ -106,9 +163,9 @@ export async function addDeskSet(): Promise<void> {
 }
 
 /** Where a new widget goes: next to the others on the main screen, without overlapping. */
-async function freePlace(w: number, h: number): Promise<{ x: number; y: number }> {
+async function freePlace(w: number, h: number, display?: number): Promise<{ x: number; y: number }> {
   const displays = await api.displays().catch(() => [])
-  const main = displays.find((d) => d.primary) ?? displays[0]
+  const main = displays.find((d) => d.id === display) ?? displays.find((d) => d.primary) ?? displays[0]
   const area = main?.workArea ?? { x: 0, y: 0, width: window.screen.width, height: window.screen.height }
   const taken = activePanels().filter((x) => !x.hidden && x.w > 0)
   const hit = (x: number, y: number): boolean => taken.some((o) => x < o.x + o.w + 12 && o.x < x + w + 12 && y < o.y + o.h + 12 && o.y < y + h + 12)
@@ -122,13 +179,20 @@ const SIZE: Partial<Record<WidgetType, [number, number]>> = {
   clock: [260, 260], countdown: [220, 170], stat: [220, 170], progress: [220, 220], value: [300, 190], quickadd: [380, 76], page: [260, 80],
   focus: [300, 170], text: [420, 150], image: [320, 320], week: [560, 150], calendar: [560, 270], chart: [380, 260],
   weather: [560, 270], daylight: [260, 260], system: [260, 260], timer: [128, 128], sections: [320, 420], table: [440, 260], tasks: [320, 300],
-  worldclock: [300, 240], stopwatch: [260, 220], timeleft: [300, 230], moon: [300, 150], launcher: [360, 130], search: [420, 64], quote: [420, 140], battery: [180, 180]
+  worldclock: [300, 240], stopwatch: [260, 220], timeleft: [300, 230], moon: [300, 150], launcher: [360, 130], search: [420, 64], quote: [420, 140], battery: [180, 180],
+  dbchart: [320, 260], activity: [440, 200], deadlines: [300, 320]
 }
 
-export async function addDesktopWidget(type: WidgetType, init: Partial<DeskWidget> = {}): Promise<string> {
+/** The size a new panel of this type starts at. */
+export function panelSize(type: WidgetType): [number, number] {
   const def = widgetDef(type)
-  const [w, h] = init.w && init.h ? [init.w, init.h] : SIZE[type] ?? [Math.max(240, def.w * 80), Math.max(140, def.h * 76)]
-  const pos = typeof init.x === 'number' && typeof init.y === 'number' ? { x: init.x, y: init.y } : await freePlace(w, h)
+  return SIZE[type] ?? [Math.max(240, def.w * 80), Math.max(140, def.h * 76)]
+}
+
+export async function addDesktopWidget(type: WidgetType, init: Partial<DeskWidget> = {}, display?: number): Promise<string> {
+  const def = widgetDef(type)
+  const [w, h] = init.w && init.h ? [init.w, init.h] : panelSize(type)
+  const pos = typeof init.x === 'number' && typeof init.y === 'number' ? { x: init.x, y: init.y } : await freePlace(w, h, display)
   const id = uid()
   act((d) => {
     d.desktop.enabled = true
@@ -158,6 +222,10 @@ async function showMenu(id: string, editable: boolean): Promise<void> {
     ] as DeskMenuItem[] : []),
     { id: 'lock', label: w.locked ? 'Unlock movement' : 'Lock movement' },
     { id: 'edit', label: 'Edit panel…' },
+    { id: 'look', label: 'Look', submenu: [
+      { id: 'look:shared', label: 'Shared style', checked: Object.keys(w.style).length === 0 },
+      ...DESK_LOOKS.map((l) => ({ id: 'look:' + l.id, label: l.name, checked: Object.keys(w.style).length > 0 && Object.entries(l.style).every(([k, v]) => (st as any)[k] === v) }))
+    ] },
     ...(page?.source?.kind === 'notion' ? [{ id: 'refresh', label: 'Refresh from Notion' }] : []),
     ...(w.type === 'timer' ? [
       { id: 'timer-reset', label: 'Reset timer' },
@@ -175,6 +243,7 @@ async function showMenu(id: string, editable: boolean): Promise<void> {
     { id: 'hide', label: 'Hide' },
     { id: 'remove', label: 'Remove' },
     { id: 'sep4', label: '', type: 'separator' },
+    { id: 'add', label: 'Add panel…' },
     { id: 'open', label: 'Open app' }
   ]
   const cmd = await api.desk.menu(id, items)
@@ -186,6 +255,7 @@ export function runCommand(id: string, cmd: string): void {
   if (cmd === 'toggle') { act((d) => { d.desktop.enabled = !d.desktop.enabled }); return }
   if (cmd === 'arrange') { setDeskEditing(!useDesk.getState().editing); return }
   if (cmd === 'open') { openView('@desktop'); return }
+  if (cmd === 'add') { useDesk.setState({ adding: true }); openView('@desktop'); void api.showMain(); return }
   if (cmd.startsWith('space:')) { switchSpace(cmd.slice(6)); return }
   if (cmd === 'next-space') { cycleSpace(1); return }
   if (cmd === 'lock-all') {
@@ -195,6 +265,7 @@ export function runCommand(id: string, cmd: string): void {
   if (!w) return
   switch (cmd) {
     case 'edit': useDesk.setState({ selected: id }); openView('@desktop'); break
+    case 'look:shared': patchDesk(id, (x) => { x.style = {} }); break
     case 'lock': patchDesk(id, (x) => { x.locked = !x.locked }); break
     case 'header': {
       const on = fullStyle(getData().desktop.style, w.style).header
@@ -236,7 +307,7 @@ export function runCommand(id: string, cmd: string): void {
     case 'hide': patchDesk(id, (x) => { x.hidden = true }); toast('Panel hidden. Show it again from the Desktop page.', { undo: true }); break
     case 'remove': act((d) => { d.desktop.widgets = d.desktop.widgets.filter((x) => x.id !== id) }); toast('Panel removed', { undo: true }); break
     default:
-      if (cmd.startsWith('timer:')) patchDesk(id, (x) => { x.config.minutes = Number(cmd.slice(6)) || 5; x.config.endsAt = null; x.config.left = null })
+      if (cmd.startsWith('look:')) { const l = DESK_LOOKS.find((x) => 'look:' + x.id === cmd); if (l) patchDesk(id, (x) => { x.style = { ...x.style, ...l.style } }) } else if (cmd.startsWith('timer:')) patchDesk(id, (x) => { x.config.minutes = Number(cmd.slice(6)) || 5; x.config.endsAt = null; x.config.left = null })
   }
 }
 
@@ -321,6 +392,7 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
 
   return (
     <DocContext.Provider value={doc}>
+      <Frost doc={doc} w={w} material={st.material} radius={st.radius} amount={st.blur} />
       <div
         className={`dw wt-${w.type} ${widgetClass(st)} ${editing ? 'editing' : ''} ${selected && editing ? 'selected' : ''} ${w.locked ? 'locked' : ''}`}
         data-theme={st.theme === 'auto' ? undefined : st.theme}
@@ -362,7 +434,8 @@ function specOf(w: DeskWidget, base: WidgetStyle): DeskSpec {
   const st = fullStyle(base, w.style, surfaceMaterial(getData().settings.look, true))
   return {
     id: w.id, x: w.x, y: w.y, w: w.w, h: w.h, displayId: w.config.displayId ?? null,
-    material: st.material === 'auto' ? 'glass' : st.material, layer: 'desktop', radius: st.radius, clickThrough: !!w.config.clickThrough,
+    // With the wallpaper at hand, the panel draws its own blur (see Frost) instead of Windows'.
+    material: st.material === 'auto' ? 'glass' : frosted(st.material) && useWall.getState().wp ? 'glass' : st.material, layer: 'desktop', radius: st.radius, clickThrough: !!w.config.clickThrough,
     title: widgetTitle(w, getData()) || widgetDef(w.type).name, group: w.group ?? null
   }
 }
@@ -490,11 +563,24 @@ export function startDesktop(): () => void {
   if (!isDesktop) return () => {}
   watchHost()
   reconcile()
+  let wallTimer: ReturnType<typeof setInterval> | null = null
+  const wallNeeded = (): boolean => {
+    const d = getData()
+    return d.desktop.widgets.some((w) => !w.hidden && frosted(fullStyle(d.desktop.style, w.style, surfaceMaterial(d.settings.look, true)).material))
+  }
+  const syncWall = (): void => {
+    if (wallNeeded()) {
+      if (!wallTimer) { void loadWall(); wallTimer = setInterval(() => { void loadWall() }, 3000) }
+    } else if (wallTimer) { clearInterval(wallTimer); wallTimer = null }
+  }
+  syncWall()
+  let lastWp = useWall.getState().wp
+  const offWall = useWall.subscribe((s) => { const was = Boolean(lastWp); lastWp = s.wp; if (Boolean(s.wp) !== was) reconcile() })
   let last = getData().desktop
   let lastSurface = surfaceMaterial(getData().settings.look, true)
   const unsub = useApp.subscribe((s) => {
     const surface = surfaceMaterial(s.data.settings.look, true)
-    if (s.data.desktop !== last || surface !== lastSurface) { last = s.data.desktop; lastSurface = surface; reconcile() }
+    if (s.data.desktop !== last || surface !== lastSurface) { last = s.data.desktop; lastSurface = surface; reconcile(); syncWall() }
   })
   // Titles and contents follow the data on their own; specs only change with the desktop settings.
   const offClosed = api.desk.onClosed((id) => {
@@ -509,7 +595,7 @@ export function startDesktop(): () => void {
   const offCmd = api.desk.onCommand((id, cmd) => runCommand(id, cmd))
   const onUnload = (): void => { for (const id of [...open.keys()]) closeWidget(id) }
   window.addEventListener('beforeunload', onUnload)
-  return () => { unsub(); offClosed(); offCmd(); window.removeEventListener('beforeunload', onUnload) }
+  return () => { unsub(); offClosed(); offCmd(); offWall(); if (wallTimer) clearInterval(wallTimer); window.removeEventListener('beforeunload', onUnload) }
 }
 
 /** Current on-screen bounds of a widget (after the user moved it). */

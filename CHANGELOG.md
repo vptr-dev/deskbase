@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Blur and Frosted panels have rounded corners: they blur what is behind them inside their own shape instead of Windows blurring a square around them. How much they blur is a setting of its own (Background → Blur amount).
+- Settings is one page with an index on the side; click a heading to go there. Appearance is no longer in Settings.
+- Appearance has two places, App and Desktop panels, each with its own index on the side. Everything about how desktop panels look (looks, background, edges, text and titles, spacing, snapping) is under Desktop panels.
+- Desktop page: a panel's settings open right under it in the list, and every panel has settings, hide, duplicate and remove buttons on its row. Delete removes the selected panel (with undo). The style every panel shares now lives only in Appearance.
+- Adding a panel: search, categories and a live preview. Set up what it shows, its look, its size and the screen before it goes on the desktop; Add another keeps the picker open, and a double click adds one straight away.
+- Right-click a panel for Look (any ready-made look, or back to the shared style) and Add panel.
+- Databases: Relation properties link rows to rows of any database, Rollups show a count, sum, average, smallest, largest, percent checked, earliest or latest of the linked rows, and Formulas work things out from the other properties (prop("Price") * 2, if(), dateBetween(), round() and more), with the result shown as you type.
+- Timeline view: rows as bars from a start date to an end date; drag a bar to move it and its end to make it longer. Weeks, months or quarters.
+- Chart view: rows as bars, sideways bars, a line or a donut, split by any property, counting rows or adding up a number.
+- Templates: mark any page as a template and start new pages from it; databases have row templates under the arrow next to New.
+- Page history: every page keeps its earlier versions; open Page history from the page menu to look at one and restore it.
+- Notion import brings relations over as real links and timeline views as timelines.
+- New panels: Database chart, Activity (a heatmap of the days you got things done, with your streak) and Coming up (deadlines, due tasks and dated rows with the days left).
+
 ## 0.12.0 — 2026-11-20
 
 - Desktop panels are now part of the desktop, like Rainmeter skins: no taskbar buttons, not in Alt+Tab, left alone by window tools such as Snowhush, and still there after Show desktop. If Explorer restarts they come back on their own. Panels that had been hidden by closing them from the taskbar are shown again.

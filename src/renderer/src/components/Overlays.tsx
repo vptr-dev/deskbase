@@ -4,8 +4,9 @@ import { createPage, getData, openPage, openView, purgePage, replaceData, restor
 import { ACCENTS, PAGE_TYPES, typeInfo } from '../lib/defaults'
 import { api, isDesktop, type AppInfo, type UpdateStatus } from '../lib/api'
 import { exportAll, tasksToCsv } from '../lib/exporters'
+import { pageFromTemplate } from '../lib/db'
 import { timeAgo, today } from '../lib/util'
-import { Button, ConfirmButton, Empty, Modal, Segmented, Toggle } from './ui'
+import { Button, ConfirmButton, Empty, Modal, Segmented, SideIndex, Toggle, useSectionIndex } from './ui'
 import { Glyph, Icon } from './Icon'
 import { PROVIDERS, providerInfo, type AiConfig, type AiProvider } from '../../../shared/ai-core'
 import { toggleAssistant } from './Assistant'
@@ -46,9 +47,15 @@ export function QuickAddDialog(): JSX.Element {
 export function NewPageDialog(): JSX.Element {
   const arg = useApp((s) => s.overlayArg) as { parentId: string | null } | null
   const [title, setTitle] = useState('')
+  const templates = useData((d) => Object.values(d.pages).filter((p) => p.template && !p.rowOf && !p.deletedAt))
   const make = (type: (typeof PAGE_TYPES)[number]['type']): void => {
     const id = createPage(type, arg?.parentId ?? null, title.trim() || undefined)
     ;(window as any).__lastCreated = id
+    setOverlay(null)
+  }
+  const fromTemplate = (tplId: string): void => {
+    const id = pageFromTemplate(tplId, arg?.parentId ?? null, title.trim() || undefined)
+    openPage(id)
     setOverlay(null)
   }
   return (
@@ -65,6 +72,18 @@ export function NewPageDialog(): JSX.Element {
             </button>
           ))}
         </div>
+        {templates.length > 0 && <>
+          <div className="section-label">Templates</div>
+          <div className="type-grid">
+            {templates.map((t) => (
+              <button key={t.id} className="type-card" onClick={() => fromTemplate(t.id)}>
+                <span className="type-icon"><Glyph value={t.icon} fallback={typeInfo(t.type).icon} size={18} /></span>
+                <span className="strong">{t.title || 'Untitled'}</span>
+                <span className="muted small">{typeInfo(t.type).name}</span>
+              </button>
+            ))}
+          </div>
+        </>}
       </div>
     </Modal>
   )
@@ -222,26 +241,26 @@ export function SettingsDialog(): JSX.Element {
   const s = useData((d) => d.settings)
   const pages = useData((d) => d.pages)
   const initialTab = useApp((st) => st.overlayArg)
-  const TABS = ['general', 'appearance', ...(isDesktop ? ['widget' as const] : []), 'assistant', 'data', 'about'] as const
-  type Tab = 'general' | 'appearance' | 'widget' | 'assistant' | 'data' | 'about'
-  const [tab, setTab] = useState<Tab>((TABS as readonly string[]).includes(initialTab) ? initialTab : 'general')
+  const SECTIONS = [
+    { id: 'general', label: 'General', icon: 'settings' },
+    ...(isDesktop ? [{ id: 'widget', label: 'Desktop', icon: 'monitor' }] : []),
+    { id: 'assistant', label: 'Assistant', icon: 'sparkles' },
+    { id: 'data', label: 'Data & backups', icon: 'database' },
+    { id: 'about', label: 'About & updates', icon: 'info' }
+  ]
+  const { body, active, go } = useSectionIndex(SECTIONS.map((x) => x.id), initialTab)
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [backups, setBackups] = useState<{ name: string; date: string; size: number }[]>([])
   const [upd, setUpd] = useState<UpdateStatus>({ state: 'idle' })
   const [resetArmed, setResetArmed] = useState(false)
-  useEffect(() => { api.info().then(setInfo); api.updater.status().then(setUpd); return api.updater.onStatus(setUpd) }, [])
-  useEffect(() => { if (tab === 'data') api.listBackups().then(setBackups) }, [tab])
+  useEffect(() => { api.info().then(setInfo); api.updater.status().then(setUpd); api.listBackups().then(setBackups).catch(() => {}); return api.updater.onStatus(setUpd) }, [])
   const set = setSettings
   return (
-    <Modal onClose={() => setOverlay(null)} width={720} className="settings">
+    <Modal onClose={() => setOverlay(null)} width={760} className="settings">
       <div className="settings-layout">
-        <nav className="settings-nav">
-          {TABS.map((t) => (
-            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{{ general: 'General', appearance: 'Appearance', widget: 'Desktop', assistant: 'Assistant', data: 'Data & backups', about: 'About & updates' }[t]}</button>
-          ))}
-        </nav>
-        <div className="settings-body">
-          {tab === 'general' && <>
+        <SideIndex className="settings-nav" items={SECTIONS} active={active} go={go} />
+        <div className="settings-body" ref={body}>
+          <section className="set-section" data-section="general">
             <h3>General</h3>
             <Row label="Open on start"><select id="set-start" className="input input-sm" value={s.startPage} onChange={(e) => set((x) => { x.startPage = e.target.value })}>
               <option value="last">Last opened page</option>
@@ -256,20 +275,10 @@ export function SettingsDialog(): JSX.Element {
             {isDesktop && <StartWithWindows />}
             {isDesktop && <Row label="Close to tray" sub="Closing the window keeps it running in the tray"><Toggle checked={s.closeToTray} onChange={(v) => set((x) => { x.closeToTray = v })} /></Row>}
             {isDesktop && <Row label="Quick add hotkey" sub="Ctrl Shift Space adds a task from anywhere"><Toggle checked={s.quickAddHotkey} onChange={(v) => set((x) => { x.quickAddHotkey = v })} /></Row>}
-          </>}
-          {tab === 'appearance' && <>
-            <h3>Appearance</h3>
-            <Row label="Theme"><Segmented small value={s.theme} onChange={(v) => set((x) => { x.theme = v })} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} /></Row>
-            <Row label="Accent color"><div className="color-dots">{ACCENTS.map((a) => <button key={a.value} title={a.name} className={`color-dot ${s.accent === a.value ? 'active' : ''}`} style={{ background: a.value }} onClick={() => set((x) => { x.accent = a.value })} />)}</div></Row>
-            <Row label="Surface" sub="Windows, cards and desktop panels"><Segmented small value={s.look.surface} onChange={(v) => set((x) => { x.look = { ...x.look, surface: v } })} options={[{ value: 'glass', label: 'Glass' }, { value: 'blur', label: 'Blur' }, { value: 'frosted', label: 'Frosted' }, { value: 'solid', label: 'Solid' }]} /></Row>
-            <Row label="Window material" sub={info && !info.micaSupported ? 'Mica needs Windows 11' : 'Used with the Desktop background'}>
-              <Segmented small value={s.material} onChange={(v) => { set((x) => { x.material = v }); api.setMaterial(v) }} options={[{ value: 'mica', label: 'Mica' }, { value: 'acrylic', label: 'Acrylic' }, { value: 'none', label: 'Solid' }]} />
-            </Row>
-            <Row label="Everything else" sub="Themes, backgrounds, glass, corners, fonts, motion and custom CSS"><Button small kind="primary" icon="palette" onClick={() => openView('@appearance')}>Open Appearance</Button></Row>
-          </>}
-          {tab === 'widget' && <DesktopSettings />}
-          {tab === 'assistant' && <AssistantSettings />}
-          {tab === 'data' && <>
+          </section>
+          {isDesktop && <section className="set-section" data-section="widget"><DesktopSettings /></section>}
+          <section className="set-section" data-section="assistant"><AssistantSettings /></section>
+          <section className="set-section" data-section="data">
             <h3>Data & backups</h3>
             <p className="muted small">Everything is stored on this computer{info?.dataPath ? <> in <code>{info.dataPath}</code></> : null}. Updates never touch your data, and a backup is made every day.</p>
             <Row label="Import from Notion" sub="From the Notion app on this computer, or an export"><Button small icon="upload" onClick={() => setOverlay('notionImport')}>Import</Button></Row>
@@ -300,8 +309,8 @@ export function SettingsDialog(): JSX.Element {
                 setOverlay(null)
               }}>{resetArmed ? 'Erase everything' : 'Erase'}</Button>
             </Row>
-          </>}
-          {tab === 'about' && <>
+          </section>
+          <section className="set-section" data-section="about">
             <h3>About</h3>
             <Row label="Version"><span>{info?.version ?? '…'}</span></Row>
             <Row label="Updates" sub={updText(upd)}>
@@ -310,7 +319,7 @@ export function SettingsDialog(): JSX.Element {
             </Row>
             <Row label="Source code"><Button small kind="ghost" icon="external" onClick={() => api.openExternal('https://github.com/vptr-dev/deskbase')}>GitHub</Button></Row>
             <Row label="Keyboard shortcuts"><Button small kind="ghost" icon="keyboard" onClick={() => setOverlay('shortcuts')}>View</Button></Row>
-          </>}
+          </section>
         </div>
       </div>
     </Modal>

@@ -10,11 +10,12 @@ Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com
 
 ## What's inside
 
-- **Desktop panels** that live on the desktop like Rainmeter skins (no taskbar buttons, not in Alt+Tab): tasks, pages (or just today's part), clocks in many styles, world clock, timers, stopwatch, sunrise and sunset, weather, moon, system use, network speed, battery, calculator, recent pages, launcher, web search, study progress, table totals, month and more. Each has its own styles and parts to show or hide. Move, resize, lock and group them.
+- **Desktop panels** that live on the desktop like Rainmeter skins (no taskbar buttons, not in Alt+Tab): tasks, pages (or just today's part), clocks in many styles, world clock, timers, stopwatch, sunrise and sunset, weather, moon, system use, network speed, battery, calculator, recent pages, database charts, activity heatmap, deadlines, launcher, web search, study progress, table totals, month and more. Each has its own styles and parts to show or hide; set one up with a live preview before adding it. Move, resize, lock and group them.
 - **Workspaces**, each with its own panel layout.
-- **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts, text tone and colors, with a separate look for the desktop panels.
+- **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts, text tone and colors, with its own section for the desktop panels.
 - **Pages** in tabs, with columns, tabs blocks, inline databases, toggle headings, links between pages, backlinks, bookmarks, images, embeds, equations, buttons and synced blocks.
-- **To-dos, databases, habits, journal and goals**, with **Notion import** that keeps tabs, columns, colors, formatting and real databases with their views.
+- **Page history and templates** for pages and database rows.
+- **To-dos, databases** (relations, rollups, formulas; table, board, gallery, list, calendar, timeline and chart views), **habits, journal and goals**, with **Notion import** that keeps tabs, columns, colors, formatting and real databases with their views.
 
 ## Your data
 

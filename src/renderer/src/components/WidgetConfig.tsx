@@ -9,6 +9,7 @@ import { STATS, type AnyWidget, flatBlocks, sectionNames, widgetTitle } from './
 import { createValue } from './Values'
 import { Button, Segmented, Toggle } from './ui'
 import { Icon } from './Icon'
+import { chartGroupable } from './DbChart'
 import { pickImageData } from '../lib/image'
 import { FONT_CHOICES } from '../lib/look'
 import { PlaceSearch } from './PanelKit'
@@ -294,6 +295,22 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         <Field label="Keys"><Toggle checked={c.keys !== false} onChange={(v) => set('keys', v)} /></Field>
         {Array.isArray(c.history) && c.history.length > 0 && <Field label="Last answers"><Button small kind="ghost" onClick={() => set('history', [])}>Clear</Button></Field>}
       </>}
+      {w.type === 'dbchart' && <DbChartFields c={c} set={set} />}
+      {w.type === 'activity' && <>
+        <Field label="Count"><Segmented small value={c.source ?? 'all'} onChange={(v) => set('source', v)} options={[{ value: 'all', label: 'Everything' }, { value: 'tasks', label: 'Tasks' }, { value: 'habits', label: 'Habits' }, { value: 'focus', label: 'Focus' }, { value: 'pages', label: 'Pages' }]} /></Field>
+        <Field label="Weeks"><Segmented small value={String(c.weeks ?? 20)} onChange={(v) => set('weeks', Number(v))} options={['12', '20', '26', '52'].map((n) => ({ value: n, label: n }))} /></Field>
+        <Field label="Totals and streak"><Toggle checked={c.stats !== false} onChange={(v) => set('stats', v)} /></Field>
+      </>}
+      {w.type === 'deadlines' && <>
+        <Field label="Show">
+          <Chip on={c.countdowns !== false} label="Deadlines" onChange={(v) => set('countdowns', v)} />
+          <Chip on={c.tasks !== false} label="Tasks" onChange={(v) => set('tasks', v)} />
+          <Chip on={c.rows !== false} label="Database rows" onChange={(v) => set('rows', v)} />
+          <Chip on={c.overdue !== false} label="Late ones" onChange={(v) => set('overdue', v)} />
+        </Field>
+        <Field label="Looking ahead"><Segmented small value={String(c.days ?? 60)} onChange={(v) => set('days', Number(v))} options={[{ value: '14', label: '2 weeks' }, { value: '30', label: 'Month' }, { value: '60', label: '2 months' }, { value: '365', label: 'Year' }]} /></Field>
+        <Field label="How many"><Segmented small value={String(c.count ?? 6)} onChange={(v) => set('count', Number(v))} options={['4', '6', '10'].map((n) => ({ value: n, label: n }))} /></Field>
+      </>}
       {w.type === 'recent' && <>
         <Field label="Favorites first"><Toggle checked={c.favorites !== false} onChange={(v) => set('favorites', v)} /></Field>
         <Field label="How many"><Segmented small value={String(c.count ?? 8)} onChange={(v) => set('count', Number(v))} options={['5', '8', '12'].map((n) => ({ value: n, label: n }))} /></Field>
@@ -446,6 +463,37 @@ function ZonePicker({ value, onChange, placeholder }: { value: string; onChange:
   )
 }
 
+function DbChartFields({ c, set }: { c: Record<string, any>; set: (k: string, v: any) => void }): JSX.Element {
+  const pages = useData((d) => d.pages)
+  const dbs = Object.values(pages).filter((p) => p.type === 'database' && !p.deletedAt)
+  const db = c.dbId ? pages[c.dbId]?.db : undefined
+  const nums = (db?.props ?? []).filter((p) => p.type === 'number' || p.type === 'progress' || p.type === 'formula' || p.type === 'rollup')
+  return <>
+    <Field label="Database">
+      <select className="input input-sm grow" value={c.dbId ?? ''} onChange={(e) => { set('dbId', e.target.value || null); set('by', null); set('viewId', null) }}>
+        <option value="">Pick a database…</option>
+        {dbs.map((p) => <option key={p.id} value={p.id}>{p.title || 'Untitled'}</option>)}
+      </select>
+    </Field>
+    {db && <>
+      <Field label="Rows"><select className="input input-sm grow" value={c.viewId ?? ''} onChange={(e) => set('viewId', e.target.value || null)}>
+        <option value="">All rows</option>
+        {db.views.map((v) => <option key={v.id} value={v.id}>As in {v.name}</option>)}
+      </select></Field>
+      <Field label="Split by"><select className="input input-sm grow" value={c.by ?? ''} onChange={(e) => set('by', e.target.value || null)}>
+        <option value="">Nothing (one total)</option>
+        {chartGroupable(db).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select></Field>
+      <Field label="Show"><select className="input input-sm grow" value={(c.fn ?? 'count') === 'count' ? 'count' : `${c.fn}:${c.value ?? ''}`} onChange={(e) => { const v = e.target.value; if (v === 'count') { set('fn', 'count'); set('value', null) } else { const [fn, id] = v.split(':'); set('fn', fn); set('value', id) } }}>
+        <option value="count">Number of rows</option>
+        {nums.flatMap((p) => [<option key={'s' + p.id} value={`sum:${p.id}`}>Total {p.name}</option>, <option key={'a' + p.id} value={`avg:${p.id}`}>Average {p.name}</option>])}
+      </select></Field>
+    </>}
+    <Field label="Chart"><Segmented small value={c.kind ?? 'donut'} onChange={(v) => set('kind', v)} options={[{ value: 'donut', label: 'Donut' }, { value: 'bar', label: 'Bars' }, { value: 'hbar', label: 'Rows' }, { value: 'line', label: 'Line' }]} /></Field>
+    <Field label="Caption"><Toggle checked={c.caption !== false} onChange={(v) => set('caption', v)} /></Field>
+  </>
+}
+
 export const BORDER_WIDTHS = [{ value: 0, label: 'None' }, { value: 1, label: 'Thin' }, { value: 1.5, label: 'Medium' }, { value: 2.5, label: 'Thick' }]
 export const TITLE_STYLES: { value: WidgetStyle['titleStyle']; label: string }[] = [{ value: 'caps', label: 'Small caps' }, { value: 'plain', label: 'Plain' }, { value: 'large', label: 'Large' }]
 
@@ -486,11 +534,16 @@ export function DeskLookPicker({ style, onPick }: { style: WidgetStyle; onPick: 
 }
 
 /** Look of a widget. `inherit` shows which values come from the shared default style. */
-export function StyleFields({ style, set, desktop, inherit }: { style: WidgetStyle; set: (patch: Partial<WidgetStyle>) => void; desktop?: boolean; inherit?: Partial<WidgetStyle> }): JSX.Element {
+export type StylePart = 'background' | 'edges' | 'text' | 'spacing'
+
+/** Look of a widget, or one part of it. `inherit` shows which values come from the shared default style. */
+export function StyleFields({ style, set, desktop, inherit, part }: { style: WidgetStyle; set: (patch: Partial<WidgetStyle>) => void; desktop?: boolean; inherit?: Partial<WidgetStyle>; part?: StylePart }): JSX.Element {
   const own = (k: keyof WidgetStyle): string => (inherit && inherit[k] !== undefined ? 'own' : '')
+  const show = (p: StylePart): boolean => !part || part === p
+  const frost = style.material === 'blur' || style.material === 'acrylic'
   return (
     <div className="form-grid style-fields">
-      <Field label="Background">
+      {show('background') && <><Field label="Background">
         <div className="material-pick">
           {MATERIALS.filter((m) => desktop || m.value !== 'acrylic').map((m) => (
             <button key={m.value} className={`material-opt ${style.material === m.value ? 'active' : ''} ${own('material')}`} onClick={() => set({ material: m.value })}>
@@ -503,12 +556,20 @@ export function StyleFields({ style, set, desktop, inherit }: { style: WidgetSty
       {style.material !== 'clear' && <>
         <Field label="Tint"><ColorField value={style.tint} onChange={(v) => set({ tint: v })} auto="Theme" /></Field>
         <Field label="Tint strength"><input type="range" min={0} max={100} value={style.opacity} onChange={(e) => set({ opacity: Number(e.target.value) })} /><span className="muted small w-40">{style.opacity}%</span></Field>
+      </>}
+      {desktop && frost && <Field label="Blur amount"><input type="range" min={0} max={80} value={style.blur} onChange={(e) => set({ blur: Number(e.target.value) })} /><span className="muted small w-40">{style.blur}px</span></Field>}
+      </>}
+      {show('edges') && <>
+      {style.material !== 'clear' && <>
         <Field label="Border"><input type="range" min={0} max={100} value={style.border} onChange={(e) => set({ border: Number(e.target.value) })} /><span className="muted small w-40">{style.border}%</span></Field>
         {desktop && <Field label="Border width"><Segmented small value={style.borderWidth} onChange={(v) => set({ borderWidth: v })} options={BORDER_WIDTHS} /></Field>}
         <Field label="Border color"><ColorField value={style.borderColor} onChange={(v) => set({ borderColor: v })} auto="Auto" /></Field>
       </>}
       <Field label="Corners"><input type="range" min={0} max={40} value={style.radius} onChange={(e) => set({ radius: Number(e.target.value) })} /><span className="muted small w-40">{style.radius}px</span></Field>
-      <Field label="Padding"><input type="range" min={0} max={40} value={style.padding} onChange={(e) => set({ padding: Number(e.target.value) })} /><span className="muted small w-40">{style.padding}px</span></Field>
+      {style.material === 'tint' && <Field label="Shadow"><Toggle checked={style.shadow} onChange={(v) => set({ shadow: v })} /></Field>}
+      </>}
+      {show('spacing') && <Field label="Padding"><input type="range" min={0} max={40} value={style.padding} onChange={(e) => set({ padding: Number(e.target.value) })} /><span className="muted small w-40">{style.padding}px</span></Field>}
+      {show('text') && <>
       <Field label="Size"><input type="range" min={60} max={200} step={5} value={style.scale} onChange={(e) => set({ scale: Number(e.target.value) })} /><span className="muted small w-40">{style.scale}%</span></Field>
       <Field label="Text color"><ColorField value={style.text} onChange={(v) => set({ text: v })} auto="Theme" /></Field>
       <Field label="Accent"><ColorField value={style.accent} onChange={(v) => set({ accent: v })} auto="App accent" /></Field>
@@ -523,7 +584,7 @@ export function StyleFields({ style, set, desktop, inherit }: { style: WidgetSty
       <Field label="Title bar"><Toggle checked={style.header} onChange={(v) => set({ header: v })} /></Field>
       {style.header && <Field label="Title style"><Segmented small value={style.titleStyle} onChange={(v) => set({ titleStyle: v })} options={TITLE_STYLES} /></Field>}
       <Field label="Align"><Segmented small value={style.align} onChange={(v) => set({ align: v })} options={[{ value: 'start', label: 'Left' }, { value: 'center', label: 'Center' }]} /></Field>
-      {style.material === 'tint' && <Field label="Shadow"><Toggle checked={style.shadow} onChange={(v) => set({ shadow: v })} /></Field>}
+      </>}
     </div>
   )
 }

@@ -308,3 +308,54 @@ export function BarChart({ data, height = 120, color = 'var(--accent)', format =
     </div>
   )
 }
+
+/** A long page of settings with an index beside it: click a heading to go there; the one in view is marked. */
+export function useSectionIndex(ids: string[], initial?: string): { body: React.RefObject<HTMLDivElement>; active: string; go: (id: string, smooth?: boolean) => void } {
+  const body = useRef<HTMLDivElement>(null)
+  const [active, setActive] = useState(initial && ids.includes(initial) ? initial : ids[0])
+  const hold = useRef(0)
+  const key = ids.join(',')
+  const scroller = (): HTMLElement | null => {
+    let el: HTMLElement | null = body.current
+    while (el && !(el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement
+    return el ?? body.current
+  }
+  const find = (id: string): HTMLElement | null => body.current?.querySelector<HTMLElement>(`[data-section="${id}"]`) ?? null
+  const go = (id: string, smooth = true): void => {
+    const sc = scroller()
+    const el = find(id)
+    if (!sc || !el) return
+    hold.current = Date.now() + 700
+    setActive(id)
+    sc.scrollTo({ top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 8, behavior: smooth ? 'smooth' : 'auto' })
+  }
+  useEffect(() => {
+    const spy = (): void => {
+      if (Date.now() < hold.current) return
+      const sc = scroller()
+      if (!sc) return
+      const top = sc.getBoundingClientRect().top
+      let cur = ids[0]
+      for (const id of ids) { const el = find(id); if (el && el.getBoundingClientRect().top - top <= 80) cur = id }
+      if (sc.scrollTop > 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2) cur = ids[ids.length - 1]
+      setActive(cur)
+    }
+    document.addEventListener('scroll', spy, true)
+    return () => document.removeEventListener('scroll', spy, true)
+  }, [key])
+  useLayoutEffect(() => { if (initial && ids.includes(initial)) go(initial, false) }, [])
+  useEffect(() => { if (!ids.includes(active)) setActive(ids[0]) }, [key])
+  return { body, active, go }
+}
+
+export function SideIndex({ items, active, go, className = '' }: { items: { id: string; label: string; icon?: string }[]; active: string; go: (id: string) => void; className?: string }): JSX.Element {
+  return (
+    <nav className={`side-index ${className}`}>
+      {items.map((it) => (
+        <button key={it.id} className={active === it.id ? 'active' : ''} onClick={() => go(it.id)}>
+          {it.icon && <Icon name={it.icon} size={14} />}<span>{it.label}</span>
+        </button>
+      ))}
+    </nav>
+  )
+}

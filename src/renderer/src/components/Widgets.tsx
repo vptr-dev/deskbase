@@ -22,6 +22,7 @@ import { api } from '../lib/api'
 import { Marks, findBlock } from './Blocks'
 import { plainText } from '../lib/links'
 import { CalculatorWidget, NetworkWidget, RecentWidget } from './PanelKit3'
+import { ActivityWidget, DbChartWidget, DeadlinesWidget } from './PanelKit4'
 
 /** Partial widget used by both dashboards and desktop widgets. */
 export type AnyWidget = Pick<Widget, 'id' | 'type' | 'config' | 'title'>
@@ -53,6 +54,9 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'sections', name: 'Progress by section', icon: 'listChecks', desc: 'How far along each toggle or heading is, like subjects to revise', w: 3, h: 4, group: 'Track', config: { next: 3 } },
   { type: 'table', name: 'Table', icon: 'table', desc: 'A table from a page, with a total and the next due dates', w: 4, h: 3, group: 'Track', config: { table: 0 } },
   { type: 'system', name: 'System', icon: 'cpu', desc: 'CPU, memory and disk as rings, bars, numbers or a graph', w: 2, h: 3, group: 'Track', config: {} },
+  { type: 'dbchart', name: 'Database chart', icon: 'chart-pie', desc: 'Rows of a database as a donut, bars or a line, split by any property', w: 3, h: 3, group: 'Track', config: { kind: 'donut', fn: 'count' } },
+  { type: 'activity', name: 'Activity', icon: 'grid', desc: 'Every day you got things done as a heatmap, with your streak', w: 4, h: 2, group: 'Track', config: { source: 'all', weeks: 20 } },
+  { type: 'deadlines', name: 'Coming up', icon: 'hourglass', desc: 'Deadlines, due tasks and dated rows with the days left', w: 3, h: 3, group: 'Plan', config: { days: 60, count: 6 } },
   { type: 'network', name: 'Network', icon: 'wifi', desc: 'Download and upload speed with a live graph', w: 3, h: 2, group: 'Track', config: { graph: true } },
   { type: 'battery', name: 'Battery', icon: 'battery', desc: 'Charge left and time remaining', w: 2, h: 2, group: 'Track', config: { look: 'ring' } },
   { type: 'dashboard', name: 'Dashboard', icon: 'layout-dashboard', desc: 'A whole dashboard page in one panel', w: 8, h: 6, group: 'More', config: {} },
@@ -407,6 +411,9 @@ export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfi
     case 'quote': return <QuoteWidget cfg={c} setConfig={setConfig} />
     case 'battery': return <BatteryWidget cfg={c} />
     case 'network': return <NetworkWidget cfg={c} />
+    case 'dbchart': return <DbChartWidget cfg={c} />
+    case 'activity': return <ActivityWidget cfg={c} />
+    case 'deadlines': return <DeadlinesWidget cfg={c} />
     case 'calculator': return <CalculatorWidget cfg={c} setConfig={setConfig} />
     case 'recent': return <RecentWidget cfg={c} />
     case 'timer': return <TimerWidget cfg={c} setConfig={setConfig} />
@@ -436,6 +443,9 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
     case 'calendar': case 'weather': case 'daylight': case 'system': case 'timer':
     case 'worldclock': case 'stopwatch': case 'timeleft': case 'moon': case 'search': case 'quote': case 'battery': case 'launcher': case 'network': case 'calculator': return ''
     case 'sections': return w.config.section || d.pages[w.config.pageId]?.title || 'Progress'
+    case 'dbchart': return d.pages[w.config.dbId]?.title || 'Chart'
+    case 'activity': return 'Activity'
+    case 'deadlines': return 'Coming up'
     case 'table': return d.pages[w.config.pageId]?.title || 'Table'
     case 'chart': return w.config.source === 'value' ? d.values[w.config.valueId]?.name ?? 'Chart' : w.config.source === 'focus' ? 'Focus minutes' : w.config.source === 'habits' ? 'Habits done' : w.config.source === 'metric' ? d.metrics[w.config.metricId]?.name ?? 'Tracker' : 'Tasks done'
     case 'tasks': return { today: 'Today', overdue: 'Overdue', upcoming: 'Next 7 days', all: 'Open tasks' }[w.config.filter as string] ?? 'Tasks'

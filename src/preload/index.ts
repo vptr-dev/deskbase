@@ -8,6 +8,10 @@ const api = {
   exportFile: (text: string, name: string) => ipcRenderer.invoke('data:export', text, name),
   importFile: () => ipcRenderer.invoke('data:import'),
   listBackups: () => ipcRenderer.invoke('backups:list'),
+  history: {
+    list: (id: string) => ipcRenderer.invoke('history:list', id),
+    save: (id: string, v: unknown) => ipcRenderer.invoke('history:save', id, v)
+  },
   createBackup: () => ipcRenderer.invoke('backups:create'),
   readBackup: (name: string) => ipcRenderer.invoke('backups:read', name),
   openDataFolder: () => ipcRenderer.invoke('app:openDataFolder'),
@@ -51,6 +55,7 @@ const api = {
     bounds: (id: string) => ipcRenderer.invoke('desk:bounds', id),
     menu: (id: string, items: unknown) => ipcRenderer.invoke('desk:menu', id, items),
     focus: (id: string) => ipcRenderer.invoke('desk:focus', id),
+    backdrop: (stamp?: string) => ipcRenderer.invoke('desk:backdrop', stamp),
     onClosed: (cb: (id: string) => void) => {
       const fn = (_e: unknown, id: string): void => cb(id)
       ipcRenderer.on('desk:closed', fn)

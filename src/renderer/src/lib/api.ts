@@ -26,6 +26,7 @@ export interface Bridge {
   exportFile(text: string, name: string): Promise<string | null>
   importFile(): Promise<any>
   listBackups(): Promise<{ name: string; date: string; size: number; mtime: number }[]>
+  history: { list(id: string): Promise<PageVersion[]>; save(id: string, v: PageVersion): Promise<void> }
   createBackup(): Promise<string | null>
   readBackup(name: string): Promise<any>
   openDataFolder(): Promise<void>
@@ -65,6 +66,7 @@ export interface Bridge {
     bounds(id: string): Promise<Rect | null>
     menu(id: string, items: DeskMenuItem[]): Promise<string | null>
     focus(id: string): Promise<void>
+    backdrop(stamp?: string): Promise<Backdrop | { same: true } | null>
     onClosed(cb: (id: string) => void): () => void
     onCommand(cb: (id: string, cmd: string) => void): () => void
   }
@@ -175,6 +177,19 @@ const browserBridge: Bridge = {
       input.click()
     }),
   listBackups: async () => [],
+  history: {
+    // In the browser preview, a few versions per page in local storage.
+    list: async (id) => { try { return JSON.parse(localStorage.getItem('deskbase:history:' + id) ?? '[]') } catch { return [] } },
+    save: async (id, v) => {
+      try {
+        const key = 'deskbase:history:' + id
+        const list: PageVersion[] = JSON.parse(localStorage.getItem(key) ?? '[]')
+        const last = list[list.length - 1]
+        if (last && JSON.stringify(last.blocks) === JSON.stringify(v.blocks) && last.title === v.title) return
+        localStorage.setItem(key, JSON.stringify([...list, v].slice(-10)))
+      } catch { /* storage full */ }
+    }
+  },
   createBackup: async () => null,
   readBackup: async () => null,
   openDataFolder: async () => {},
@@ -226,6 +241,7 @@ const browserBridge: Bridge = {
     bounds: async () => null,
     menu: async () => null,
     focus: async () => {},
+    backdrop: async () => null,
     onClosed: () => () => {},
     onCommand: () => () => {}
   },
@@ -248,6 +264,8 @@ export const api: Bridge = (window as any).api ?? browserBridge
 export const isDesktop = Boolean((window as any).api)
 
 export interface Rect { x: number; y: number; width: number; height: number }
+export interface PageVersion { at: number; title: string; icon: string; blocks: any[] }
+export interface Backdrop { stamp: string; displays: { id: number; url: string }[] }
 export interface DisplayInfo { id: number; label: string; primary: boolean; width: number; height: number; scale: number; bounds: Rect; workArea: Rect }
 export interface DeskSpec { id: string; x: number; y: number; w: number; h: number; displayId?: number | null; material: 'glass' | 'blur' | 'acrylic' | 'tint' | 'clear'; layer: 'desktop' | 'normal' | 'top'; radius: number; clickThrough: boolean; title: string; group?: string | null }
 export interface NetStats { supported: boolean; down: number; up: number; rx: number; tx: number; ip: string; online: boolean }

@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 12
+export const CURRENT_SCHEMA = 13
 
 type Raw = Record<string, any>
 
@@ -206,6 +206,10 @@ migrations[11] = (d) => {
   if (!widgets.length || !widgets.every((w) => w && w.hidden)) return d
   return { ...d, desktop: { ...desktop, widgets: widgets.map((w) => ({ ...w, hidden: false })) } }
 }
+
+// 12 → 13: database relations, rollups and formulas, timeline and chart views, templates (pages and
+// rows marked as templates), and how much Blur and Frosted panels blur. All optional; nothing to change.
+migrations[12] = (d) => d
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

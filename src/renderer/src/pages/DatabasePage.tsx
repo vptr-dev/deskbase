@@ -1,13 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
-import { act, openPage, useData } from '../store'
+import { act, getData, openPage, useData } from '../store'
 import type { DbFilter, DbProp, DbSchema, DbView, Page, PropType } from '../types'
 import {
-  TITLE, PROP_TYPES, VIEW_TYPES, addOption, addProp, addRow, deleteProp, deleteRows, filterOps, formatNumber, hasOptions,
-  newView, optionOf, propText, propTypeInfo, rowsOf, setRowProp, updateDb, updateView, viewRows
+  TITLE, PROP_TYPES, ROLLUP_FNS, VIEW_TYPES, addOption, addProp, addRow, addRowFrom, addTemplate, cellValue, deleteProp, deleteRows, filterOps, formatNumber, formulaResult, hasOptions,
+  isComputed, linkedRows, newView, optionOf, propText, propTypeInfo, rowsOf, setRowProp, setupProp, templatesOf, updateDb, updateView, viewRows
 } from '../lib/db'
+import { FORMULA_FUNCTIONS, formulaText } from '../lib/formula'
+import { ChartSvg, chartData, chartGroupable, chartTitleOf } from '../components/DbChart'
 import { COLORS, coverStyle } from '../lib/defaults'
 import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid, weekStartOf } from '../lib/util'
-import { Button, ColorDots, Empty, Menu, type MenuItem, Popover, Progress } from '../components/ui'
+import { Button, ColorDots, Empty, Menu, type MenuItem, Popover, Progress, Segmented } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
 import { api } from '../lib/api'
 
@@ -70,12 +72,64 @@ function OptionPicker({ dbId, prop, value, onChange, onClose, anchor }: {
   )
 }
 
+function RelationPicker({ prop, value, onChange, onClose, anchor }: { prop: DbProp; value: any; onChange: (v: string[]) => void; onClose: () => void; anchor: HTMLElement }): JSX.Element {
+  const all = useData((d) => d.pages)
+  const target = prop.relation ? all[prop.relation] : undefined
+  const [q, setQ] = useState('')
+  const sel: string[] = Array.isArray(value) ? value : []
+  const rows = target ? Object.values(all).filter((r) => r.rowOf === target.id && !r.deletedAt && !r.template) : []
+  const ql = q.trim().toLowerCase()
+  const list = rows.filter((r) => (r.title || 'Untitled').toLowerCase().includes(ql)).sort((a, b) => Number(sel.includes(b.id)) - Number(sel.includes(a.id))).slice(0, 80)
+  const toggle = (id: string): void => onChange(sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id])
+  const create = (): void => { if (!target || !q.trim()) return; const id = addRow(target.id, {}, q.trim()); onChange([...sel, id]); setQ('') }
+  return (
+    <Popover anchor={anchor} onClose={onClose} width={280}>
+      <div className="db-picker" onClick={(e) => e.stopPropagation()}>
+        {!target ? <div className="muted small pad">Pick the database to link to from this property's menu.</div> : <>
+          <input className="input input-sm" autoFocus placeholder={`Link to ${target.title || 'a row'}`} value={q} onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { if (list[0] && (!ql || list[0].title.toLowerCase() === ql)) toggle(list[0].id); else create() } }} />
+          <div className="db-opts">
+            {list.map((r) => (
+              <div key={r.id} className={`db-opt ${sel.includes(r.id) ? 'on' : ''}`} onClick={() => toggle(r.id)}>
+                <span className="db-rel-chip"><Glyph value={r.icon} fallback="file-text" size={12} />{r.title || 'Untitled'}</span>
+                <span className="spacer" />
+                {sel.includes(r.id) && <Icon name="check" size={13} />}
+              </div>
+            ))}
+            {ql && !rows.some((r) => r.title.toLowerCase() === ql) && <div className="db-opt" onClick={create}><span className="muted small">New row</span><span className="db-rel-chip">{q.trim()}</span></div>}
+            {!list.length && !ql && <div className="muted small pad">{target.title || 'That database'} has no rows yet</div>}
+          </div>
+        </>}
+      </div>
+    </Popover>
+  )
+}
+
+/** Value of a rollup or formula, read-only. */
+function ComputedView({ prop, v }: { prop: DbProp; v: any }): JSX.Element | null {
+  if (v === undefined || v === null || v === '') return null
+  if (typeof v === 'boolean') return <Icon name={v ? 'square-check-big' : 'square'} size={14} className={v ? 'accent-ink' : 'muted'} />
+  if (prop.type === 'rollup' && prop.rollup?.fn === 'checked') return <span className="db-cell-progress"><Progress value={Number(v) / 100} height={4} /><span className="small muted">{v}%</span></span>
+  return <span className={`ellipsis ${typeof v === 'number' ? 'num' : ''}`}>{propText(prop, v)}</span>
+}
+
 // ---------- cells ----------
 export function PropCell({ row, prop, dbId, inline }: { row: Page; prop: DbProp; dbId: string; inline?: boolean }): JSX.Element {
   const v = row.props?.[prop.id]
   const [el, setEl] = useState<HTMLElement | null>(null)
   const set = (val: any, key?: string): void => setRowProp(row.id, prop.id, val, key)
+  if (isComputed(prop.type)) return <div className="db-cell db-computed"><ComputedView prop={prop} v={cellValue(getData(), row, prop)} />{!inline ? null : cellValue(getData(), row, prop) === null ? <span className="db-empty">Empty</span> : null}</div>
   switch (prop.type) {
+    case 'relation': {
+      const linked = linkedRows(getData(), row, prop)
+      return (
+        <div className="db-cell db-cell-btn" onClick={(e) => { e.stopPropagation(); setEl(e.currentTarget) }}>
+          {linked.map((r) => <span key={r.id} className="db-rel-chip link" onClick={(e) => { e.stopPropagation(); openPage(r.id) }}><Glyph value={r.icon} fallback="file-text" size={12} />{r.title || 'Untitled'}</span>)}
+          {!linked.length && inline && <span className="db-empty">Empty</span>}
+          {el && <RelationPicker prop={prop} value={v} anchor={el} onChange={(x) => set(x)} onClose={() => setEl(null)} />}
+        </div>
+      )
+    }
     case 'checkbox':
       return <label className="db-cell db-check" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={!!v} onChange={(e) => set(e.target.checked || null)} /></label>
     case 'select': case 'status': case 'multi': {
@@ -121,14 +175,76 @@ function PropView({ prop, v }: { prop: DbProp; v: any }): JSX.Element | null {
     return <div className="row gap-xs wrap">{ids.map((id) => { const o = optionOf(prop, id); return o ? <Chip key={id} name={o.name} color={o.color} /> : null })}</div>
   }
   if (prop.type === 'checkbox') return <span className="small row gap-xs"><Icon name={v ? 'square-check-big' : 'square'} size={13} /> {prop.name}</span>
+  if (isComputed(prop.type)) return <span className="small muted row gap-xs">{typeof v === 'boolean' ? <><Icon name={v ? 'square-check-big' : 'square'} size={13} /> {prop.name}</> : propText(prop, v)}</span>
+  if (prop.type === 'relation') return <div className="row gap-xs wrap">{(Array.isArray(v) ? v : []).map((id: string) => getData().pages[id]).filter((r): r is Page => !!r && !r.deletedAt).map((r) => <span key={r.id} className="db-rel-chip"><Glyph value={r.icon} fallback="file-text" size={11} />{r.title || 'Untitled'}</span>)}</div>
   if (prop.type === 'progress') return <Progress value={(Number(v) || 0) / (prop.max || 100)} height={4} />
   return <span className="small muted ellipsis">{prop.type === 'number' ? formatNumber(prop, Number(v)) : propText(prop, v)}</span>
 }
 
 // ---------- property header menu ----------
+/** Write a formula with the result for the first row shown as you type. */
+function FormulaEditor({ dbId, prop, anchor, onClose }: { dbId: string; prop: DbProp; anchor: HTMLElement; onClose: () => void }): JSX.Element {
+  const db = useData((d) => d.pages[dbId]?.db)
+  const sample = useData((d) => rowsOf(d, dbId)[0])
+  const [src, setSrc] = useState(prop.formula ?? '')
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const res = sample ? formulaResult(getData(), sample, prop, src) : { value: null }
+  const insert = (t: string): void => {
+    const el = ref.current
+    const a = el?.selectionStart ?? src.length
+    const b = el?.selectionEnd ?? src.length
+    const next = src.slice(0, a) + t + src.slice(b)
+    setSrc(next)
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(a + t.length, a + t.length) })
+  }
+  const save = (): void => { updateDb(dbId, (s) => { const p = s.props.find((x) => x.id === prop.id); if (p) p.formula = src }); onClose() }
+  return (
+    <Popover anchor={anchor} onClose={save} width={460}>
+      <div className="formula-edit" onClick={(e) => e.stopPropagation()}>
+        <textarea ref={ref} className="input formula-input" autoFocus spellCheck={false} rows={3} value={src} placeholder={'prop("Price") * prop("Amount")'}
+          onChange={(e) => setSrc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save() }} />
+        <div className={`formula-result ${res.error ? 'error' : ''}`}>
+          {res.error ? res.error : sample ? <>{sample.title || 'Untitled'}: <strong>{formulaText(res.value) || '—'}</strong></> : 'Add a row to see the result'}
+        </div>
+        <div className="section-label">Properties</div>
+        <div className="formula-chips">
+          <button onClick={() => insert('prop("Name")')}>Name</button>
+          {(db?.props ?? []).filter((p) => p.id !== prop.id).map((p) => <button key={p.id} onClick={() => insert(`prop("${p.name}")`)}>{p.name}</button>)}
+        </div>
+        <div className="section-label">Functions</div>
+        <div className="formula-chips fn">
+          {FORMULA_FUNCTIONS.filter((f) => f !== 'prop').map((f) => <button key={f} onClick={() => insert(f + '(')}>{f}</button>)}
+        </div>
+        <div className="row gap-sm"><div className="spacer" /><Button small kind="primary" onClick={save}>Done</Button></div>
+      </div>
+    </Popover>
+  )
+}
+
 function PropHeader({ dbId, view, prop }: { dbId: string; view: DbView; prop: DbProp }): JSX.Element {
   const [el, setEl] = useState<HTMLElement | null>(null)
   const [rename, setRename] = useState(false)
+  const [formulaEl, setFormulaEl] = useState<HTMLElement | null>(null)
+  const pages = useData((d) => d.pages)
+  const db = pages[dbId]?.db
+  const dbs = Object.values(pages).filter((x) => x.type === 'database' && !x.deletedAt)
+  const rels = (db?.props ?? []).filter((x) => x.type === 'relation')
+  const rel = prop.rollup ? rels.find((x) => x.id === prop.rollup!.rel) : undefined
+  const relDb = rel?.relation ? pages[rel.relation]?.db : undefined
+  const setP = (fn: (p: DbProp) => void): void => updateDb(dbId, (s) => { const p = s.props.find((x) => x.id === prop.id); if (p) fn(p) })
+  const special: MenuItem[] = prop.type === 'relation' ? [
+    { divider: true, label: '' },
+    ...dbs.map((x) => ({ label: `Links to: ${x.title || 'Untitled'}${x.id === dbId ? ' (this one)' : ''}`, checked: prop.relation === x.id, onClick: () => setP((p) => { p.relation = x.id }) }))
+  ] : prop.type === 'rollup' ? [
+    { divider: true, label: '' },
+    ...(rels.length ? rels.map((r) => ({ label: `Through: ${r.name}`, checked: prop.rollup?.rel === r.id, onClick: () => setP((p) => { p.rollup = { rel: r.id, prop: TITLE, fn: p.rollup?.fn ?? 'count' } }) })) : [{ label: 'Add a Relation property first', disabled: true }]),
+    ...(relDb ? [{ divider: true, label: '' }, { label: 'Of: Name', checked: prop.rollup?.prop === TITLE, onClick: () => setP((p) => { if (p.rollup) p.rollup.prop = TITLE }) },
+      ...relDb.props.filter((x) => x.type !== 'rollup').map((x) => ({ label: `Of: ${x.name}`, checked: prop.rollup?.prop === x.id, onClick: () => setP((p) => { if (p.rollup) p.rollup.prop = x.id }) }))] : []),
+    ...(prop.rollup ? [{ divider: true, label: '' }, ...ROLLUP_FNS.map((f) => ({ label: `Show: ${f.name}`, checked: prop.rollup?.fn === f.fn, onClick: () => setP((p) => { if (p.rollup) p.rollup.fn = f.fn }) }))] : [])
+  ] : prop.type === 'formula' ? [
+    { divider: true, label: '' },
+    { label: 'Edit formula…', icon: 'sigma', onClick: () => setFormulaEl(el) }
+  ] : []
   const items: MenuItem[] = [
     { label: 'Rename', icon: 'edit', onClick: () => setRename(true) },
     ...PROP_TYPES.map((t) => ({ label: `Type: ${t.name}`, checked: prop.type === t.type, onClick: () => updateDb(dbId, (db) => {
@@ -137,7 +253,9 @@ function PropHeader({ dbId, view, prop }: { dbId: string; view: DbView; prop: Db
       p.type = t.type
       if (hasOptions(t.type) && !p.options) p.options = []
       if (t.type === 'progress' && !p.max) p.max = 100
+      setupProp(getData(), dbId, db, p)
     }) })),
+    ...special,
     ...(prop.type === 'number' ? [{ divider: true, label: '' }, ...(['plain', 'decimal', 'percent', 'currency'] as const).map((f) => ({ label: `Format: ${f}`, checked: (prop.format ?? 'plain') === f, onClick: () => updateDb(dbId, (db) => { const p = db.props.find((x) => x.id === prop.id); if (p) p.format = f }) }))] : []),
     { divider: true, label: '' },
     { label: 'Sort ascending', icon: 'sort', onClick: () => updateView(dbId, view.id, (v) => { v.sort = { prop: prop.id, dir: 'asc' } }) },
@@ -154,7 +272,8 @@ function PropHeader({ dbId, view, prop }: { dbId: string; view: DbView; prop: Db
         <button className="db-th-btn" onClick={(e) => setEl(e.currentTarget)}><Icon name={propTypeInfo(prop.type).icon} size={13} /><span className="ellipsis">{prop.name}</span></button>
       )}
       <ColResizer dbId={dbId} view={view} colId={prop.id} />
-      {el && <Popover anchor={el} onClose={() => setEl(null)}><Menu items={items} onClose={() => setEl(null)} /></Popover>}
+      {el && !formulaEl && <Popover anchor={el} onClose={() => setEl(null)}><Menu items={items} onClose={() => setEl(null)} /></Popover>}
+      {formulaEl && <FormulaEditor dbId={dbId} prop={prop} anchor={formulaEl} onClose={() => { setFormulaEl(null); setEl(null) }} />}
     </div>
   )
 }
@@ -245,7 +364,7 @@ function Card({ row, db, view, dbId, draggable }: { row: Page; db: DbSchema; vie
     <div className="db-card glass" draggable={draggable} onDragStart={(e) => e.dataTransfer.setData('text/row', row.id)} onClick={() => openPage(row.id)}>
       {coverStyle(row.cover) && <div className="db-card-cover" style={coverStyle(row.cover)!} />}
       <div className="db-card-title">{row.icon && <><Glyph value={row.icon} size={14} /> </>}{row.title || <span className="muted">Untitled</span>}</div>
-      {shown.map((p) => <PropView key={p.id} prop={p} v={row.props?.[p.id]} />)}
+      {shown.map((p) => <PropView key={p.id} prop={p} v={cellValue(getData(), row, p)} />)}
       <span hidden>{dbId}</span>
     </div>
   )
@@ -292,10 +411,148 @@ function ListView({ dbId, db, view, rows }: { dbId: string; db: DbSchema; view: 
         <button key={r.id} className="db-list-row" onClick={() => openPage(r.id)}>
           <span className="db-list-title">{r.icon || <Icon name="note" size={14} />} <span className="ellipsis">{r.title || 'Untitled'}</span></span>
           <span className="spacer" />
-          {shown.map((p) => <PropView key={p.id} prop={p} v={r.props?.[p.id]} />)}
+          {shown.map((p) => <PropView key={p.id} prop={p} v={cellValue(getData(), r, p)} />)}
         </button>
       ))}
       <button className="db-new-row" onClick={() => addRow(dbId, defaultsFromFilters(view))}><Icon name="plus" size={14} /> New</button>
+    </div>
+  )
+}
+
+const dayDiff = (a: string, b: string): number => Math.round((parseDay(a).getTime() - parseDay(b).getTime()) / 86400000)
+
+function TimelineView({ dbId, db, view, rows }: { dbId: string; db: DbSchema; view: DbView; rows: Page[] }): JSX.Element {
+  const startP = db.props.find((p) => p.id === view.dateProp && p.type === 'date')
+  const endP = db.props.find((p) => p.id === view.endProp && p.type === 'date' && p.id !== view.dateProp)
+  const [zoom, setZoom] = useState<'week' | 'month' | 'quarter'>('month')
+  const t = today()
+  const [from, setFrom] = useState(() => addDays(t, -7))
+  const [drag, setDrag] = useState<{ id: string; dx: number; mode: 'move' | 'end' } | null>(null)
+  if (!startP) return <div className="muted pad">Pick a Date property to place rows on the timeline.</div>
+  const dw = zoom === 'week' ? 64 : zoom === 'month' ? 30 : 12
+  const span = zoom === 'week' ? 21 : zoom === 'month' ? 56 : 120
+  const days = Array.from({ length: span }, (_, i) => addDays(from, i))
+  const dated = rows.filter((r) => typeof r.props?.[startP.id] === 'string')
+  const undated = rows.filter((r) => typeof r.props?.[startP.id] !== 'string')
+  const startDrag = (e: React.PointerEvent, r: Page, mode: 'move' | 'end'): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    const x0 = e.clientX
+    let moved = 0
+    const move = (ev: PointerEvent): void => { moved = ev.clientX - x0; setDrag({ id: r.id, dx: moved, mode }) }
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setDrag(null)
+      const n = Math.round(moved / dw)
+      if (Math.abs(moved) < 4) { if (mode === 'move') openPage(r.id); return }
+      if (!n) return
+      const s0 = r.props?.[startP.id] as string
+      const e0 = (endP && (r.props?.[endP.id] as string)) || s0
+      if (mode === 'move') {
+        setRowProp(r.id, startP.id, addDays(s0, n))
+        if (endP && r.props?.[endP.id]) setRowProp(r.id, endP.id, addDays(e0, n))
+      } else if (endP) {
+        const ne = addDays(e0, n)
+        setRowProp(r.id, endP.id, ne < s0 ? s0 : ne)
+      }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  return (
+    <div className="db-timeline glass">
+      <div className="row gap-sm db-cal-nav">
+        <button className="icon-btn" onClick={() => setFrom(addDays(from, -Math.round(span / 2)))}><Icon name="left" size={14} /></button>
+        <button className="link small" onClick={() => setFrom(addDays(t, -7))}>Today</button>
+        <button className="icon-btn" onClick={() => setFrom(addDays(from, Math.round(span / 2)))}><Icon name="right" size={14} /></button>
+        <div className="spacer" />
+        <Segmented small value={zoom} onChange={setZoom} options={[{ value: 'week', label: 'Weeks' }, { value: 'month', label: 'Months' }, { value: 'quarter', label: 'Quarters' }]} />
+      </div>
+      <div className="tl-scroll">
+        <div className="tl-grid" style={{ width: 220 + span * dw }}>
+          <div className="tl-head">
+            <div className="tl-name-col" />
+            {days.map((d) => {
+              const dt = parseDay(d)
+              const first = dt.getDate() === 1 || d === from
+              return (
+                <div key={d} className={`tl-day ${d === t ? 'today' : ''} ${dt.getDay() === 0 || dt.getDay() === 6 ? 'weekend' : ''}`} style={{ width: dw }}>
+                  {first && <span className="tl-month">{MONTHS_LONG[dt.getMonth()].slice(0, 3)} {dt.getFullYear() !== parseDay(t).getFullYear() ? dt.getFullYear() : ''}</span>}
+                  {(zoom !== 'quarter' || dt.getDay() === 1) && <span className="tl-num">{dt.getDate()}</span>}
+                </div>
+              )
+            })}
+          </div>
+          {dated.map((r) => {
+            const s0 = r.props?.[startP.id] as string
+            const e0 = (endP && (r.props?.[endP.id] as string)) || s0
+            let a = dayDiff(s0, from)
+            let b = dayDiff(e0 < s0 ? s0 : e0, from)
+            const dx = drag?.id === r.id ? drag.dx : 0
+            const color = optionOf(db.props.find((p) => p.type === 'status') ?? db.props.find((p) => p.type === 'select') ?? ({} as DbProp), r.props?.[(db.props.find((p) => p.type === 'status') ?? db.props.find((p) => p.type === 'select'))?.id ?? ''])?.color
+            const visible = b >= 0 && a < span
+            const cutL = a < 0
+            const cutR = b >= span
+            a = Math.max(0, a)
+            b = Math.min(span - 1, b)
+            return (
+              <div key={r.id} className="tl-row">
+                <button className="tl-name-col ellipsis" onClick={() => openPage(r.id)}>{r.icon && <Glyph value={r.icon} size={13} />} {r.title || 'Untitled'}</button>
+                <div className="tl-track" style={{ width: span * dw }}>
+                  {days.map((d) => <span key={d} className={`tl-cell ${d === t ? 'today' : ''}`} style={{ width: dw }} />)}
+                  {visible && (
+                    <div className={`tl-bar ${drag?.id === r.id ? 'dragging' : ''} ${cutL ? 'cut-l' : ''} ${cutR ? 'cut-r' : ''}`} style={{ left: a * dw + 2 + (drag?.mode === 'move' ? dx : 0), width: Math.max(dw - 4, (b - a + 1) * dw - 4 + (drag?.mode === 'end' ? dx : 0)), ['--c' as any]: color ?? 'var(--accent)' }}
+                      onPointerDown={(e) => startDrag(e, r, 'move')} title={`${friendlyDay(s0)}${e0 !== s0 ? ' – ' + friendlyDay(e0) : ''}`}>
+                      <span className="ellipsis">{r.title || 'Untitled'}</span>
+                      {endP && <span className="tl-handle" onPointerDown={(e) => startDrag(e, r, 'end')} />}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      {undated.length > 0 && (
+        <div className="tl-undated">
+          <span className="section-label">No date</span>
+          {undated.map((r) => <button key={r.id} className="db-rel-chip link" title="Put on today" onClick={() => setRowProp(r.id, startP.id, t)}><Icon name="plus" size={11} />{r.title || 'Untitled'}</button>)}
+        </div>
+      )}
+      <button className="db-new-row" onClick={() => addRow(dbId, { ...defaultsFromFilters(view), [startP.id]: t })}><Icon name="plus" size={14} /> New</button>
+    </div>
+  )
+}
+
+function ChartView({ db, view, rows }: { db: DbSchema; view: DbView; rows: Page[] }): JSX.Element {
+  const c = view.chart ?? { kind: 'bar', by: null, value: null, fn: 'count' }
+  const data = chartData(getData(), db, rows, c)
+  return (
+    <div className="db-chart glass">
+      <div className="db-chart-title">{chartTitleOf(db, c)}</div>
+      <ChartSvg data={data} kind={c.kind} height={c.kind === 'donut' ? 220 : 260} />
+    </div>
+  )
+}
+
+function ChartSettings({ dbId, db, view }: { dbId: string; db: DbSchema; view: DbView }): JSX.Element {
+  const c = view.chart ?? { kind: 'bar' as const, by: null, value: null, fn: 'count' as const }
+  const set = (p: Partial<typeof c>): void => updateView(dbId, view.id, (v) => { v.chart = { ...c, ...p } })
+  const nums = db.props.filter((p) => p.type === 'number' || p.type === 'progress' || isComputed(p.type))
+  return (
+    <div className="form-grid">
+      <label>Chart</label><Segmented small value={c.kind} onChange={(v) => set({ kind: v })} options={[{ value: 'bar', label: 'Bars' }, { value: 'hbar', label: 'Rows' }, { value: 'line', label: 'Line' }, { value: 'donut', label: 'Donut' }]} />
+      <label>Split by</label>
+      <select className="input input-sm" value={c.by ?? ''} onChange={(e) => set({ by: e.target.value || null })}>
+        <option value="">Nothing (one total)</option>
+        {chartGroupable(db).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      <label>Show</label>
+      <select className="input input-sm" value={c.fn === 'count' ? 'count' : `${c.fn}:${c.value ?? ''}`} onChange={(e) => { const v = e.target.value; if (v === 'count') set({ fn: 'count', value: null }); else { const [fn, id] = v.split(':'); set({ fn: fn as 'sum' | 'avg', value: id }) } }}>
+        <option value="count">Number of rows</option>
+        {nums.flatMap((p) => [<option key={'s' + p.id} value={`sum:${p.id}`}>Total {p.name}</option>, <option key={'a' + p.id} value={`avg:${p.id}`}>Average {p.name}</option>])}
+      </select>
     </div>
   )
 }
@@ -410,10 +667,11 @@ function ToolbarPop({ icon, label, active, children }: { icon: string; label: st
 export function DatabaseView({ dbId, viewId, embedded }: { dbId: string; viewId?: string; embedded?: boolean }): JSX.Element {
   const page = useData((d) => d.pages[dbId])
   const all = useData((d) => d.pages)
-  const rows = useMemo(() => Object.values(all).filter((p) => p.rowOf === dbId && !p.deletedAt).sort((a, b) => (a.rowOrder ?? a.createdAt) - (b.rowOrder ?? b.createdAt)), [all, dbId])
+  const rows = useMemo(() => Object.values(all).filter((p) => p.rowOf === dbId && !p.deletedAt && !p.template).sort((a, b) => (a.rowOrder ?? a.createdAt) - (b.rowOrder ?? b.createdAt)), [all, dbId])
   const [q, setQ] = useState('')
   const [viewEl, setViewEl] = useState<{ el: HTMLElement; id: string } | null>(null)
   const [addEl, setAddEl] = useState<HTMLElement | null>(null)
+  const [tplEl, setTplEl] = useState<HTMLElement | null>(null)
   const renaming = useRef<string | null>(null)
   const [, force] = useState(0)
   const db = page?.db
@@ -427,7 +685,8 @@ export function DatabaseView({ dbId, viewId, embedded }: { dbId: string; viewId?
     ...VIEW_TYPES.map((t) => ({ label: `Layout: ${t.name}`, checked: v.type === t.type, onClick: () => updateView(dbId, v.id, (x) => {
       x.type = t.type
       if (t.type === 'board' && !x.groupBy) x.groupBy = (db.props.find((p) => p.type === 'status') ?? db.props.find((p) => p.type === 'select'))?.id ?? null
-      if (t.type === 'calendar' && !x.dateProp) x.dateProp = db.props.find((p) => p.type === 'date')?.id ?? null
+      if ((t.type === 'calendar' || t.type === 'timeline') && !x.dateProp) x.dateProp = db.props.find((p) => p.type === 'date')?.id ?? null
+      if (t.type === 'chart' && !x.chart) x.chart = { kind: 'bar', by: (db.props.find((p) => p.type === 'status') ?? db.props.find((p) => p.type === 'select'))?.id ?? null, value: null, fn: 'count' }
       if (!x.cardProps) x.cardProps = db.props.slice(0, 3).map((p) => p.id)
     }) })),
     { divider: true, label: '' },
@@ -478,15 +737,37 @@ export function DatabaseView({ dbId, viewId, embedded }: { dbId: string; viewId?
             {dates.map((p) => <option key={p.id} value={p.id}>By {p.name}</option>)}
           </select>
         )}
+        {view.type === 'timeline' && <>
+          <select className="input input-sm db-select" title="Starts" value={view.dateProp ?? ''} onChange={(e) => updateView(dbId, view.id, (v) => { v.dateProp = e.target.value || null })}>
+            <option value="">Starts on…</option>
+            {dates.map((p) => <option key={p.id} value={p.id}>Starts: {p.name}</option>)}
+          </select>
+          <select className="input input-sm db-select" title="Ends" value={view.endProp ?? ''} onChange={(e) => updateView(dbId, view.id, (v) => { v.endProp = e.target.value || null })}>
+            <option value="">Same day</option>
+            {dates.filter((p) => p.id !== view.dateProp).map((p) => <option key={p.id} value={p.id}>Ends: {p.name}</option>)}
+          </select>
+        </>}
+        {view.type === 'chart' && <ToolbarPop icon="chart-pie" label="Chart"><ChartSettings dbId={dbId} db={db} view={view} /></ToolbarPop>}
         <ToolbarPop icon="eye" label="Properties"><PropsEditor dbId={dbId} db={db} view={view} /></ToolbarPop>
-        <Button small kind="primary" icon="plus" onClick={() => { const id = addRow(dbId, defaultsFromFilters(view)); if (view.type !== 'table') openPage(id) }}>New</Button>
+        <span className="split-btn">
+          <Button small kind="primary" icon="plus" onClick={() => { const id = addRow(dbId, defaultsFromFilters(view)); if (view.type !== 'table') openPage(id) }}>New</Button>
+          <Button small kind="primary" icon="down" title="Templates" onClick={(e) => setTplEl(e.currentTarget as HTMLElement)} />
+        </span>
       </div>
-      {rows.length === 0 && view.type !== 'calendar' && view.type !== 'table' ? <Empty icon="database" title="No rows yet" /> : null}
+      {rows.length === 0 && !['calendar', 'table', 'timeline'].includes(view.type) ? <Empty icon="database" title="No rows yet" /> : null}
       {view.type === 'table' && <TableView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'board' && <BoardView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'gallery' && <GalleryView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'list' && <ListView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'calendar' && <CalendarView dbId={dbId} db={db} view={view} rows={shown} />}
+      {view.type === 'timeline' && <TimelineView dbId={dbId} db={db} view={view} rows={shown} />}
+      {view.type === 'chart' && <ChartView db={db} view={view} rows={shown} />}
+      {tplEl && <Popover anchor={tplEl} align="end" onClose={() => setTplEl(null)}><Menu onClose={() => setTplEl(null)} items={[
+        ...templatesOf(getData(), dbId).map((t) => ({ label: t.title || 'Untitled', icon: 'file-text', onClick: () => { const id = addRowFrom(dbId, t.id, defaultsFromFilters(view)); openPage(id) } })),
+        ...(templatesOf(getData(), dbId).length ? [{ divider: true, label: '' }] : []),
+        ...templatesOf(getData(), dbId).map((t) => ({ label: `Edit ${t.title || 'Untitled'}`, icon: 'edit', onClick: () => openPage(t.id) })),
+        { label: 'New template', icon: 'plus', onClick: () => openPage(addTemplate(dbId)) }
+      ]} /></Popover>}
       {viewEl && <Popover anchor={viewEl.el} onClose={() => setViewEl(null)}><Menu items={viewMenu(db.views.find((v) => v.id === viewEl.id) ?? view)} onClose={() => setViewEl(null)} /></Popover>}
       {addEl && <Popover anchor={addEl} onClose={() => setAddEl(null)}><Menu items={VIEW_TYPES.map((t) => ({ label: t.name, icon: t.icon, onClick: () => { const nv = newView(t.type, db); updateDb(dbId, (s) => { s.views.push(nv) }); setActive(nv.id) } }))} onClose={() => setAddEl(null)} /></Popover>}
     </div>
@@ -504,6 +785,7 @@ export function RowProps({ rowId }: { rowId: string }): JSX.Element | null {
   if (!row?.rowOf || !db) return null
   return (
     <div className="row-props">
+      {row.template && <div className="row-template-note"><Icon name="file-text" size={13} /> Template for new rows <button className="link small" onClick={() => act((d) => { d.pages[rowId].template = undefined })}>Make it a normal row</button></div>}
       {db.props.map((p) => (
         <div key={p.id} className="row-prop">
           <span className="row-prop-name"><Icon name={propTypeInfo(p.type).icon} size={13} />{p.name}</span>

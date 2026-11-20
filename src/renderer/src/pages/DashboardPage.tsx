@@ -69,6 +69,7 @@ export function initialConfig(type: WidgetType, d: import('../types').AppData, e
   const live = Object.values(d.pages).filter((x) => !x.deletedAt && !x.rowOf && x.id !== exclude)
   if (type === 'value' || type === 'progress') config.valueId = Object.values(d.values).sort((a, b) => a.order - b.order)[0]?.id ?? null
   if (type === 'database') config.dbId = live.find((x) => x.type === 'database')?.id ?? null
+  if (type === 'dbchart') { const db = live.find((x) => x.type === 'database'); config.dbId = db?.id ?? null; config.by = (db?.db?.props.find((p) => p.type === 'status') ?? db?.db?.props.find((p) => p.type === 'select'))?.id ?? null }
   if (type === 'dashboard') config.pageId = live.find((x) => x.type === 'dashboard')?.id ?? null
   if (type === 'pageview' || type === 'checklist') {
     const withTodos = live.filter((x) => x.type === 'doc' && x.blocks.some((b) => b.type === 'todo'))

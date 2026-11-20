@@ -8,7 +8,7 @@ import { addDays, addMonths, friendlyDay, parseDay, today, uid } from './lib/uti
 
 enablePatches()
 
-export type Overlay = null | 'search' | 'settings' | 'trash' | 'newPage' | 'shortcuts' | 'notionImport' | 'movePage' | 'quickAdd' | 'values'
+export type Overlay = null | 'search' | 'settings' | 'trash' | 'newPage' | 'shortcuts' | 'notionImport' | 'movePage' | 'quickAdd' | 'values' | 'history'
 
 export interface Toast { id: string; text: string; icon?: string; kind?: 'xp' | 'info' | 'level' | 'achievement' | 'error'; undo?: boolean }
 

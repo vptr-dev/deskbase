@@ -461,7 +461,7 @@ class NotionReader {
     if (!col) { this.stats.missing++; return null }
     this.collections.set(collectionId, r.id)
     const name = this.rich(json(col.name, []), true) || fallbackTitle || 'Database'
-    const schema: Record<string, { name: string; type: string; options?: any[]; number_format?: string }> = json(col.schema, {})
+    const schema: Record<string, { name: string; type: string; options?: any[]; number_format?: string; collection_id?: string }> = json(col.schema, {})
     const colFmt = json(col.format, {})
     const icon = json(col.icon, null) ?? json(r.format, {}).page_icon
     const page: ImportPage = {
@@ -477,7 +477,7 @@ class NotionReader {
     const TYPE: Record<string, PropType> = {
       text: 'text', number: 'number', select: 'select', multi_select: 'multi', status: 'status', date: 'date',
       checkbox: 'checkbox', url: 'url', email: 'text', phone_number: 'text', person: 'text', created_by: 'text',
-      last_edited_by: 'text', relation: 'text', file: 'text', created_time: 'date', last_edited_time: 'date'
+      last_edited_by: 'text', relation: 'relation', file: 'text', created_time: 'date', last_edited_time: 'date'
     }
     const order: string[] = (colFmt.collection_page_properties ?? []).map((x: any) => x?.property).filter((k: any) => typeof k === 'string')
     const keys = [...order.filter((k) => schema[k]), ...Object.keys(schema).filter((k) => !order.includes(k))].filter((k) => k !== 'title' && TYPE[schema[k]?.type])
@@ -487,6 +487,11 @@ class NotionReader {
       const p: DbProp = { id: propId(k), name: s.name || 'Property', type }
       if (type === 'select' || type === 'multi' || type === 'status') {
         p.options = (s.options ?? []).filter((o) => o && o.value).map((o) => ({ id: 'o_' + propId(String(o.id ?? o.value)).replace(/^n_/, ''), name: String(o.value), color: OPTION_HEX[o.color] ?? OPTION_HEX.default }))
+      }
+      if (type === 'relation') {
+        // Points at the database's page; the renderer turns notion: refs into its own ids.
+        const target: Row | undefined = s.collection_id ? this.db.prepare('select parent_id from collection where id = ?').get(s.collection_id) : undefined
+        p.relation = target?.parent_id ? 'notion:' + target.parent_id : null
       }
       if (type === 'number') {
         const f = s.number_format ?? ''
@@ -508,7 +513,7 @@ class NotionReader {
     const viewIds: string[] = json(r.view_ids, [])
     const views: DbView[] = []
     let manual: string[] = []
-    const VIEW: Record<string, ViewType> = { table: 'table', board: 'board', gallery: 'gallery', list: 'list', calendar: 'calendar', timeline: 'table' }
+    const VIEW: Record<string, ViewType> = { table: 'table', board: 'board', gallery: 'gallery', list: 'list', calendar: 'calendar', timeline: 'timeline' }
     for (const vid of Array.isArray(viewIds) ? viewIds : []) {
       const v: Row | undefined = this.db.prepare('select * from collection_view where id = ? and alive = 1').get(vid)
       if (!v) continue
@@ -517,7 +522,7 @@ class NotionReader {
       const type = VIEW[v.type] ?? 'table'
       if (!manual.length) { const ps = json(v.page_sort, []); if (Array.isArray(ps)) manual = ps }
       const list: any[] = vf[`${v.type}_properties`] ?? vf.table_properties ?? []
-      const vname = typeof v.name === 'string' && v.name.replace(/[\sㅤ]/g, '') ? v.name.trim() : ({ table: 'Table', board: 'Board', gallery: 'Gallery', list: 'List', calendar: 'Calendar' } as const)[type]
+      const vname = typeof v.name === 'string' && v.name.replace(/[\sㅤ]/g, '') ? v.name.trim() : ({ table: 'Table', board: 'Board', gallery: 'Gallery', list: 'List', calendar: 'Calendar', timeline: 'Timeline', chart: 'Chart' } as const)[type]
       const view: DbView = { id: 'v_' + propId(vid).slice(2, 40), name: vname, type, filters: [], hidden: [] }
       const known = (k: unknown): k is string => typeof k === 'string' && pid(k) !== null
       view.hidden = list.filter((x) => x?.visible === false && known(x.property) && x.property !== 'title').map((x) => pid(x.property)!)
@@ -533,6 +538,12 @@ class NotionReader {
       if (type === 'board' && known(group)) view.groupBy = pid(group)
       const cal = vf.calendar_by ?? q.calendar_by
       if (type === 'calendar' && known(cal)) view.dateProp = pid(cal)
+      if (type === 'timeline') {
+        const start = vf.timeline_by ?? q.timeline_by
+        const end = vf.timeline_by_end ?? q.timeline_by_end
+        if (known(start)) view.dateProp = pid(start)
+        if (known(end)) view.endProp = pid(end)
+      }
       const sort = Array.isArray(q.sort) ? q.sort.find((s: any) => known(s?.property)) : null
       if (sort) view.sort = { prop: pid(sort.property)!, dir: sort.direction === 'descending' ? 'desc' : 'asc' }
       for (const f of Array.isArray(vf.property_filters) ? vf.property_filters : []) {
@@ -594,7 +605,7 @@ class NotionReader {
             val = links.join(', ') || undefined
             break
           }
-          case 'relation': val = Array.isArray(v) ? v.flatMap((seg: any[]) => (seg?.[1] ?? []).filter((m: any[]) => m?.[0] === 'p').map((m: any[]) => this.pageTitle(m[1]))).join(', ') || undefined : undefined; break
+          case 'relation': { const ids = Array.isArray(v) ? v.flatMap((seg: any[]) => (seg?.[1] ?? []).filter((m: any[]) => m?.[0] === 'p' && typeof m[1] === 'string').map((m: any[]) => 'notion:' + m[1])) : []; if (ids.length) val = ids; break }
           default: val = this.rich(v, true).trim() || undefined
         }
         if (val !== undefined && val !== '') values[prop.id] = val

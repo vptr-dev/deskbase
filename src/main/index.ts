@@ -8,6 +8,8 @@ import { linkInfo } from './linkinfo'
 import { registerAi } from './ai'
 import { importNotionExport, importNotionPages, listNotionPages, notionDbPath } from './notion'
 import { findPlace, netStats, sysStats, weather } from './sysinfo'
+import { backdrop } from './wallpaper'
+import { listVersions, saveVersion } from './history'
 import { attachDesktopHost, closeAllWidgets, deskBounds, deskClose, deskDrag, deskDragEnd, deskEdit, deskFocus, deskMenu, deskPrepare, deskShow, deskUpdate, listDisplays, type DeskSpec } from './desktop'
 
 type Material = 'mica' | 'acrylic' | 'none'
@@ -286,6 +288,8 @@ function registerIpc(): void {
     return readBackup(name)
   })
   ipcMain.handle('app:openDataFolder', () => shell.openPath(dataDir()))
+  ipcMain.handle('history:list', (_e, id: string) => listVersions(String(id)))
+  ipcMain.handle('history:save', (_e, id: string, v) => saveVersion(String(id), v))
 
   ipcMain.handle('app:setTheme', (_e, theme: 'system' | 'light' | 'dark') => {
     nativeTheme.themeSource = theme
@@ -357,6 +361,7 @@ function registerIpc(): void {
   ipcMain.handle('desk:bounds', (_e, id: string) => deskBounds(id))
   ipcMain.handle('desk:menu', (_e, id: string, items) => deskMenu(id, items))
   ipcMain.handle('desk:focus', (_e, id: string) => deskFocus(id))
+  ipcMain.handle('desk:backdrop', (_e, stamp?: string) => backdrop(stamp))
   ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
   // Launcher panels: a website, an app link (mailto:, spotify:, steam:…) or a file, folder or program on this PC.

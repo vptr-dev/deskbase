@@ -3,7 +3,7 @@ import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 12
+export const SCHEMA = 13
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -116,7 +116,8 @@ export const DEFAULT_WIDGET_STYLE: WidgetStyle = {
   shadow: false,
   header: true,
   align: 'start',
-  theme: 'auto'
+  theme: 'auto',
+  blur: 28
 }
 
 export const MAIN_SPACE = { id: 'main', name: 'Main', icon: 'monitor' }
@@ -283,6 +284,10 @@ export function normalize(raw: any): AppData {
       const db = obj(p.db)
       p.db = { props: Array.isArray(db.props) ? db.props.filter((x: any) => x && x.id) : [], views: Array.isArray(db.views) ? db.views.filter((x: any) => x && x.id) : [] }
       for (const pr of p.db.props) if (['select', 'multi', 'status'].includes(pr.type)) pr.options = Array.isArray(pr.options) ? pr.options : []
+      for (const pr of p.db.props) {
+        if (pr.type === 'formula') pr.formula = typeof pr.formula === 'string' ? pr.formula : ''
+        if (pr.type === 'rollup') pr.rollup = pr.rollup && typeof pr.rollup === 'object' && pr.rollup.rel ? pr.rollup : null
+      }
       if (!p.db.views.length) p.db.views.push({ id: uid(), name: 'Table', type: 'table', filters: [], hidden: [] })
     }
     if (p.type === 'dashboard') p.widgets = Array.isArray(p.widgets) ? p.widgets.filter((w) => w && w.id && w.type).map((w) => ({ ...w, config: obj(w.config), style: normalizeStyle(w.style, true) })) : []
@@ -445,6 +450,7 @@ export function normalizeStyle(raw: any, partial = false): Partial<WidgetStyle> 
   if (has('header')) out.header = r.header === undefined ? d.header : Boolean(r.header)
   if (has('align')) out.align = r.align === 'center' ? 'center' : 'start'
   if (has('theme')) out.theme = r.theme === 'light' || r.theme === 'dark' ? r.theme : 'auto'
+  if (has('blur')) out.blur = num(r.blur, 0, 80, d.blur)
   return out
 }
 

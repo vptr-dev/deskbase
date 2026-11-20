@@ -1,5 +1,6 @@
 import { act, emit, getData, toast, unemit } from '../store'
-import type { AppData, DbFilter, DbProp, DbSchema, DbView, Page, PropType, ViewType } from '../types'
+import type { AppData, Block, DbFilter, DbProp, DbSchema, DbView, Page, PropType, RollupFn, ViewType } from '../types'
+import { evalFormula, formulaText, type FVal } from './formula'
 import { COLORS } from './defaults'
 import { friendlyDay, today, uid } from './util'
 
@@ -15,7 +16,18 @@ export const PROP_TYPES: { type: PropType; name: string; icon: string }[] = [
   { type: 'date', name: 'Date', icon: 'calendar' },
   { type: 'checkbox', name: 'Checkbox', icon: 'check' },
   { type: 'url', name: 'URL', icon: 'link' },
-  { type: 'progress', name: 'Progress', icon: 'gauge' }
+  { type: 'progress', name: 'Progress', icon: 'gauge' },
+  { type: 'relation', name: 'Relation', icon: 'arrow-up-right' },
+  { type: 'rollup', name: 'Rollup', icon: 'search' },
+  { type: 'formula', name: 'Formula', icon: 'sigma' }
+]
+
+/** Properties whose value is worked out instead of typed in. */
+export const isComputed = (t: PropType): boolean => t === 'rollup' || t === 'formula'
+
+export const ROLLUP_FNS: { fn: RollupFn; name: string }[] = [
+  { fn: 'count', name: 'Count' }, { fn: 'sum', name: 'Sum' }, { fn: 'avg', name: 'Average' }, { fn: 'min', name: 'Smallest' }, { fn: 'max', name: 'Largest' },
+  { fn: 'checked', name: 'Percent checked' }, { fn: 'list', name: 'Show values' }, { fn: 'earliest', name: 'Earliest date' }, { fn: 'latest', name: 'Latest date' }
 ]
 export const propTypeInfo = (t: PropType): (typeof PROP_TYPES)[number] => PROP_TYPES.find((p) => p.type === t) ?? PROP_TYPES[0]
 
@@ -24,7 +36,9 @@ export const VIEW_TYPES: { type: ViewType; name: string; icon: string }[] = [
   { type: 'board', name: 'Board', icon: 'board' },
   { type: 'gallery', name: 'Gallery', icon: 'gallery' },
   { type: 'list', name: 'List', icon: 'list' },
-  { type: 'calendar', name: 'Calendar', icon: 'calendar' }
+  { type: 'calendar', name: 'Calendar', icon: 'calendar' },
+  { type: 'timeline', name: 'Timeline', icon: 'calendar-range' },
+  { type: 'chart', name: 'Chart', icon: 'chart-pie' }
 ]
 
 export const hasOptions = (t: PropType): boolean => t === 'select' || t === 'multi' || t === 'status'
@@ -43,7 +57,7 @@ export function updateView(dbId: string, viewId: string, fn: (v: DbView) => void
 }
 
 export function rowsOf(d: AppData, dbId: string): Page[] {
-  return Object.values(d.pages).filter((p) => p.rowOf === dbId && !p.deletedAt).sort((a, b) => (a.rowOrder ?? a.createdAt) - (b.rowOrder ?? b.createdAt))
+  return Object.values(d.pages).filter((p) => p.rowOf === dbId && !p.deletedAt && !p.template).sort((a, b) => (a.rowOrder ?? a.createdAt) - (b.rowOrder ?? b.createdAt))
 }
 
 export function addRow(dbId: string, props: Record<string, any> = {}, title = ''): string {
@@ -57,6 +71,59 @@ export function addRow(dbId: string, props: Record<string, any> = {}, title = ''
       rowOrder: orders.length ? Math.max(...orders) + 1 : 0
     }
   })
+  return id
+}
+
+/** Row templates of a database. */
+export function templatesOf(d: AppData, dbId: string): Page[] {
+  return Object.values(d.pages).filter((p) => p.rowOf === dbId && !p.deletedAt && p.template).sort((a, b) => a.createdAt - b.createdAt)
+}
+
+/** A deep copy of blocks with new ids (tabs and columns included). */
+export function copyBlocks(blocks: Block[]): Block[] {
+  const re = (list: Block[]): Block[] => list.map((b) => {
+    const c: any = { ...b, id: uid() }
+    if (Array.isArray(c.children)) c.children = re(c.children)
+    if (Array.isArray(c.cols)) c.cols = c.cols.map((col: any) => (Array.isArray(col) ? re(col) : col))
+    return c
+  })
+  return re(structuredClone(blocks))
+}
+
+/** A new row that starts as a copy of a template row. */
+export function addRowFrom(dbId: string, tplId: string, props: Record<string, any> = {}): string {
+  const t = getData().pages[tplId]
+  const id = addRow(dbId, { ...(t?.props ?? {}), ...props }, t?.title ?? '')
+  if (t) act((d) => { const r = d.pages[id]; r.icon = t.icon; r.iconColor = t.iconColor; r.cover = t.cover ?? null; r.blocks = copyBlocks(t.blocks) })
+  return id
+}
+
+/** A new page that starts as a copy of a template page (its look, content and database setup). */
+export function pageFromTemplate(tplId: string, parentId: string | null, title?: string): string {
+  const t = getData().pages[tplId]
+  const id = uid()
+  act((d) => {
+    const now = Date.now()
+    const page: Page = {
+      ...structuredClone(t), id, title: title ?? t.title, parentId, children: [], createdAt: now, updatedAt: now, favorite: false,
+      template: undefined, source: null, rowOf: null, props: undefined, blocks: copyBlocks(t.blocks)
+    }
+    if (page.db) page.db = { ...page.db, views: page.db.views.map((v) => ({ ...v, id: uid() })) }
+    d.pages[id] = page
+    if (parentId && d.pages[parentId]) d.pages[parentId].children.push(id)
+    else d.rootOrder.push(id)
+    if (t.db) for (const r of Object.values(d.pages).filter((x) => x.rowOf === tplId && x.template && !x.deletedAt)) {
+      const rid = uid()
+      d.pages[rid] = { ...structuredClone(r), id: rid, rowOf: id, createdAt: now, updatedAt: now, blocks: copyBlocks(r.blocks) }
+    }
+  })
+  return id
+}
+
+/** A new template row for a database. */
+export function addTemplate(dbId: string): string {
+  const id = addRow(dbId, {}, 'New template')
+  act((d) => { d.pages[id].template = true })
   return id
 }
 
@@ -102,9 +169,29 @@ export function addProp(dbId: string, type: PropType, name?: string): string {
       ? [{ id: uid(), name: 'Not started', color: '#8e8e93' }, { id: uid(), name: 'In progress', color: '#0a84ff' }, { id: uid(), name: 'Done', color: '#30d158' }]
       : []
     if (type === 'progress') p.max = 100
+    setupProp(getData(), dbId, db, p)
     db.props.push(p)
   })
   return id
+}
+
+/** First settings for a relation, rollup or formula property. */
+export function setupProp(d: AppData, dbId: string, db: DbSchema, p: DbProp): void {
+  if (p.type === 'relation' && p.relation === undefined) p.relation = Object.values(d.pages).find((x) => x.type === 'database' && !x.deletedAt && x.id !== dbId)?.id ?? dbId
+  if (p.type === 'formula' && p.formula === undefined) p.formula = ''
+  if (p.type === 'rollup' && !p.rollup) { const rel = db.props.find((x) => x.type === 'relation'); p.rollup = rel ? { rel: rel.id, prop: TITLE, fn: 'count' } : null }
+}
+
+/** A formula's result for one row, with the error if it has one (for the formula editor). */
+export function formulaResult(d: AppData, row: Page, prop: DbProp, src: string): { value: FVal; error?: string } {
+  const db = d.pages[row.rowOf ?? '']?.db
+  if (!db) return { value: null }
+  return evalFormula(src, (name) => {
+    const p = db.props.find((x) => x.name.toLowerCase() === name.toLowerCase())
+    if (!p) { if (/^(name|title)$/i.test(name)) return row.title; throw new Error(`There is no property called "${name}"`) }
+    if (p.id === prop.id) throw new Error('A formula cannot use itself')
+    return toFVal(d, p, cellValue(d, row, p, 1))
+  })
 }
 
 export function deleteProp(dbId: string, propId: string): void {
@@ -144,6 +231,13 @@ export function propText(prop: DbProp, v: any): string {
     case 'date': return friendlyDay(v)
     case 'number': return formatNumber(prop, Number(v))
     case 'progress': return `${Math.round((Number(v) / (prop.max || 100)) * 100)}%`
+    case 'relation': { const d = getData(); return (Array.isArray(v) ? v : []).map((id) => d.pages[id]).filter((r) => r && !r.deletedAt).map((r) => r.title || 'Untitled').join(', ') }
+    case 'formula': return formulaText(v)
+    case 'rollup':
+      if (prop.rollup?.fn === 'checked') return `${v}%`
+      if (typeof v === 'number') return Number(v.toFixed(2)).toLocaleString()
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return friendlyDay(v)
+      return String(v)
     default: return String(v)
   }
 }
@@ -156,7 +250,69 @@ export function formatNumber(prop: DbProp, n: number): string {
   return n.toLocaleString()
 }
 
-const rowVal = (row: Page, propId: string): any => (propId === TITLE ? row.title : row.props?.[propId])
+/** A cell's value, with rollups and formulas worked out. */
+export function cellValue(d: AppData, row: Page, prop: DbProp, depth = 0): any {
+  if (prop.type === 'formula') {
+    const db = d.pages[row.rowOf ?? '']?.db
+    if (!db || depth > 8) return null
+    return evalFormula(prop.formula ?? '', (name) => {
+      const p = db.props.find((x) => x.name.toLowerCase() === name.toLowerCase())
+      if (!p) { if (/^(name|title)$/i.test(name)) return row.title; throw new Error('missing') }
+      if (p.id === prop.id) throw new Error('self')
+      return toFVal(d, p, cellValue(d, row, p, depth + 1))
+    }).value
+  }
+  if (prop.type === 'rollup') {
+    const ru = prop.rollup
+    const db = d.pages[row.rowOf ?? '']?.db
+    const rel = ru && db?.props.find((x) => x.id === ru.rel && x.type === 'relation')
+    if (!ru || !rel || depth > 8) return null
+    const linked = linkedRows(d, row, rel)
+    const tdb = d.pages[rel.relation ?? '']?.db
+    const tp = tdb?.props.find((x) => x.id === ru.prop)
+    const vals = linked.map((r) => (tp ? cellValue(d, r, tp, depth + 1) : r.title))
+    const nums = vals.map((v) => (typeof v === 'number' ? v : Number(v))).filter((n) => Number.isFinite(n) && n !== null)
+    const dates = vals.filter((v): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)).sort()
+    switch (ru.fn) {
+      case 'count': return linked.length
+      case 'sum': return nums.reduce((a, b) => a + b, 0)
+      case 'avg': return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null
+      case 'min': return nums.length ? Math.min(...nums) : null
+      case 'max': return nums.length ? Math.max(...nums) : null
+      case 'checked': return linked.length ? Math.round((vals.filter(Boolean).length / linked.length) * 100) : null
+      case 'earliest': return dates[0] ?? null
+      case 'latest': return dates[dates.length - 1] ?? null
+      default: return linked.map((r, i) => (tp ? propText(tp, vals[i]) : r.title)).filter(Boolean).join(', ')
+    }
+  }
+  return row.props?.[prop.id]
+}
+
+/** Rows a relation cell points at (missing or deleted ones left out). */
+export function linkedRows(d: AppData, row: Page, rel: DbProp): Page[] {
+  const ids: string[] = Array.isArray(row.props?.[rel.id]) ? row.props![rel.id] : []
+  return ids.map((id) => d.pages[id]).filter((r): r is Page => !!r && !r.deletedAt)
+}
+
+/** A property value as formulas see it. */
+function toFVal(d: AppData, p: DbProp, v: any): FVal {
+  if (v === undefined || v === null || v === '') return null
+  switch (p.type) {
+    case 'number': case 'progress': return Number(v)
+    case 'checkbox': return !!v
+    case 'select': case 'status': return optionOf(p, v)?.name ?? null
+    case 'multi': return (Array.isArray(v) ? v : []).map((x: string) => optionOf(p, x)?.name).filter(Boolean).join(', ')
+    case 'relation': return (Array.isArray(v) ? v : []).map((id: string) => d.pages[id]?.title).filter(Boolean).join(', ')
+    default: return typeof v === 'number' || typeof v === 'boolean' ? v : String(v)
+  }
+}
+
+const rowVal = (row: Page, propId: string): any => {
+  if (propId === TITLE) return row.title
+  const d = getData()
+  const prop = d.pages[row.rowOf ?? '']?.db?.props.find((p) => p.id === propId)
+  return prop ? cellValue(d, row, prop) : row.props?.[propId]
+}
 const isEmpty = (v: any): boolean => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
 
 export function matchFilter(row: Page, f: DbFilter, prop: DbProp | undefined): boolean {
@@ -186,6 +342,7 @@ export function filterOps(type: PropType | 'title'): { op: DbFilter['op']; label
     case 'number': case 'progress': return [{ op: 'is', label: '=' }, { op: 'gt', label: '>' }, { op: 'lt', label: '<' }, { op: 'empty', label: 'is empty' }, { op: 'notEmpty', label: 'is not empty' }]
     case 'select': case 'status': return [{ op: 'is', label: 'is' }, { op: 'not', label: 'is not' }, { op: 'empty', label: 'is empty' }, { op: 'notEmpty', label: 'is not empty' }]
     case 'multi': return [{ op: 'contains', label: 'has' }, { op: 'empty', label: 'is empty' }, { op: 'notEmpty', label: 'is not empty' }]
+    case 'relation': return [{ op: 'empty', label: 'is empty' }, { op: 'notEmpty', label: 'is not empty' }]
     case 'date': return [{ op: 'is', label: 'is' }, { op: 'lt', label: 'is before' }, { op: 'gt', label: 'is after' }, { op: 'empty', label: 'is empty' }, { op: 'notEmpty', label: 'is not empty' }]
     default: return [{ op: 'contains', label: 'contains' }, { op: 'is', label: 'is' }, { op: 'empty', label: 'is empty' }, { op: 'notEmpty', label: 'is not empty' }]
   }
@@ -195,7 +352,7 @@ export function filterOps(type: PropType | 'title'): { op: DbFilter['op']; label
 export function viewRows(rows: Page[], db: DbSchema, view: DbView, q = ''): Page[] {
   const ql = q.trim().toLowerCase()
   let out = rows.filter((r) => (view.filters ?? []).every((f) => matchFilter(r, f, db.props.find((p) => p.id === f.prop))))
-  if (ql) out = out.filter((r) => (r.title + ' ' + db.props.map((p) => propText(p, r.props?.[p.id])).join(' ')).toLowerCase().includes(ql))
+  if (ql) { const d = getData(); out = out.filter((r) => (r.title + ' ' + db.props.map((p) => propText(p, cellValue(d, r, p))).join(' ')).toLowerCase().includes(ql)) }
   const s = view.sort
   if (s) {
     const prop = db.props.find((p) => p.id === s.prop)
@@ -205,6 +362,8 @@ export function viewRows(rows: Page[], db: DbSchema, view: DbView, q = ''): Page
       if (prop.type === 'number' || prop.type === 'progress') return v === undefined ? Number.NEGATIVE_INFINITY : Number(v)
       if (prop.type === 'select' || prop.type === 'status') return (prop.options ?? []).findIndex((o) => o.id === v)
       if (prop.type === 'checkbox') return v ? 1 : 0
+      if (prop.type === 'relation') return (Array.isArray(v) ? v.length : 0)
+      if (isComputed(prop.type)) return typeof v === 'number' ? v : typeof v === 'boolean' ? (v ? 1 : 0) : String(v ?? '').toLowerCase()
       return String(propText(prop, v) && prop.type === 'date' ? v : propText(prop, v)).toLowerCase()
     }
     out = [...out].sort((a, b) => {
@@ -227,7 +386,8 @@ export function newView(type: ViewType, db: DbSchema): DbView {
     filters: [],
     hidden: [],
     groupBy: type === 'board' ? groupable?.id ?? null : null,
-    dateProp: type === 'calendar' ? date?.id ?? null : null,
+    dateProp: type === 'calendar' || type === 'timeline' ? date?.id ?? null : null,
+    ...(type === 'chart' ? { chart: { kind: 'bar' as const, by: groupable?.id ?? null, value: null, fn: 'count' as const } } : {}),
     cardProps: db.props.slice(0, 3).map((p) => p.id)
   }
 }

@@ -106,12 +106,15 @@ export interface Page {
   widgets?: Widget[]
   /** where the page was imported from, for refreshing it later */
   source?: PageSource | null
+  /** a template: new pages (or rows of its database) can start as a copy of it */
+  template?: boolean
 }
 
 export interface PageSource { kind: 'notion'; id: string; syncedAt: number }
 
 // ---------- databases ----------
-export type PropType = 'text' | 'number' | 'select' | 'multi' | 'status' | 'date' | 'checkbox' | 'url' | 'progress'
+export type PropType = 'text' | 'number' | 'select' | 'multi' | 'status' | 'date' | 'checkbox' | 'url' | 'progress' | 'relation' | 'rollup' | 'formula'
+export type RollupFn = 'count' | 'sum' | 'avg' | 'min' | 'max' | 'checked' | 'list' | 'earliest' | 'latest'
 export interface PropOption { id: string; name: string; color: string }
 export interface DbProp {
   id: string
@@ -122,8 +125,15 @@ export interface DbProp {
   format?: 'plain' | 'percent' | 'currency' | 'decimal'
   /** progress: maximum value (default 100) */
   max?: number
+  /** relation: the database whose rows this links to */
+  relation?: string | null
+  /** rollup: a value from the linked rows of one of this database's relations */
+  rollup?: { rel: string; prop: string; fn: RollupFn } | null
+  /** formula: an expression over the other properties, e.g. prop("Price") * 2 */
+  formula?: string
 }
-export type ViewType = 'table' | 'board' | 'gallery' | 'list' | 'calendar'
+export type ViewType = 'table' | 'board' | 'gallery' | 'list' | 'calendar' | 'timeline' | 'chart'
+export interface DbChart { kind: 'bar' | 'hbar' | 'line' | 'donut'; by: string | null; value: string | null; fn: 'count' | 'sum' | 'avg' }
 export interface DbFilter { id: string; prop: string; op: 'is' | 'not' | 'contains' | 'empty' | 'notEmpty' | 'gt' | 'lt' | 'checked' | 'unchecked'; value?: any }
 export interface DbView {
   id: string
@@ -137,6 +147,9 @@ export interface DbView {
   widths?: Record<string, number>
   /** gallery/board: properties shown on cards */
   cardProps?: string[]
+  /** timeline: where a row ends (dateProp is where it starts) */
+  endProp?: string | null
+  chart?: DbChart
 }
 export interface DbSchema { props: DbProp[]; views: DbView[] }
 
@@ -147,7 +160,7 @@ export type WidgetType =
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
   | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
   | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'launcher' | 'search' | 'quote' | 'battery'
-  | 'network' | 'calculator' | 'recent'
+  | 'network' | 'calculator' | 'recent' | 'dbchart' | 'activity' | 'deadlines'
 export interface Widget {
   id: string
   type: WidgetType
@@ -192,6 +205,8 @@ export interface WidgetStyle {
   /** title: small caps, plain or large */
   titleStyle: 'caps' | 'plain' | 'large'
   shadow: boolean
+  /** how much Blur and Frosted panels blur what is behind them, px */
+  blur: number
   header: boolean
   align: 'start' | 'center'
   theme: 'auto' | 'light' | 'dark'
