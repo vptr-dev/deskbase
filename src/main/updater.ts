@@ -39,8 +39,12 @@ export function getStatus(): UpdateStatus {
   return status
 }
 
+let timer: NodeJS.Timeout | null = null
+
 export async function checkForUpdates(): Promise<void> {
   if (!app.isPackaged) return send({ state: 'dev' })
+  // keep checking while the app stays open, so a long-running window still gets new releases
+  if (!timer) timer = setInterval(() => { if (status.state !== 'ready' && status.state !== 'downloading') checkForUpdates() }, 3 * 60 * 60 * 1000)
   try {
     await autoUpdater.checkForUpdates()
   } catch (e: any) {

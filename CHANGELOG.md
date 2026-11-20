@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The window can be dragged from the empty top of the sidebar, the section headings, the empty space below the pages, the whole top bar between buttons and the window edges. A hidden canvas used for the task celebration no longer blocks dragging.
+- The app checks for updates every few hours while it stays open, not only at start.
+
 ## 0.10.0 — 2026-11-20
 
 - Clock styles: ring, digital, stacked, minimal, analog (classic, minimal, numbers or dots), flip, bars, words and a 24-hour sun dial. Any clock can show another time zone, with 12 or 24 hours, seconds, date and date format to choose.

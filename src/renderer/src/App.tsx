@@ -81,7 +81,7 @@ function Breadcrumbs({ page }: { page: Page }): JSX.Element {
   let p: Page | undefined = page
   while (p) { trail.unshift(p); p = p.parentId ? pages[p.parentId] : p.rowOf ? pages[p.rowOf] : undefined }
   return (
-    <div className="crumbs no-drag">
+    <div className="crumbs">
       {trail.map((c, i) => (
         <span key={c.id} className="crumb-wrap">
           {i > 0 && <span className="crumb-sep">/</span>}
@@ -217,6 +217,8 @@ function Confetti(): JSX.Element {
       if (!c) return
       if (getData().settings.sounds) playLevelUp()
       const ctx = c.getContext('2d')!
+      // shown only while it plays: an idle full-window canvas would block dragging the window
+      c.classList.add('on')
       c.width = window.innerWidth
       c.height = window.innerHeight
       const colors = ['#0a84ff', '#30d158', '#ff9f0a', '#ff375f', '#bf5af2', '#ffd60a']
@@ -229,7 +231,7 @@ function Confetti(): JSX.Element {
           ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a); ctx.fillStyle = p.c; ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 0.6); ctx.restore()
         }
         if (++frame < 150) requestAnimationFrame(step)
-        else ctx.clearRect(0, 0, c.width, c.height)
+        else { ctx.clearRect(0, 0, c.width, c.height); c.classList.remove('on') }
       }
       step()
     })
@@ -371,7 +373,7 @@ function MainApp(): JSX.Element {
           {collapsed && <button className="icon-btn no-drag" title="Show sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = false })}><Icon name="sidebar" size={16} /></button>}
           <button className="icon-btn no-drag" title="Back (Ctrl+[)" onClick={goBack}><Icon name="left" size={15} stroke={2} /></button>
           <button className="icon-btn no-drag" title="Forward (Ctrl+])" onClick={goForward}><Icon name="right" size={15} stroke={2} /></button>
-          {view ? <div className="crumbs no-drag"><span className="crumb"><Icon name={view === '@desktop' ? 'monitor' : 'palette'} size={14} /> {view === '@desktop' ? 'Desktop' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
+          {view ? <div className="crumbs"><span className="crumb"><Icon name={view === '@desktop' ? 'monitor' : 'palette'} size={14} /> {view === '@desktop' ? 'Desktop' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
           <div className="spacer" />
           <FocusMini />
           <SaveIndicator />

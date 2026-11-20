@@ -189,7 +189,7 @@ export function Sidebar(): JSX.Element {
       <div className="sidebar-scroll" role="tree">
         {favs.length > 0 && (
           <>
-            <div className="sidebar-section">Favorites</div>
+            <div className="sidebar-section drag">Favorites</div>
             {favs.map((id) => (
               <button key={id} className={`tree-row fav ${current === id ? 'active' : ''}`} style={{ paddingLeft: 8 }} onClick={() => openPage(id)}>
                 <span className="tree-chevron invisible" />
@@ -199,7 +199,7 @@ export function Sidebar(): JSX.Element {
             ))}
           </>
         )}
-        <div className="sidebar-section row between">
+        <div className="sidebar-section row between drag">
           <span>Pages</span>
           <button className="section-btn" title="Filter pages" onClick={() => setFilter(filter === null ? '' : null)}><Icon name={filter === null ? 'filter' : 'x'} size={12} stroke={2} /></button>
         </div>
@@ -227,6 +227,7 @@ export function Sidebar(): JSX.Element {
           <span className="tree-title">Add a page</span>
         </button>
         <RootDrop />
+        <div className="sidebar-fill drag" />
       </div>
 
       <div className="sidebar-bottom">
