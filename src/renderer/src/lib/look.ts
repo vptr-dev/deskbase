@@ -114,6 +114,23 @@ export function applyLook(root: HTMLElement, s: Settings, dark: boolean): void {
   else root.style.removeProperty('--backdrop-image')
   set('--backdrop-blur', l.backdropBlur + 'px')
   set('--backdrop-dim', String(l.backdropDim / 100))
+  // Text: a tone (or your own color) and softened letter edges.
+  const fg = l.textTone === 'custom' ? (dark ? l.textDark : l.textLight) : (TEXT_TONES[l.textTone] ?? TEXT_TONES.auto)[dark ? 1 : 0]
+  set('--fg', fg)
+  set('--fg-2', `color-mix(in srgb, ${fg} 82%, transparent)`)
+  set('--glass-text', `linear-gradient(180deg, ${fg} 30%, color-mix(in srgb, ${fg} ${dark ? 66 : 74}%, transparent) 100%)`)
+  const soft = (l.textSoft ?? 0) / 100 * (dark ? 0.6 : 1)
+  if (soft > 0) set('--text-halo', `0 0 ${(0.5 + soft * 1.5).toFixed(2)}px color-mix(in srgb, ${fg} ${Math.round(8 + soft * 32)}%, transparent)`)
+  else set('--text-halo', 'none')
+}
+
+/** Ready-made text tones: [light, dark]. */
+export const TEXT_TONES: Record<string, [string, string]> = {
+  auto: ['#2b2d33', '#f2f3f8'],
+  soft: ['#4a4d57', '#d4d7e1'],
+  ink: ['#0e1014', '#ffffff'],
+  warm: ['#3d342a', '#efe5d6'],
+  cool: ['#25334a', '#dfe8f6']
 }
 
 /** Keeps a <style> element with the user's own CSS in a document. */

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Page icons are optional: a page without one shows only its title, with Add icon and Add cover appearing while you point at the top of the page.
+- Softer text: the default text color is a soft charcoal instead of black, with a choice of tones (default, soft, ink, warm, cool or your own color for light and dark mode) and a Soft edges setting that softens the edges of letters, in Appearance → Text.
+- Lines can have a text color and a background color. Backgrounds fade out at the edges instead of ending in a hard box.
+- Each line has a + and a handle in the margin to its left, so they never cover text or checkboxes. + adds a line below with the block menu open (Alt adds it above); the handle moves the line or opens its menu with Turn into, text color and background.
+- Selection box: hold the mouse on an empty part of a page and drag to select lines. Delete, Ctrl C, Ctrl X, Ctrl D, Tab and the arrow keys work on the selection; dragging or a menu on one selected line acts on all of them. Ctrl A selects every line when no line is being edited.
+
 ## 0.11.0 — 2026-11-20
 
 - Tabs: open pages in tabs with Ctrl T, close with Ctrl W, switch with Ctrl Tab, bring back a closed tab with Ctrl Shift T. Ctrl click or middle click opens a page in a new tab from the sidebar, breadcrumbs, search, links and subpages. Tabs can be dragged to reorder and come back when the app starts. Each tab keeps its own back and forward.

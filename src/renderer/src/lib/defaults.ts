@@ -3,7 +3,7 @@ import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 10
+export const SCHEMA = 11
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -84,7 +84,11 @@ export const DEFAULT_LOOK: Look = {
   backdropBlur: 0,
   backdropDim: 0,
   gradient: { a: '#7ab8ff', b: '#c9b6ff', c: '#ffd1dc', angle: 135 },
-  customCss: ''
+  customCss: '',
+  textTone: 'auto',
+  textLight: '#2b2d33',
+  textDark: '#f2f3f8',
+  textSoft: 35
 }
 
 export const DEFAULT_WIDGET_STYLE: WidgetStyle = {
@@ -349,7 +353,11 @@ export function normalizeLook(raw: any): Look {
     backdropBlur: num(l.backdropBlur, 0, 60, 0),
     backdropDim: num(l.backdropDim, -60, 60, 0),
     gradient: { a: color(g.a, D.gradient.a) || D.gradient.a, b: color(g.b, D.gradient.b) || D.gradient.b, c: color(g.c, D.gradient.c) || D.gradient.c, angle: num(g.angle, 0, 360, 135) },
-    customCss: typeof l.customCss === 'string' ? l.customCss.slice(0, 50000) : ''
+    customCss: typeof l.customCss === 'string' ? l.customCss.slice(0, 50000) : '',
+    textTone: ['auto', 'soft', 'ink', 'warm', 'cool', 'custom'].includes(l.textTone) ? l.textTone : 'auto',
+    textLight: color(l.textLight, D.textLight) || D.textLight,
+    textDark: color(l.textDark, D.textDark) || D.textDark,
+    textSoft: num(l.textSoft, 0, 100, D.textSoft)
   }
 }
 

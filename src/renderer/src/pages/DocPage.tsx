@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { act, getData, toast, updatePage, useData } from '../store'
+import { createPortal } from 'react-dom'
+import { act, getData, toast, updatePage, useApp, useData } from '../store'
+import { blocksToText, clearSelection, useSelection } from '../lib/selection'
 import type { Block, BlockType, Page } from '../types'
 import { uid } from '../lib/util'
 import { blockRefs as refs, focusBlock } from '../lib/links'
@@ -54,8 +56,30 @@ const OBJECT_TYPES = new Set<BlockType>(['divider', 'table', 'columns', 'toc', '
 
 const DIVIDERS = [['line', 'Line'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['thick', 'Thick'], ['fade', 'Fade'], ['space', 'Space only']] as const
 
-const BLOCK_COLORS = ['', '#ff453a', '#ff9f0a', '#e5b000', '#30d158', '#0a84ff', '#bf5af2', '#8e8e93']
+/** Named colors for text and backgrounds; each theme has its own shade (--tc-* and --bc-* in styles.css). */
+const COLOR_NAMES = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'] as const
+const textColor = (c?: string): string | undefined => (!c ? undefined : c.startsWith('#') ? c : `var(--tc-${c})`)
+const bgColor = (c?: string): string | undefined => (!c ? undefined : c.startsWith('#') ? `color-mix(in srgb, ${c} 16%, transparent)` : `var(--bc-${c})`)
 const EMPTY: Block[] = []
+const NONE: string[] = []
+
+function ColorRows({ text, bg, onText, onBg }: { text?: string; bg?: string; onText: (c: string) => void; onBg: (c: string) => void }): JSX.Element {
+  const name = (n: string): string => n[0].toUpperCase() + n.slice(1)
+  return (
+    <div className="color-rows">
+      <div className="color-label">Text color</div>
+      <div className="swatches">
+        <button className={`tc-swatch ${!text ? 'active' : ''}`} title="Default" onClick={() => onText('')}>A</button>
+        {COLOR_NAMES.map((n) => <button key={n} className={`tc-swatch ${text === n ? 'active' : ''}`} style={{ color: `var(--tc-${n})` }} title={name(n)} onClick={() => onText(n)}>A</button>)}
+      </div>
+      <div className="color-label">Background</div>
+      <div className="swatches">
+        <button className={`bc-swatch none ${!bg ? 'active' : ''}`} title="None" onClick={() => onBg('')} />
+        {COLOR_NAMES.map((n) => <button key={n} className={`bc-swatch ${bg === n ? 'active' : ''}`} style={{ background: `var(--bc-${n})` }} title={name(n)} onClick={() => onBg(n)} />)}
+      </div>
+    </div>
+  )
+}
 
 /** A copy with new ids, columns included. */
 function cloneBlock(b: Block): Block {
@@ -78,6 +102,9 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
   const [handleMenu, setHandleMenu] = useState<{ id: string; el: HTMLElement } | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
   const dragRef = useRef<string | null>(null)
+  const selIds = useSelection((s) => (s.page === pageId && !col ? s.ids : NONE))
+  /** A menu on a selected block acts on every selected block. */
+  const targetsOf = (id: string): string[] => (selIds.length > 1 && selIds.includes(id) ? selIds : [id])
 
   const edit = (fn: (b: Block[]) => void, key?: string): void => updatePage(pageId, (p) => { const l = listOf(p, col); if (l) fn(l) }, key)
   const setBlock = (id: string, fn: (b: Block) => void, key?: string): void =>
@@ -112,6 +139,15 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
     if (type === 'columns') { lineAfter(id); focusBlock(firstCol, 'end') }
     else if (OBJECT_TYPES.has(type)) lineAfter(id)
     else if (TEXT_TYPES.has(type)) focusBlock(id)
+  }
+
+  /** The + beside a block: a new line below (or above) with the block menu open. */
+  const addNear = (id: string, above: boolean): void => {
+    const nb: Block = { id: uid(), type: 'p', text: '/' }
+    edit((bs) => { const i = bs.findIndex((x) => x.id === id); bs.splice(above ? i : i + 1, 0, nb) })
+    clearSelection()
+    focusBlock(nb.id, 'end')
+    requestAnimationFrame(() => requestAnimationFrame(() => { const el = refs.get(nb.id); if (el) setSlash({ id: nb.id, el, q: '' }) }))
   }
 
   const applySlash = (id: string, s: SlashItem): void => {
@@ -295,8 +331,9 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
     const b = blocks.find((x) => x.id === id)
     if (!b) return []
     const items: MenuItem[] = [
-      { label: 'Delete', icon: 'trash', danger: true, onClick: () => edit((bs) => { const i = bs.findIndex((x) => x.id === id); bs.splice(i, 1); if (!bs.length) bs.push({ id: uid(), type: 'p', text: '' }) }) },
-      { label: 'Duplicate', icon: 'copy', hint: 'Ctrl D', onClick: () => insertAfter(id, cloneBlock(b)) },
+      ...(targetsOf(id).length > 1 ? [{ label: `${targetsOf(id).length} blocks`, disabled: true }] : []),
+      { label: 'Delete', icon: 'trash', danger: true, hint: 'Del', onClick: () => { const ts = new Set(targetsOf(id)); edit((bs) => { for (let i = bs.length - 1; i >= 0; i--) if (ts.has(bs[i].id)) bs.splice(i, 1); if (!bs.length) bs.push({ id: uid(), type: 'p', text: '' }) }); clearSelection() } },
+      { label: 'Duplicate', icon: 'copy', hint: 'Ctrl D', onClick: () => { const ts = targetsOf(id); edit((bs) => { const picked = bs.filter((x) => ts.includes(x.id)); const last = Math.max(...picked.map((x) => bs.indexOf(x))); bs.splice(last + 1, 0, ...picked.map(cloneBlock)) }) } },
       { label: 'Insert below', icon: 'plus', onClick: () => insertAfter(id) }
     ]
     if (TEXT_TYPES.has(b.type) || b.type === 'divider') {
@@ -325,9 +362,6 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
       const s = find(src)
       setBlock(id, (x) => { x.type = s && TEXT_TYPES.has(s.type) ? s.type : 'p'; x.text = s?.text ?? ''; x.ref = undefined })
     } })
-    if (TEXT_TYPES.has(b.type)) {
-      items.push({ divider: true, label: '' }, ...SLASH.filter((s) => TEXT_TYPES.has(s.type) && s.type !== b.type).map((s) => ({ label: 'Turn into ' + s.label.toLowerCase(), icon: s.icon, onClick: () => changeType(id, s.type) })))
-    }
     return items
   }
 
@@ -393,8 +427,8 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           <div
             key={b.id}
             data-block={b.id}
-            className={`block block-${b.type} ${headLevel ? 'block-' + headLevel : ''} ${dragOver === b.id ? 'drag-over' : ''}`}
-            style={{ paddingLeft: 28 + (b.indent ?? 0) * 24, color: b.color || undefined }}
+            className={`block block-${b.type} ${headLevel ? 'block-' + headLevel : ''} ${dragOver === b.id ? 'drag-over' : ''} ${selIds.includes(b.id) ? 'selected' : ''} ${b.bg ? 'has-bg' : ''}`}
+            style={{ paddingLeft: 28 + (b.indent ?? 0) * 24, color: textColor(b.color), ['--ind' as string]: (b.indent ?? 0) * 24 + 'px', ['--bgc' as string]: bgColor(b.bg) }}
             onDragOver={(e) => { if (dragRef.current) { e.preventDefault(); e.stopPropagation(); setDragOver(b.id) } }}
             onDragLeave={() => setDragOver(null)}
             onDrop={(e) => {
@@ -404,21 +438,26 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
               e.stopPropagation()
               setDragOver(null)
               dragRef.current = null
-              if (from === b.id) return
+              // Dragging a selected block moves the whole selection.
+              const moving = selIds.includes(from) ? selIds : [from]
+              if (moving.includes(b.id)) return
               edit((bs) => {
-                const fi = bs.findIndex((x) => x.id === from)
-                const [m] = bs.splice(fi, 1)
+                const ms = bs.filter((x) => moving.includes(x.id))
+                for (const m of ms) bs.splice(bs.indexOf(m), 1)
                 const ti = bs.findIndex((x) => x.id === b.id)
-                bs.splice(ti + 1, 0, m)
+                bs.splice(ti + 1, 0, ...ms)
               })
             }}
           >
             {!locked && (
-              <div className="block-handle" draggable onDragStart={(e) => { e.stopPropagation(); dragRef.current = b.id }} onClick={(e) => setHandleMenu({ id: b.id, el: e.currentTarget })} title="Drag to move, click for options">
-                <Icon name="grip" size={14} stroke={2.6} />
+              <div className="block-gutter">
+                <button className="gutter-btn" title="Add a block below (Alt: above)" onClick={(e) => addNear(b.id, e.altKey)}><Icon name="plus" size={15} stroke={2} /></button>
+                <div className="gutter-btn block-handle" draggable onDragStart={(e) => { e.stopPropagation(); dragRef.current = b.id }} onClick={(e) => setHandleMenu({ id: b.id, el: e.currentTarget })} title="Drag to move, click for options">
+                  <Icon name="grip" size={15} stroke={2.4} />
+                </div>
               </div>
             )}
-            {content}
+            <div className="block-main">{content}</div>
           </div>
         )
       })}
@@ -430,10 +469,12 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
 
       {slash && (
         <Popover anchor={slash.el} onClose={() => setSlash(null)} width={250}>
-          <Menu
-            onClose={() => setSlash(null)}
-            items={slashMatches(slash.q).map((s) => ({ label: s.label, icon: s.icon, hint: s.hint, onClick: () => applySlash(slash.id, s) }))}
-          />
+          <div className="slash-menu">
+            <Menu
+              onClose={() => setSlash(null)}
+              items={slashMatches(slash.q).map((s) => ({ label: s.label, icon: s.icon, hint: s.hint, onClick: () => applySlash(slash.id, s) }))}
+            />
+          </div>
         </Popover>
       )}
       {mention && mentionOptions(mention).length > 0 && (
@@ -444,13 +485,27 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
       {handleMenu && (
         <Popover anchor={handleMenu.el} onClose={() => setHandleMenu(null)} width={230}>
           <Menu onClose={() => setHandleMenu(null)} items={menuFor(handleMenu.id)} />
-          {TEXT_TYPES.has(blocks.find((x) => x.id === handleMenu.id)?.type ?? 'divider') && (
-            <div className="color-row">
-              {BLOCK_COLORS.map((c) => (
-                <button key={c || 'none'} className="color-dot" style={{ background: c || 'var(--fg)' }} title={c ? c : 'Default'} onClick={() => { setBlock(handleMenu.id, (x) => { x.color = c }); setHandleMenu(null) }} />
-              ))}
-            </div>
-          )}
+          {(() => {
+            const b = blocks.find((x) => x.id === handleMenu.id)
+            if (!b) return null
+            const ts = new Set(targetsOf(b.id))
+            const paint = (fn: (x: Block) => void): void => edit((bs) => { for (const x of bs) if (ts.has(x.id)) fn(x) })
+            return <>
+              {TEXT_TYPES.has(b.type) && (
+                <div className="turn-into">
+                  <div className="color-label">Turn into</div>
+                  <div className="turn-grid">
+                    {SLASH.filter((s) => TEXT_TYPES.has(s.type)).map((s) => (
+                      <button key={s.label} className={`turn-btn ${s.type === b.type ? 'active' : ''}`} title={s.label} onClick={() => { [...ts].forEach((t) => changeType(t, s.type)); setHandleMenu(null) }}>
+                        <Icon name={s.icon} size={15} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <ColorRows text={b.color} bg={b.bg} onText={(c) => paint((x) => { x.color = c || undefined })} onBg={(c) => paint((x) => { x.bg = c || undefined })} />
+            </>
+          })()}
         </Popover>
       )}
     </div>
@@ -489,8 +544,134 @@ function TableBlock({ block, locked, onEdit }: { block: Block; locked?: boolean;
   )
 }
 
+/** Elements a selection box never starts on: text, controls and embedded content. */
+const NO_BOX = 'textarea, input, select, button, a, iframe, img, label, [role="link"], .rich, .page-top, .page-cover, .subpages, .tbl-wrap, .embed, .img-block, .bookmark, .equation-out, .block-gutter, .backlinks, .synced-from, .page-link, .check, .page-picker, .popover, .modal, .row-props'
+
+/** Hold the mouse on an empty part of the page and drag: a box selects the blocks it touches. */
+function useBlockSelection(pageId: string, root: React.RefObject<HTMLDivElement>, locked?: boolean): { x: number; y: number; w: number; h: number } | null {
+  const [box, setBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  useEffect(() => {
+    const doc = root.current
+    const scroller = doc?.closest<HTMLElement>('.scroll')
+    if (!doc || !scroller) return
+    let start: { x: number; y: number; top: number } | null = null
+    let active = false
+    let last = { x: 0, y: 0 }
+    let raf = 0
+    let eatClick = false
+    const edit = (fn: (bs: Block[]) => void): void => updatePage(pageId, (p) => fn(p.blocks))
+    const select = (ids: string[]): void => {
+      const cur = useSelection.getState()
+      if (cur.page !== pageId || cur.ids.join() !== ids.join()) useSelection.setState({ page: pageId, ids })
+    }
+    const update = (): void => {
+      if (!start) return
+      const sy = start.y - (scroller.scrollTop - start.top)
+      const x1 = Math.min(start.x, last.x), x2 = Math.max(start.x, last.x)
+      const y1 = Math.min(sy, last.y), y2 = Math.max(sy, last.y)
+      setBox({ x: x1, y: y1, w: x2 - x1, h: y2 - y1 })
+      const els = [...doc.querySelectorAll<HTMLElement>(':scope > .blocks > .block')]
+      select(els.filter((el) => { const r = el.getBoundingClientRect(); return r.bottom > y1 && r.top < y2 && r.right > x1 && r.left < x2 }).map((el) => el.dataset.block!))
+    }
+    // Near the top or bottom edge the page scrolls while the box is dragged.
+    const tick = (): void => {
+      if (!active) return
+      const r = scroller.getBoundingClientRect()
+      const edge = 46
+      const v = last.y < r.top + edge ? -Math.ceil((r.top + edge - last.y) / 3) : last.y > r.bottom - edge ? Math.ceil((last.y - r.bottom + edge) / 3) : 0
+      if (v) { scroller.scrollTop += v; update() }
+      raf = requestAnimationFrame(tick)
+    }
+    const down = (e: MouseEvent): void => {
+      if (e.button !== 0) return
+      const t = e.target as HTMLElement
+      if (!scroller.contains(t) || t.closest('.popover, .modal')) return
+      if (t === scroller && e.offsetX >= scroller.clientWidth) return // the scrollbar
+      if (t.closest(NO_BOX)) { if (!t.closest('.block-gutter')) clearSelection(); return }
+      clearSelection()
+      start = { x: e.clientX, y: e.clientY, top: scroller.scrollTop }
+      last = { x: e.clientX, y: e.clientY }
+      e.preventDefault()
+    }
+    const move = (e: MouseEvent): void => {
+      if (!start) return
+      last = { x: e.clientX, y: e.clientY }
+      if (!active && Math.hypot(last.x - start.x, last.y - start.y) > 5) {
+        active = true
+        ;(document.activeElement as HTMLElement | null)?.blur?.()
+        raf = requestAnimationFrame(tick)
+      }
+      if (active) update()
+    }
+    const up = (): void => {
+      if (active) eatClick = true
+      start = null
+      active = false
+      cancelAnimationFrame(raf)
+      setBox(null)
+    }
+    const click = (e: MouseEvent): void => { if (eatClick) { eatClick = false; e.stopPropagation(); e.preventDefault() } }
+    const key = (e: KeyboardEvent): void => {
+      if (useApp.getState().overlay) return
+      const typing = !!(e.target as HTMLElement)?.closest?.('input, textarea, select, [contenteditable]')
+      const mod = e.ctrlKey || e.metaKey
+      const k = e.key.toLowerCase()
+      const blocks = getData().pages[pageId]?.blocks ?? []
+      if (mod && k === 'a' && !typing) { e.preventDefault(); select(blocks.map((b) => b.id)); return }
+      const sel = useSelection.getState()
+      if (sel.page !== pageId || !sel.ids.length || typing) return
+      const ids = new Set(sel.ids)
+      const picked = blocks.filter((b) => ids.has(b.id))
+      const remove = (): void => { edit((bs) => { for (let i = bs.length - 1; i >= 0; i--) if (ids.has(bs[i].id)) bs.splice(i, 1); if (!bs.length) bs.push({ id: uid(), type: 'p', text: '' }) }); clearSelection() }
+      if (e.key === 'Escape') { e.preventDefault(); clearSelection() }
+      else if ((e.key === 'Backspace' || e.key === 'Delete') && !locked) { e.preventDefault(); remove() }
+      else if (mod && (k === 'c' || k === 'x')) {
+        e.preventDefault()
+        navigator.clipboard.writeText(blocksToText(picked)).catch(() => {})
+        if (k === 'x' && !locked) remove()
+      } else if (mod && k === 'd' && !locked) {
+        e.preventDefault()
+        const copies = picked.map(cloneBlock)
+        edit((bs) => { const lastIdx = Math.max(...picked.map((p) => bs.findIndex((x) => x.id === p.id))); bs.splice(lastIdx + 1, 0, ...copies) })
+        select(copies.map((c) => c.id))
+      } else if (e.key === 'Tab' && !locked) {
+        e.preventDefault()
+        edit((bs) => { for (const b of bs) if (ids.has(b.id) && ['p', 'todo', 'bullet', 'number'].includes(b.type)) b.indent = Math.max(0, Math.min(4, (b.indent ?? 0) + (e.shiftKey ? -1 : 1))) })
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        clearSelection()
+        if (picked[0]) focusBlock(picked[0].id)
+      } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !mod) {
+        e.preventDefault()
+        const idx = blocks.map((b) => b.id)
+        const ends = picked.map((p) => idx.indexOf(p.id))
+        const at = e.key === 'ArrowUp' ? Math.max(0, Math.min(...ends) - 1) : Math.min(idx.length - 1, Math.max(...ends) + 1)
+        if (e.shiftKey) select(idx.slice(Math.min(at, ...ends), Math.max(at, ...ends) + 1))
+        else select([idx[at]])
+      }
+    }
+    window.addEventListener('mousedown', down)
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+    window.addEventListener('click', click, true)
+    window.addEventListener('keydown', key)
+    return () => {
+      window.removeEventListener('mousedown', down)
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+      window.removeEventListener('click', click, true)
+      window.removeEventListener('keydown', key)
+      cancelAnimationFrame(raf)
+      clearSelection()
+    }
+  }, [pageId, locked])
+  return box
+}
+
 export function DocPage({ pageId }: { pageId: string }): JSX.Element {
   const locked = useData((d) => d.pages[pageId]?.locked)
+  const root = useRef<HTMLDivElement>(null)
+  const box = useBlockSelection(pageId, root, locked)
   const words = useData((d) => (d.pages[pageId]?.blocks ?? []).reduce((a, b) => a + (b.text.trim() ? b.text.trim().split(/\s+/).length : 0), 0))
   useEffect(() => {
     // Focus the first block of a fresh empty page.
@@ -501,9 +682,10 @@ export function DocPage({ pageId }: { pageId: string }): JSX.Element {
     }
   }, [pageId])
   return (
-    <div className="doc">
+    <div className="doc" ref={root}>
       <BlockEditor pageId={pageId} locked={locked} />
       <div className="doc-foot">{words} {words === 1 ? 'word' : 'words'}</div>
+      {box && createPortal(<div className="select-box" style={{ left: box.x, top: box.y, width: box.w, height: box.h }} />, document.body)}
     </div>
   )
 }

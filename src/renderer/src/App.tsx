@@ -8,7 +8,7 @@ import { habitWeek } from './lib/habits'
 import { playLevelUp } from './lib/sound'
 import { Sidebar } from './components/Sidebar'
 import { Glyph, Icon } from './components/Icon'
-import { IconPickerButton, MenuButton, Popover, Button } from './components/ui'
+import { IconPicker, IconPickerButton, MenuButton, Popover, Button } from './components/ui'
 import { CommandPalette, NewPageDialog, QuickAddDialog, SettingsDialog, ShortcutsDialog, TrashDialog } from './components/Overlays'
 import { DocPage, BlockEditor } from './pages/DocPage'
 import { BoardPage, TasksPage } from './pages/TasksPage'
@@ -122,6 +122,23 @@ function PageCover({ page }: { page: Page }): JSX.Element | null {
 
 const randomCover = (): string => COVERS[Math.floor(Math.random() * COVERS.length)]
 
+/** Icon and cover are optional: a page without them shows these buttons while hovering its top. */
+function PageAdds({ page }: { page: Page }): JSX.Element | null {
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  if (page.locked || (page.icon && page.cover)) return null
+  return (
+    <div className="page-adds">
+      {!page.icon && <button className="page-add" onClick={(e) => setEl(e.currentTarget)}><Icon name="smile" size={14} /> Add icon</button>}
+      {!page.cover && <button className="page-add" onClick={() => updatePage(page.id, (p) => { p.cover = randomCover() })}><Icon name="image" size={14} /> Add cover</button>}
+      {el && (
+        <Popover anchor={el} onClose={() => setEl(null)} width={340}>
+          <IconPicker color={page.iconColor} onColor={(c) => updatePage(page.id, (p) => { p.iconColor = c || undefined })} onPick={(n) => { updatePage(page.id, (p) => { p.icon = n }); setEl(null) }} />
+        </Popover>
+      )}
+    </div>
+  )
+}
+
 function PageView({ id }: { id: string }): JSX.Element | null {
   const page = useData((d) => d.pages[id])
   const titleRef = useRef<HTMLInputElement>(null)
@@ -135,8 +152,10 @@ function PageView({ id }: { id: string }): JSX.Element | null {
   return (
     <div className={`page ${page.fullWidth || ['calendar', 'board', 'database', 'dashboard'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
       <PageCover page={page} />
+      <div className="page-top">
+      <PageAdds page={page} />
       <div className="page-header">
-        <IconPickerButton size="lg" value={page.icon} placeholder={info.icon} color={page.iconColor} onColor={(c) => updatePage(id, (p) => { p.iconColor = c || undefined })} onChange={(icon) => updatePage(id, (p) => { p.icon = icon })} />
+        {page.icon && <IconPickerButton size="lg" value={page.icon} placeholder={info.icon} color={page.iconColor} onColor={(c) => updatePage(id, (p) => { p.iconColor = c || undefined })} onChange={(icon) => updatePage(id, (p) => { p.icon = icon })} />}
         <input
           ref={titleRef}
           id={`title-${id}`}
@@ -154,6 +173,7 @@ function PageView({ id }: { id: string }): JSX.Element | null {
             }
           }}
         />
+      </div>
       </div>
       {page.rowOf && <RowProps rowId={page.id} />}
       <SubpageList page={page} />

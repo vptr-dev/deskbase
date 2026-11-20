@@ -2,7 +2,7 @@ import { type ReactNode, useState } from 'react'
 import { act, setSettings, toast, useData } from '../store'
 import type { Look, Settings, Surface } from '../types'
 import { ACCENTS, BACKDROPS, DEFAULT_LOOK, normalizeLook } from '../lib/defaults'
-import { FONT_CHOICES, PRESETS, exportTheme, parseTheme, type ThemePreset } from '../lib/look'
+import { FONT_CHOICES, PRESETS, TEXT_TONES, exportTheme, parseTheme, type ThemePreset } from '../lib/look'
 import { api } from '../lib/api'
 import { pickImageData } from '../lib/image'
 import { Button, Checkbox, Segmented, Toggle } from '../components/ui'
@@ -97,6 +97,8 @@ const SURFACES: { value: Surface; name: string; sub: string }[] = [
   { value: 'solid', name: 'Solid', sub: 'No see-through' }
 ]
 
+const TONE_NAMES: [Look['textTone'], string][] = [['auto', 'Default'], ['soft', 'Soft'], ['ink', 'Ink'], ['warm', 'Warm'], ['cool', 'Cool'], ['custom', 'Your own']]
+
 function SurfacePick({ value, onChange }: { value: Surface; onChange: (v: Surface) => void }): JSX.Element {
   return (
     <div className="surface-pick">
@@ -143,6 +145,7 @@ function DesktopLook(): JSX.Element {
 export function AppearancePage(): JSX.Element {
   const s = useData((d) => d.settings)
   const l = s.look
+  const isDark = document.documentElement.dataset.theme === 'dark'
   const blurs = [l.surface, l.panelSurface].some((x) => x === 'blur' || x === 'frosted')
   const set = (fn: (x: Settings) => void, key?: string): void => setSettings(fn, key)
   const [cssDraft, setCssDraft] = useState<string | null>(null)
@@ -264,6 +267,27 @@ export function AppearancePage(): JSX.Element {
         <Row label="Text size"><Slider value={s.fontSize} min={12} max={18} unit="px" onChange={(v) => set((x) => { x.fontSize = v }, 'fs')} /></Row>
         <Row label="Line height"><Slider value={l.lineHeight} min={1.2} max={2} step={0.05} onChange={(v) => setLook({ lineHeight: v }, 'lh')} /></Row>
         <Row label="Letter spacing"><Slider value={l.letterSpacing} min={-4} max={8} onChange={(v) => setLook({ letterSpacing: v }, 'ls')} /></Row>
+        <Row label="Text color">
+          <div className="tone-row">
+            {TONE_NAMES.map(([id, name]) => {
+              const c = id === 'custom' ? (isDark ? l.textDark : l.textLight) : TEXT_TONES[id][isDark ? 1 : 0]
+              return (
+                <button key={id} className={`tone-chip ${l.textTone === id ? 'active' : ''}`} onClick={() => setLook({ textTone: id })} title={name}>
+                  <span className="tone-sample" style={{ color: c }}>Aa</span>{name}
+                </button>
+              )
+            })}
+          </div>
+        </Row>
+        {l.textTone === 'custom' && (
+          <Row label="Your colors" sub="One for light mode, one for dark mode">
+            <div className="row gap-8">
+              <label className="tone-pick"><input type="color" value={l.textLight} onChange={(e) => setLook({ textLight: e.target.value }, 'tl')} /> Light</label>
+              <label className="tone-pick"><input type="color" value={l.textDark} onChange={(e) => setLook({ textDark: e.target.value }, 'td')} /> Dark</label>
+            </div>
+          </Row>
+        )}
+        <Row label="Soft edges" sub="Softens the edges of letters"><Slider value={l.textSoft} min={0} max={100} unit="%" onChange={(v) => setLook({ textSoft: v }, 'tsoft')} /></Row>
       </Section>
 
       <Section title="Motion" icon="activity">

@@ -58,6 +58,8 @@ export interface Block {
   cols?: Block[][]
   /** link: the page id; synced: "pageId/blockId" of the original block */
   ref?: string
+  /** background color behind the block (a color name or #hex) */
+  bg?: string
   /** divider look, image width, button look */
   style?: string
   /** what a button does */
@@ -266,6 +268,12 @@ export interface Look {
   gradient: { a: string; b: string; c: string; angle: number }
   /** extra CSS applied to the app and widgets */
   customCss: string
+  /** text color: a ready-made tone or your own colors for light and dark */
+  textTone: 'auto' | 'soft' | 'ink' | 'warm' | 'cool' | 'custom'
+  textLight: string
+  textDark: string
+  /** 0-100: how soft the edges of letters look */
+  textSoft: number
 }
 
 // ---------- custom values ----------

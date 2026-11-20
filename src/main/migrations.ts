@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 10
+export const CURRENT_SCHEMA = 11
 
 type Raw = Record<string, any>
 
@@ -192,6 +192,10 @@ migrations[9] = (d) => {
   }
   return { ...d, pages: out }
 }
+
+// 10 → 11: text tone and soft letter edges in the look; blocks may have a background color.
+// Everything new is optional and filled in on load, so the data itself stays as it is.
+migrations[10] = (d) => d
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}
