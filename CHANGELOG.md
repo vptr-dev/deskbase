@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.14.0 — 2026-11-20
+
 - Assistant page with every chat on the side: search them, rename, pin and delete. The side panel (Ctrl J) shows the same chats over any page and can open as a page.
 - Each chat picks its own provider and model at the top: Ollama and LM Studio on this computer, Anthropic, OpenAI, Google Gemini, OpenRouter or any OpenAI-compatible server. Keys are kept per provider, encrypted on this computer.
 - The assistant looks things up on its own: it searches your pages, reads a page or database, lists your tasks and checks the calendar before it answers, and shows what it read.
