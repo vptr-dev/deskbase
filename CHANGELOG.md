@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Clock styles: ring, digital, stacked, minimal, analog (classic, minimal, numbers or dots), flip, bars, words and a 24-hour sun dial. Any clock can show another time zone, with 12 or 24 hours, seconds, date and date format to choose.
+- New panels: world clock (list, cards or analog), stopwatch with laps, time left in the day, week, month and year, moon phase, launcher for websites, apps, files and folders, web search, a line of words to keep in mind, and battery.
+- Daylight styles: curve, arc, day bar or just the times, with day length and the change since yesterday.
+- Weather styles: days, hourly, detailed (feels like, humidity, wind, rain) or compact.
+- System styles: rings, bars, big numbers or a live graph, with uptime.
+- Timer looks: dial, bar or text.
+- Panels show toggles for each part they can show or hide, and every panel can pick one of the ready-made looks.
+
 ## 0.9.0 — 2026-11-20
 
 - New window buttons drawn by the app: they match light and dark mode and every surface, and no longer leave filled corners with blur or frosted.

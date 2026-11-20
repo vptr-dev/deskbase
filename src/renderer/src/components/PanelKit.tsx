@@ -10,15 +10,15 @@ import { Icon } from './Icon'
 type Cfg = Record<string, any>
 type SetConfig = (key: string, value: any) => void
 
-const pad = (n: number): string => String(n).padStart(2, '0')
+export const pad = (n: number): string => String(n).padStart(2, '0')
 
-function useTick(ms: number): number {
+export function useTick(ms: number): number {
   const [n, setN] = useState(Date.now())
   useEffect(() => { const id = setInterval(() => setN(Date.now()), ms); return () => clearInterval(id) }, [ms])
   return n
 }
 
-function useTimeFormat(): (d: Date) => string {
+export function useTimeFormat(): (d: Date) => string {
   const use24h = useData((d) => d.settings.use24h)
   return (d) => (use24h ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : `${d.getHours() % 12 || 12}:${pad(d.getMinutes())}`)
 }
@@ -26,7 +26,8 @@ function useTimeFormat(): (d: Date) => string {
 // ---------- ring clock ----------
 /** Big time with a ring of second ticks that fills up each minute. */
 export function RingClock({ cfg }: { cfg: Cfg }): JSX.Element {
-  const now = new Date(useTick(1000))
+  const base = new Date(useTick(1000))
+  const now = cfg.tz ? new Date(base.toLocaleString('en-US', { timeZone: cfg.tz })) : base
   const use24h = useData((d) => d.settings.use24h)
   const h = now.getHours()
   const s = now.getSeconds()
@@ -53,7 +54,7 @@ export function RingClock({ cfg }: { cfg: Cfg }): JSX.Element {
 }
 
 // ---------- places ----------
-function usePlace(cfg: Cfg): Place | null {
+export function usePlace(cfg: Cfg): Place | null {
   const global = useData((d) => d.settings.place)
   const own = cfg.place && Number.isFinite(cfg.place.lat) ? (cfg.place as Place) : null
   return own ?? global
@@ -131,7 +132,7 @@ export function sunTimes(date: Date, lat: number, lon: number): { rise: Date | n
   return { rise: fromJulian(noonJ - (setJ - noonJ)), set: fromJulian(setJ), noon: fromJulian(noonJ) }
 }
 
-function PlacePrompt({ setConfig }: { setConfig?: SetConfig }): JSX.Element {
+export function PlacePrompt({ setConfig }: { setConfig?: SetConfig }): JSX.Element {
   void setConfig
   return <div className="pk pk-empty"><PlaceSearch compact /></div>
 }
@@ -199,7 +200,7 @@ async function loadWeather(key: string, p: Place, f: boolean): Promise<void> {
   emitWeather()
 }
 
-function useWeather(p: Place | null, f: boolean): WeatherEntry | null {
+export function useWeather(p: Place | null, f: boolean): WeatherEntry | null {
   const key = p ? `${p.lat.toFixed(2)},${p.lon.toFixed(2)},${f ? 'f' : 'c'}` : ''
   const tick = useTick(60_000)
   const entry = useSyncExternalStore(subscribeWeather, () => (key ? weatherCache.get(key) ?? null : null))
@@ -223,11 +224,11 @@ const WMO: Record<number, [string, string, string]> = {
   85: ['Snow showers', 'cloudSnow', 'cloudSnow'], 86: ['Snow showers', 'cloudSnow', 'cloudSnow'],
   95: ['Thunderstorm', 'cloudLightning', 'cloudLightning'], 96: ['Thunder and hail', 'cloudHail', 'cloudHail'], 99: ['Thunder and hail', 'cloudHail', 'cloudHail']
 }
-const wmo = (code: number, day = true): { label: string; icon: string } => {
+export const wmo = (code: number, day = true): { label: string; icon: string } => {
   const w = WMO[code] ?? ['', 'cloud', 'cloud']
   return { label: w[0], icon: day ? w[1] : w[2] }
 }
-const deg = (n: unknown): string => (typeof n === 'number' ? `${Math.round(n)}°` : '–')
+export const deg = (n: unknown): string => (typeof n === 'number' ? `${Math.round(n)}°` : '–')
 
 export function WeatherWidget({ cfg }: { cfg: Cfg }): JSX.Element {
   const place = usePlace(cfg)
@@ -276,8 +277,14 @@ let sysLast: SysStats | null = null
 const sysSubs = new Set<() => void>()
 let sysTimer: ReturnType<typeof setInterval> | null = null
 let sysDrive = ''
+/** The last two minutes of samples, for the graph style. */
+export const sysHistory: SysStats[] = []
 async function pollSys(): Promise<void> {
-  try { sysLast = await api.sysStats(sysDrive || undefined) } catch { /* keep the last numbers */ }
+  try {
+    sysLast = await api.sysStats(sysDrive || undefined)
+    sysHistory.push(sysLast)
+    if (sysHistory.length > 60) sysHistory.shift()
+  } catch { /* keep the last numbers */ }
   for (const f of sysSubs) f()
 }
 // One shared poll for every System panel; it stops when the last one closes.
@@ -289,12 +296,12 @@ function subscribeSys(cb: () => void): () => void {
     if (!sysSubs.size && sysTimer) { clearInterval(sysTimer); sysTimer = null }
   }
 }
-function useSys(drive: string): SysStats | null {
+export function useSys(drive: string): SysStats | null {
   useEffect(() => { sysDrive = drive }, [drive])
   return useSyncExternalStore(subscribeSys, () => sysLast)
 }
 
-const GB = (n: number): string => (n / 1024 ** 3).toFixed(n > 100 * 1024 ** 3 ? 0 : 1)
+export const GB = (n: number): string => (n / 1024 ** 3).toFixed(n > 100 * 1024 ** 3 ? 0 : 1)
 
 export function SystemWidget({ cfg }: { cfg: Cfg }): JSX.Element {
   const s = useSys(cfg.drive ?? '')
@@ -360,8 +367,19 @@ export function TimerWidget({ cfg, setConfig }: { cfg: Cfg; setConfig: SetConfig
   const secs = Math.ceil(left / 1000)
   const active = running || paused || finished
   const frac = active ? 1 - left / total : 0
+  const state = `${running ? 'running' : ''} ${paused ? 'paused' : ''} ${finished ? 'done' : ''}`
+  const tip = running ? 'Pause' : paused ? 'Resume' : finished ? 'Reset' : 'Start'
+  const text = active ? (finished ? 'Done' : `${Math.floor(secs / 60)}:${pad(secs % 60)}`) : `${minutes} min`
+  if (cfg.look === 'bar' || cfg.look === 'minimal') {
+    return (
+      <button className={`pk pk-timer-${cfg.look} ${state}`} onClick={click} title={tip}>
+        <span className="pk-tb-top"><span className="pk-tb-time">{text}</span>{cfg.label && <span className="pk-timer-label">{cfg.label}</span>}</span>
+        {cfg.look === 'bar' && <span className="pk-tb-track"><span style={{ width: `${frac * 100}%` }} /></span>}
+      </button>
+    )
+  }
   return (
-    <button className={`pk pk-timer ${running ? 'running' : ''} ${paused ? 'paused' : ''} ${finished ? 'done' : ''}`} onClick={click} title={running ? 'Pause' : paused ? 'Resume' : finished ? 'Reset' : 'Start'}>
+    <button className={`pk pk-timer ${state}`} onClick={click} title={tip}>
       <svg className="pk-timer-dial" viewBox="0 0 100 100" aria-hidden>
         {Array.from({ length: 60 }, (_, i) => {
           const a = (i * 6 * Math.PI) / 180

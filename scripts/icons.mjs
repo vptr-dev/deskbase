@@ -33,7 +33,9 @@ const UI = {
   cloudFog: 'cloud-fog', cloudLightning: 'cloud-lightning', cloudHail: 'cloud-hail', cloudy: 'cloudy', wind: 'wind', droplets: 'droplets',
   sunrise: 'sunrise', sunset: 'sunset', thermometer: 'thermometer', cpu: 'cpu', ram: 'memory-stick', disk: 'hard-drive', place: 'map-pin',
   group: 'group', ungroup: 'ungroup', timerReset: 'timer-reset', listChecks: 'list-checks', calendarClock: 'calendar-clock', wallet: 'wallet',
-  dumbbell: 'dumbbell', study: 'graduation-cap'
+  dumbbell: 'dumbbell', study: 'graduation-cap',
+  battery: 'battery-medium', batteryCharging: 'battery-charging', globe: 'globe', rocket: 'rocket', moonStar: 'moon-star', quote: 'quote',
+  search: 'search', appWindow: 'app-window', flag: 'flag', gauge: 'gauge', stopwatch: 'timer', calendarRange: 'calendar-range', hourglass2: 'hourglass'
 }
 
 /** Icons offered in the icon picker, by group. */

@@ -11,6 +11,7 @@ import { QuickAdd, TaskRow, useTaskDrawer } from './TaskItems'
 import { adjustValue } from './Values'
 import { logHabit } from '../pages/HabitsPage'
 import { DaylightWidget, MonthWidget, RingClock, SectionsWidget, SystemWidget, TableWidget, TimerWidget, WeatherWidget } from './PanelKit'
+import { BatteryWidget, ClockStyles, DaylightStyles, LauncherWidget, MoonWidget, QuoteWidget, SearchWidget, StopwatchWidget, SystemStyles, TimeLeftWidget, WeatherStyles, WorldClockWidget, zoned } from './PanelKit2'
 import { focusActions, fmtClock, remainingSecs, useFocus } from '../pages/FocusPage'
 import { goalProgress } from '../pages/GoalsPage'
 import { nextDate } from './Countdowns'
@@ -31,22 +32,30 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'focus', name: 'Focus timer', icon: 'timer', desc: 'Start a focus session from the desktop', w: 3, h: 2, group: 'Work', config: {} },
   { type: 'database', name: 'Database', icon: 'database', desc: 'A table, board or gallery you can edit', w: 6, h: 5, group: 'Work', config: {} },
   { type: 'timer', name: 'Timer', icon: 'timer', desc: 'Click to start; put a few side by side', w: 2, h: 2, group: 'Work', config: { minutes: 5 } },
+  { type: 'stopwatch', name: 'Stopwatch', icon: 'stopwatch', desc: 'Start, pause, laps', w: 3, h: 3, group: 'Work', config: {} },
+  { type: 'launcher', name: 'Launcher', icon: 'rocket', desc: 'Open websites, apps, files and folders with one click', w: 4, h: 2, group: 'Work', config: { items: [], look: 'grid' } },
+  { type: 'search', name: 'Web search', icon: 'search', desc: 'Search the web from the desktop', w: 4, h: 1, group: 'Work', config: { engine: 'google' } },
   { type: 'agenda', name: 'Agenda', icon: 'calendar-days', desc: 'The next days with tasks and times', w: 3, h: 4, group: 'Plan', config: { days: 5 } },
   { type: 'week', name: 'Week', icon: 'columns-3', desc: 'Seven days: what is due and what got done', w: 6, h: 2, group: 'Plan', config: {} },
   { type: 'calendar', name: 'Month', icon: 'calendar', desc: "This month, with what's due today beside it", w: 5, h: 3, group: 'Plan', config: { list: true } },
   { type: 'goals', name: 'Goals', icon: 'target', desc: 'Active goals and how far along they are', w: 3, h: 3, group: 'Plan', config: {} },
   { type: 'habits', name: 'Habits', icon: 'repeat', desc: "Today's habits to check off", w: 3, h: 3, group: 'Plan', config: {} },
   { type: 'countdown', name: 'Deadline', icon: 'hourglass', desc: 'Days left until a date', w: 2, h: 2, group: 'Plan', config: { title: '', date: '' } },
+  { type: 'timeleft', name: 'Time left', icon: 'gauge', desc: 'How much of the day, week, month and year is gone', w: 3, h: 3, group: 'Plan', config: { look: 'bars' } },
   { type: 'stat', name: 'Number', icon: 'hash', desc: 'Tasks done, overdue, focus time, rows…', w: 2, h: 2, group: 'Track', config: { stat: 'tasksToday' } },
   { type: 'chart', name: 'Chart', icon: 'chart-column', desc: 'Tasks, focus, habits or a value over time', w: 4, h: 3, group: 'Track', config: { source: 'tasks', days: 14, kind: 'bar' } },
   { type: 'progress', name: 'Progress', icon: 'gauge', desc: 'A value toward its goal, or database rows done', w: 2, h: 2, group: 'Track', config: { source: 'value' } },
   { type: 'value', name: 'Counter', icon: 'gem', desc: 'One of your values with + and −', w: 3, h: 2, group: 'Track', config: { showChart: true, step: 1 } },
   { type: 'sections', name: 'Progress by section', icon: 'listChecks', desc: 'How far along each toggle or heading is, like subjects to revise', w: 3, h: 4, group: 'Track', config: { next: 3 } },
   { type: 'table', name: 'Table', icon: 'table', desc: 'A table from a page, with a total and the next due dates', w: 4, h: 3, group: 'Track', config: { table: 0 } },
-  { type: 'system', name: 'System', icon: 'cpu', desc: 'CPU, memory and disk in use', w: 2, h: 3, group: 'Track', config: {} },
+  { type: 'system', name: 'System', icon: 'cpu', desc: 'CPU, memory and disk as rings, bars, numbers or a graph', w: 2, h: 3, group: 'Track', config: {} },
+  { type: 'battery', name: 'Battery', icon: 'battery', desc: 'Charge left and time remaining', w: 2, h: 2, group: 'Track', config: { look: 'ring' } },
   { type: 'dashboard', name: 'Dashboard', icon: 'layout-dashboard', desc: 'A whole dashboard page in one panel', w: 8, h: 6, group: 'More', config: {} },
   { type: 'page', name: 'Shortcut', icon: 'link', desc: 'Opens one of your pages', w: 2, h: 1, group: 'More', config: {} },
-  { type: 'clock', name: 'Clock', icon: 'clock', desc: 'Time and date', w: 3, h: 2, group: 'More', config: { seconds: false, style: 'ring' } },
+  { type: 'clock', name: 'Clock', icon: 'clock', desc: 'Ring, analog, digital, flip, bars, words or a sun dial; any time zone', w: 3, h: 2, group: 'More', config: { seconds: false, style: 'ring' } },
+  { type: 'worldclock', name: 'World clock', icon: 'globe', desc: 'The time in several cities', w: 3, h: 3, group: 'More', config: { style: 'list' } },
+  { type: 'moon', name: 'Moon', icon: 'moonStar', desc: "Tonight's moon phase and the next full moon", w: 3, h: 2, group: 'More', config: {} },
+  { type: 'quote', name: 'Words', icon: 'quote', desc: 'A line to keep in mind, from your own list or built in', w: 4, h: 2, group: 'More', config: { every: 'day', look: 'plain' } },
   { type: 'weather', name: 'Weather', icon: 'cloudSun', desc: 'Now and the next days where you are', w: 5, h: 3, group: 'More', config: { days: 4 } },
   { type: 'daylight', name: 'Daylight', icon: 'sunrise', desc: "The sun's path today, with sunrise and sunset", w: 3, h: 2, group: 'More', config: {} },
   { type: 'text', name: 'Heading', icon: 'type', desc: 'A title, rule or reminder in big type', w: 4, h: 2, group: 'More', config: { text: '', size: 28, weight: 650 } },
@@ -262,7 +271,7 @@ function AnalogClock({ now, seconds }: { now: Date; seconds: boolean }): JSX.Ele
 }
 
 function ClockWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
-  const now = new Date(useTick(1000))
+  const now = zoned(new Date(useTick(1000)), cfg.tz || undefined)
   const use24h = useData((d) => d.settings.use24h)
   const time = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: cfg.seconds ? '2-digit' : undefined, hour12: !use24h })
   if (cfg.style === 'analog') return <div className="w-clock analog"><AnalogClock now={now} seconds={!!cfg.seconds} /></div>
@@ -368,10 +377,18 @@ export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfi
     case 'habits': return <HabitsWidget />
     case 'database': return c.dbId ? <div className="w-scroll"><DatabaseView dbId={c.dbId} viewId={c.viewId || undefined} embedded /></div> : <Missing text="Choose a database in the panel settings." />
     case 'calendar': return <MonthWidget cfg={c} />
-    case 'clock': return c.style === 'ring' ? <RingClock cfg={c} /> : <ClockWidget cfg={c} />
-    case 'weather': return <WeatherWidget cfg={c} />
-    case 'daylight': return <DaylightWidget cfg={c} />
-    case 'system': return <SystemWidget cfg={c} />
+    case 'clock': return c.style === 'ring' ? <RingClock cfg={c} /> : !c.style || c.style === 'digital' || c.style === 'big' ? <ClockWidget cfg={c} /> : <ClockStyles cfg={c} />
+    case 'weather': return !c.style || c.style === 'standard' ? <WeatherWidget cfg={c} /> : <WeatherStyles cfg={c} />
+    case 'daylight': return !c.style || c.style === 'curve' ? <DaylightWidget cfg={c} /> : <DaylightStyles cfg={c} />
+    case 'system': return c.look === 'numbers' || c.look === 'graph' ? <SystemStyles cfg={c} /> : <SystemWidget cfg={c} />
+    case 'worldclock': return <WorldClockWidget cfg={c} />
+    case 'stopwatch': return <StopwatchWidget cfg={c} setConfig={setConfig} />
+    case 'timeleft': return <TimeLeftWidget cfg={c} />
+    case 'moon': return <MoonWidget cfg={c} />
+    case 'launcher': return <LauncherWidget cfg={c} />
+    case 'search': return <SearchWidget cfg={c} />
+    case 'quote': return <QuoteWidget cfg={c} setConfig={setConfig} />
+    case 'battery': return <BatteryWidget cfg={c} />
     case 'timer': return <TimerWidget cfg={c} setConfig={setConfig} />
     case 'sections': return <SectionsPanel cfg={c} />
     case 'table': return <TablePanel cfg={c} />
@@ -396,7 +413,8 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
   if (w.title !== undefined && w.title !== null) return w.title
   switch (w.type) {
     case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': case 'image': case 'text': case 'dashboard': case 'week':
-    case 'calendar': case 'weather': case 'daylight': case 'system': case 'timer': return ''
+    case 'calendar': case 'weather': case 'daylight': case 'system': case 'timer':
+    case 'worldclock': case 'stopwatch': case 'timeleft': case 'moon': case 'search': case 'quote': case 'battery': case 'launcher': return ''
     case 'sections': return w.config.section || d.pages[w.config.pageId]?.title || 'Progress'
     case 'table': return d.pages[w.config.pageId]?.title || 'Table'
     case 'chart': return w.config.source === 'value' ? d.values[w.config.valueId]?.name ?? 'Chart' : w.config.source === 'focus' ? 'Focus minutes' : w.config.source === 'habits' ? 'Habits done' : w.config.source === 'metric' ? d.metrics[w.config.metricId]?.name ?? 'Tracker' : 'Tasks done'

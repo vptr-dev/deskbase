@@ -346,6 +346,15 @@ function registerIpc(): void {
   ipcMain.handle('desk:focus', (_e, id: string) => deskFocus(id))
   ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
+  // Launcher panels: a website, an app link (mailto:, spotify:, steam:…) or a file, folder or program on this PC.
+  ipcMain.handle('app:launch', async (_e, target: string) => {
+    const t = String(target ?? '').trim()
+    if (!t) return false
+    if (/^(https?|mailto|spotify|steam|discord|ms-settings|obsidian|notion|vscode|zoommtg|msteams|slack):/i.test(t)) { await shell.openExternal(t); return true }
+    if (/^[a-z]:[\\/]/i.test(t) || t.startsWith('\\\\')) { if (!fs.existsSync(t)) return false; return (await shell.openPath(t)) === '' }
+    if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(t)) { await shell.openExternal('https://' + t); return true }
+    return false
+  })
 
   ipcMain.handle('notion:available', () => Boolean(notionDbPath()))
   ipcMain.handle('notion:list', () => listNotionPages())

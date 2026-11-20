@@ -63,6 +63,7 @@ export async function weather(lat: number, lon: number, fahrenheit: boolean): Pr
   const unit = fahrenheit ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : ''
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&timezone=auto&forecast_days=7${unit}` +
     '&current=temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,relative_humidity_2m' +
-    '&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max'
+    '&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max' +
+    '&hourly=temperature_2m,weather_code,precipitation_probability,is_day&forecast_hours=24'
   return getJson(url)
 }

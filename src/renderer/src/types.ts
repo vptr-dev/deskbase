@@ -112,6 +112,7 @@ export type WidgetType =
   | 'note' | 'countdown' | 'focus' | 'quickadd' | 'stat' | 'page' | 'goals'
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
   | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
+  | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'launcher' | 'search' | 'quote' | 'battery'
 export interface Widget {
   id: string
   type: WidgetType

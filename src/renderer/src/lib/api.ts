@@ -41,6 +41,7 @@ export interface Bridge {
   displays(): Promise<DisplayInfo[]>
   onOpenPage(cb: (id: string) => void): () => void
   showMain(): Promise<void>
+  launch(target: string): Promise<boolean>
   win: {
     control(action: 'min' | 'max' | 'close'): Promise<void>
     isMax(): Promise<boolean>
@@ -194,6 +195,7 @@ const browserBridge: Bridge = {
   },
   onOpenPage: () => () => {},
   showMain: async () => {},
+  launch: async (t) => { if (/^https?:/i.test(t)) window.open(t, '_blank'); return true },
   win: { control: async () => {}, isMax: async () => false, onMax: () => () => {} },
   // Preview stand-ins: fixed numbers, no network.
   sysStats: async () => ({ cpu: 29, ram: 61, ramUsed: 9.8e9, ramTotal: 16e9, disk: 63, diskFree: 180e9, diskTotal: 480e9, uptime: 36000 }),
@@ -203,6 +205,7 @@ const browserBridge: Bridge = {
     const days = Array.from({ length: 7 }, (_, i) => day(i))
     return {
       current: { temperature_2m: 7, apparent_temperature: 5, weather_code: 45, is_day: 1, wind_speed_10m: 9, relative_humidity_2m: 93 },
+      hourly: { time: Array.from({ length: 24 }, (_, i) => new Date(Date.now() + i * 3600e3).toISOString().slice(0, 13) + ':00'), temperature_2m: Array.from({ length: 24 }, (_, i) => Math.round(6 + 3 * Math.sin(i / 4))), weather_code: Array.from({ length: 24 }, (_, i) => [2, 3, 61, 1][i % 4]), precipitation_probability: Array.from({ length: 24 }, (_, i) => (i * 7) % 60), is_day: Array.from({ length: 24 }, (_, i) => (i > 6 && i < 17 ? 1 : 0)) },
       daily: { time: days, weather_code: [45, 2, 0, 3, 2, 61, 1], temperature_2m_max: [6, 9, 8, 8, 7, 10, 9], temperature_2m_min: [1, -2, 1, 1, 2, 4, 3], sunrise: days.map((d) => d + 'T07:28'), sunset: days.map((d) => d + 'T16:04'), precipitation_probability_max: [20, 5, 0, 10, 15, 70, 10] }
     }
   },

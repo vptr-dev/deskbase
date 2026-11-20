@@ -138,6 +138,7 @@ function Inspector({ w, displays }: { w: DeskWidget; displays: DisplayInfo[] }):
         <WidgetConfigFields w={w} set={set} patch={(fn) => patchDesk(w.id, fn as (x: DeskWidget) => void)} />
       </>}
       {tab === 'style' && <>
+        <DeskLookPicker style={st} onPick={(p) => patchDesk(w.id, (x) => { x.style = { ...x.style, ...p } })} />
         <StyleFields desktop style={st} inherit={w.style} set={(p) => patchDesk(w.id, (x) => { x.style = { ...x.style, ...p } }, 'dstyle:' + w.id)} />
         <div className="row gap-sm wrap">
           {Object.keys(w.style).length > 0 && <Button small kind="ghost" icon="restore" onClick={() => patchDesk(w.id, (x) => { x.style = {} })}>Use the default style</Button>}

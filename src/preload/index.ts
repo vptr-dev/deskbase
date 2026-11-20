@@ -17,6 +17,7 @@ const api = {
   alwaysOnTop: (on: boolean) => ipcRenderer.invoke('app:alwaysOnTop', on),
   loginItem: (on?: boolean) => ipcRenderer.invoke('app:loginItem', on),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  launch: (target: string) => ipcRenderer.invoke('app:launch', target),
   displays: () => ipcRenderer.invoke('app:displays'),
   onOpenPage: (cb: (id: string) => void) => {
     const fn = (_e: unknown, id: string): void => cb(id)
