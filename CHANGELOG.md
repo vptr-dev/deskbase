@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Mail: connect Gmail, iCloud, Yahoo, Fastmail or any IMAP inbox with an app password. An Inbox panel shows the unread count and the latest messages; click one to open it in the browser (Gmail opens the message itself).
+- Todoist: connect with your API token. A Todoist panel shows what is due today, this week or everything, and checks tasks off in Todoist.
+- Now playing: a panel with what Spotify, your browser or any player is playing, with the cover, progress and play, pause, next and previous. No setup.
+- The assistant can look at your connections: unread mail, GitHub issues and pull requests, news feeds, Todoist tasks and what is playing.
+
 ## 0.15.0 — 2026-11-20
 
 - Connections page: add, check, pause and remove connections to calendars, news feeds, GitHub and Notion. Each shows when it was last checked and what came in.

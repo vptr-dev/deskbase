@@ -3,7 +3,9 @@ import { openView, useData } from '../store'
 import type { ConnectionKind } from '../types'
 import type { FeedItem } from '../../../shared/feeds'
 import { api } from '../lib/api'
-import { type CalEvent, CONN_INFO, useCalendarEvents, useFeed } from '../lib/connections'
+import { type CalEvent, CONN_INFO, closeTodoist, useCalendarEvents, useFeed, useNowPlaying } from '../lib/connections'
+import { mailPreset } from '../../../shared/feeds'
+import { useEffect, useState } from 'react'
 import { MONTHS_LONG, addDays, friendlyDay, parseDay, timeAgo, today } from '../lib/util'
 import { Icon } from './Icon'
 
@@ -64,7 +66,30 @@ export function EventsWidget({ cfg }: { cfg: Cfg }): JSX.Element {
 }
 
 // ---------- news feed ----------
-export function FeedRow({ item, summary, kind }: { item: FeedItem; summary?: boolean; kind: ConnectionKind }): JSX.Element {
+export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summary?: boolean; kind: ConnectionKind; connId?: string }): JSX.Element {
+  if (kind === 'mail') {
+    return (
+      <button className={`feed-row mail ${item.unread ? 'unread' : ''}`} onClick={() => open(item.url)} title={item.title}>
+        <span className="mail-dot" />
+        <span className="min0 grow">
+          <span className="row gap-sm"><span className="ellipsis grow mail-from">{item.author ?? ''}</span><span className="muted small nowrap">{item.date ? timeAgo(item.date) : ''}</span></span>
+          <span className="ellipsis d-block mail-subject">{item.title}</span>
+        </span>
+      </button>
+    )
+  }
+  if (kind === 'todoist') {
+    const late = item.due && item.due < today()
+    return (
+      <div className={`feed-row task p${item.priority ?? 1}`}>
+        <button className="todo-ring" title="Complete" disabled={!connId} onClick={() => { if (connId) void closeTodoist(connId, item.id) }}><Icon name="check" size={11} /></button>
+        <button className="min0 grow text-left" onClick={() => open(item.url)} title={item.title}>
+          <span className="ellipsis d-block">{item.title}</span>
+          {(item.due || item.project) && <span className={`small ellipsis d-block ${late ? 'danger' : 'muted'}`}>{item.due ? friendlyDay(item.due) + (item.dueTime ? ' ' + item.dueTime : '') : ''}{item.due && item.project ? ' · ' : ''}{item.project ?? ''}</span>}
+        </button>
+      </div>
+    )
+  }
   if (kind === 'github') {
     const icon = item.kind === 'pr' ? (item.state === 'merged' ? 'merged' : item.state === 'draft' ? 'prDraft' : 'pr') : 'issue'
     return (
@@ -89,7 +114,7 @@ export function FeedRow({ item, summary, kind }: { item: FeedItem; summary?: boo
   )
 }
 
-function ListPanel({ cfg, kind }: { cfg: Cfg; kind: 'rss' | 'github' }): JSX.Element {
+function ListPanel({ cfg, kind }: { cfg: Cfg; kind: 'rss' | 'github' | 'mail' | 'todoist' }): JSX.Element {
   const first = useData((d) => d.connections.find((c) => c.kind === kind && !c.off)?.id)
   const id = cfg.conn && cfg.conn !== 'first' ? cfg.conn : first
   const { conn, result, busy } = useFeed(id)
@@ -99,10 +124,50 @@ function ListPanel({ cfg, kind }: { cfg: Cfg; kind: 'rss' | 'github' }): JSX.Ele
   let items = result.items ?? []
   if (kind === 'github' && cfg.show === 'issues') items = items.filter((i) => i.kind === 'issue')
   if (kind === 'github' && cfg.show === 'prs') items = items.filter((i) => i.kind === 'pr')
+  if (kind === 'mail' && cfg.unreadOnly) items = items.filter((i) => i.unread)
+  if (kind === 'todoist' && (cfg.show ?? 'today') === 'today') { const t = today(); items = items.filter((i) => i.due && i.due <= t) }
+  if (kind === 'todoist' && cfg.show === 'week') { const w = addDays(today(), 7); items = items.filter((i) => i.due && i.due <= w) }
   items = items.slice(0, Number(cfg.count) || (kind === 'rss' ? 6 : 8))
-  if (!items.length) return <div className="muted small pad">{kind === 'github' ? 'Nothing open.' : 'No posts yet.'}</div>
-  return <div className={`feed-panel ${kind}`}>{items.map((i) => <FeedRow key={i.id} item={i} kind={kind} summary={kind === 'rss' && cfg.summary !== false} />)}</div>
+  const head = kind === 'mail' && cfg.count !== 0 ? (
+    <button className="mail-head" onClick={() => open(mailPreset(conn.account?.preset).web || items[0]?.url)}>
+      <strong>{result.unread ?? 0}</strong><span className="muted small">unread</span>
+      {!result.ok && <Icon name="alert" size={13} className="danger" />}
+    </button>
+  ) : null
+  if (!items.length) return <div className={`feed-panel ${kind}`}>{head}<div className="muted small pad">{kind === 'github' ? 'Nothing open.' : kind === 'mail' ? 'Nothing new.' : kind === 'todoist' ? 'Nothing due.' : 'No posts yet.'}</div></div>
+  return <div className={`feed-panel ${kind}`}>{head}{items.map((i) => <FeedRow key={i.id} item={i} kind={kind} connId={conn.id} summary={kind === 'rss' && cfg.summary !== false} />)}</div>
 }
 
 export const FeedWidget = ({ cfg }: { cfg: Cfg }): JSX.Element => <ListPanel cfg={cfg} kind="rss" />
 export const GitHubWidget = ({ cfg }: { cfg: Cfg }): JSX.Element => <ListPanel cfg={cfg} kind="github" />
+export const MailWidget = ({ cfg }: { cfg: Cfg }): JSX.Element => <ListPanel cfg={cfg} kind="mail" />
+export const TodoistWidget = ({ cfg }: { cfg: Cfg }): JSX.Element => <ListPanel cfg={cfg} kind="todoist" />
+
+// ---------- now playing ----------
+const APP_NAMES: [RegExp, string][] = [[/spotify/i, 'Spotify'], [/chrome/i, 'Chrome'], [/msedge|edge/i, 'Edge'], [/firefox|308046B0AF4A39CB/i, 'Firefox'], [/zunemusic|mediaplayer/i, 'Media Player'], [/vlc/i, 'VLC'], [/itunes|applemusic/i, 'Apple Music'], [/brave/i, 'Brave'], [/opera/i, 'Opera'], [/foobar/i, 'foobar2000'], [/tidal/i, 'TIDAL'], [/deezer/i, 'Deezer'], [/youtube/i, 'YouTube Music']]
+export const appName = (id?: string): string => (id ? APP_NAMES.find(([re]) => re.test(id))?.[1] ?? id.replace(/\.exe$/i, '').replace(/_.*$/, '').split(/[!.]/).pop() ?? '' : '')
+const mmss = (s: number): string => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+
+export function MediaWidget({ cfg }: { cfg: Cfg }): JSX.Element {
+  const m = useNowPlaying()
+  const [, tick] = useState(0)
+  useEffect(() => { if (!m.playing) return; const id = setInterval(() => tick((x) => x + 1), 1000); return () => clearInterval(id) }, [m.playing])
+  if (m.none || !m.title) return <div className="media-panel empty"><Icon name="music" size={20} className="muted" /><span className="muted small">Nothing playing</span></div>
+  const pos = Math.min(m.dur ?? 0, (m.pos ?? 0) + (m.playing && m.at ? (Date.now() - m.at) / 1000 : 0))
+  const look = cfg.look ?? 'card'
+  return (
+    <div className={`media-panel look-${look}`}>
+      {look !== 'line' && (m.thumb ? <img className="media-art" src={m.thumb} alt="" /> : <span className="media-art none"><Icon name="music" size={22} /></span>)}
+      <div className="media-info min0">
+        <div className="media-title ellipsis" title={m.title}>{m.title}</div>
+        <div className="media-artist muted ellipsis">{[m.artist, cfg.app !== false ? appName(m.app) : ''].filter(Boolean).join(' · ')}</div>
+        {cfg.progress !== false && !!m.dur && <div className="media-bar"><span style={{ width: `${(pos / m.dur) * 100}%` }} /><em>{mmss(pos)}</em><em>{mmss(m.dur)}</em></div>}
+        <div className="media-ctl">
+          <button title="Previous" disabled={m.canPrev === false} onClick={() => api.media.control('prev')}><Icon name="skipBack" size={16} /></button>
+          <button className="main" title={m.playing ? 'Pause' : 'Play'} onClick={() => api.media.control('toggle')}><Icon name={m.playing ? 'pause' : 'play'} size={18} /></button>
+          <button title="Next" disabled={m.canNext === false} onClick={() => api.media.control('next')}><Icon name="skip" size={16} /></button>
+        </div>
+      </div>
+    </div>
+  )
+}

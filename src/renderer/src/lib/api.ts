@@ -87,6 +87,12 @@ export interface Bridge {
     notionList(id: string): Promise<NotionPageInfo[]>
     notionImport(id: string, ids: string[]): Promise<ImportResult>
     notionPush(id: string, op: { kind: 'todo'; block: string; checked: boolean } | { kind: 'checkbox'; page: string; prop: string; value: boolean }): Promise<void>
+    todoistClose(id: string, task: string): Promise<void>
+  }
+  media: {
+    watch(on: boolean): Promise<void>
+    control(cmd: 'toggle' | 'next' | 'prev'): Promise<void>
+    onState(cb: (s: MediaState) => void): () => void
   }
   notion: {
     available(): Promise<boolean>
@@ -110,7 +116,7 @@ const webConn: Bridge['conn'] = {
   setSecret: async (id, value) => { const s = webSecrets(); if (value) s[id] = value; else delete s[id]; localStorage.setItem(CONN_KEY, JSON.stringify(s)); return Object.keys(s) },
   fetch: async (spec) => {
     try {
-      if (spec.kind === 'notion') throw new Error('Notion connections work in the desktop app.')
+      if (spec.kind === 'notion' || spec.kind === 'mail' || spec.kind === 'todoist') throw new Error('This connection works in the desktop app.')
       if (spec.kind === 'github') {
         const tok = webSecrets()[spec.id]
         const h: Record<string, string> = { Accept: 'application/vnd.github+json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }
@@ -129,7 +135,8 @@ const webConn: Bridge['conn'] = {
   },
   notionList: async () => { throw new Error('Notion connections work in the desktop app.') },
   notionImport: async () => { throw new Error('Notion connections work in the desktop app.') },
-  notionPush: async () => {}
+  notionPush: async () => {},
+  todoistClose: async () => {}
 }
 
 const KEY = 'deskbase:data'
@@ -307,6 +314,7 @@ const browserBridge: Bridge = {
   },
   ai: webAi,
   conn: webConn,
+  media: { watch: async () => {}, control: async () => {}, onState: () => () => {} },
   notion: {
     available: async () => false,
     list: async () => [],
@@ -333,3 +341,6 @@ export interface NetStats { supported: boolean; down: number; up: number; rx: nu
 export interface SysStats { cpu: number; ram: number; ramUsed: number; ramTotal: number; disk: number; diskFree: number; diskTotal: number; uptime: number }
 export interface Place { name: string; region: string; country: string; lat: number; lon: number }
 export interface DeskMenuItem { id: string; label: string; checked?: boolean; type?: 'separator'; role?: 'cut' | 'copy' | 'paste'; submenu?: { id: string; label: string; checked?: boolean }[] }
+
+/** What is playing in Windows (any app that shows in the volume flyout: Spotify, browsers, Media Player…). */
+export interface MediaState { none?: boolean; title?: string; artist?: string; album?: string; app?: string; playing?: boolean; pos?: number; dur?: number; at?: number; thumb?: string; canNext?: boolean; canPrev?: boolean }

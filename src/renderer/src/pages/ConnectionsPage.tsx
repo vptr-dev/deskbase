@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { act, getData, openPage, toast, useData } from '../store'
 import type { Connection, ConnectionKind } from '../types'
 import type { NotionPageInfo } from '../../../shared/import-types'
-import { repoOf } from '../../../shared/feeds'
+import { MAIL_PRESETS, mailPreset, repoOf } from '../../../shared/feeds'
 import { api, isDesktop } from '../lib/api'
 import { CONN_COLORS, CONN_INFO, addConnection, loadFeed, notionPagesOf, useCalendarEvents, patchConnection, removeConnection, setSecret, useFeed, useFeeds } from '../lib/connections'
 import { refreshFromNotion, syncFromNotionApi } from '../lib/importer'
@@ -11,11 +11,12 @@ import { Button, ColorDots, ConfirmButton, Toggle } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
 import { EventRow, FeedRow } from '../components/PanelKit5'
 
-const KINDS: ConnectionKind[] = ['calendar', 'rss', 'github', 'notion']
+const KINDS: ConnectionKind[] = ['calendar', 'mail', 'todoist', 'rss', 'github', 'notion']
 
 const KEY_LINKS: Partial<Record<ConnectionKind, { url: string; label: string }>> = {
   notion: { url: 'https://www.notion.so/profile/integrations', label: 'Create an integration' },
-  github: { url: 'https://github.com/settings/personal-access-tokens/new', label: 'Create a token' }
+  github: { url: 'https://github.com/settings/personal-access-tokens/new', label: 'Create a token' },
+  todoist: { url: 'https://app.todoist.com/app/settings/integrations/developer', label: 'Find your token' }
 }
 
 const ADDRESS_HINT: Partial<Record<ConnectionKind, string>> = {
@@ -34,16 +35,17 @@ function statusOf(c: Connection, r: ReturnType<typeof useFeed>['result'], busy: 
     if (r && !r.ok) return { text: r.error ?? 'Could not reach Notion', bad: true }
     return { text: notionPages ? `${notionPages} page${notionPages === 1 ? '' : 's'} in sync` : r?.ok ? r.title ?? 'Connected' : 'Not set up' }
   }
-  if (!r) return { text: c.url || c.repos.length ? '' : 'Not set up' }
+  if (!r) return { text: c.url || c.repos.length || c.account?.user ? '' : 'Not set up' }
   if (!r.ok) return { text: r.error ?? 'Could not load it', bad: true }
-  const n = c.kind === 'calendar' ? `${r.events?.length ?? 0} events` : c.kind === 'github' ? `${r.items?.length ?? 0} open` : `${r.items?.length ?? 0} posts`
+  const n = c.kind === 'calendar' ? `${r.events?.length ?? 0} events` : c.kind === 'github' ? `${r.items?.length ?? 0} open` : c.kind === 'mail' ? `${r.unread ?? 0} unread` : c.kind === 'todoist' ? `${r.items?.length ?? 0} tasks` : `${r.items?.length ?? 0} posts`
   return { text: `${n} · checked ${timeAgo(r.at)}` }
 }
 
 function SecretField({ c, label }: { c: Connection; label: string }): JSX.Element {
   const has = useFeeds((s) => s.secrets.includes(c.id))
   const [val, setVal] = useState('')
-  const link = KEY_LINKS[c.kind]
+  const pw = c.kind === 'mail' ? mailPreset(c.account?.preset).passwordUrl : undefined
+  const link = pw ? { url: pw, label: 'Create an app password' } : KEY_LINKS[c.kind]
   const save = async (v: string | null): Promise<void> => { await setSecret(c.id, v); setVal(''); void loadFeed(c, true) }
   return (
     <Field label={label} sub={has ? 'Saved and encrypted on this computer' : c.kind === 'github' ? 'Needed for private repositories and for what is assigned to you' : 'Stored encrypted on this computer, never in exports'}>
@@ -66,7 +68,7 @@ function Preview({ c }: { c: Connection }): JSX.Element | null {
   }
   const items = (result?.items ?? []).slice(0, 4)
   if (!items.length) return null
-  return <div className="conn-preview">{items.map((i) => <FeedRow key={i.id} item={i} kind={c.kind} />)}</div>
+  return <div className="conn-preview">{items.map((i) => <FeedRow key={i.id} item={i} kind={c.kind} connId={c.id} />)}</div>
 }
 
 function NotionPages({ c }: { c: Connection }): JSX.Element {
@@ -129,6 +131,32 @@ function NotionPages({ c }: { c: Connection }): JSX.Element {
   )
 }
 
+function MailFields({ c }: { c: Connection }): JSX.Element {
+  const a = c.account ?? { preset: 'gmail', host: 'imap.gmail.com', port: 993, user: '' }
+  const [user, setUser] = useState(a.user)
+  const [host, setHost] = useState(a.host)
+  const [port, setPort] = useState(String(a.port || 993))
+  const save = (patch: Partial<NonNullable<Connection['account']>>): void => {
+    patchConnection(c.id, (x) => { x.account = { ...a, ...patch } })
+    setTimeout(() => { const now = getData().connections.find((x) => x.id === c.id); if (now?.account?.user && now.account.host) void loadFeed(now, true) }, 0)
+  }
+  return <>
+    <Field label="Service">
+      <select className="input input-sm" value={a.preset} onChange={(e) => { const p = mailPreset(e.target.value); setHost(p.host || host); setPort(String(p.port)); save({ preset: p.id, host: p.host || host, port: p.port }) }}>
+        {MAIL_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    </Field>
+    <Field label="Email address"><input className="input input-sm w-220" autoFocus={!a.user} value={user} placeholder="you@gmail.com" onChange={(e) => setUser(e.target.value)} onBlur={() => { if (user.trim() !== a.user) save({ user: user.trim() }) }} /></Field>
+    {a.preset === 'other' && (
+      <Field label="IMAP server" sub="Over SSL, usually port 993">
+        <input className="input input-sm w-220" value={host} placeholder="imap.example.com" onChange={(e) => setHost(e.target.value)} onBlur={() => { if (host.trim() !== a.host) save({ host: host.trim() }) }} />
+        <input className="input input-sm w-60" value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))} onBlur={() => { const n = Number(port) || 993; if (n !== a.port) save({ port: n }) }} />
+      </Field>
+    )}
+    <SecretField c={c} label="App password" />
+  </>
+}
+
 function ConnCard({ c, open, onToggle }: { c: Connection; open: boolean; onToggle: () => void }): JSX.Element {
   const { result, busy } = useFeed(c.id)
   const notionCount = useData((d) => (c.kind === 'notion' ? notionPagesOf(d, c.id).length : 0))
@@ -178,6 +206,8 @@ function ConnCard({ c, open, onToggle }: { c: Connection; open: boolean; onToggl
             <SecretField c={c} label="Token" />
           </>}
           {c.kind === 'notion' && <SecretField c={c} label="Integration token" />}
+          {c.kind === 'todoist' && <SecretField c={c} label="API token" />}
+          {c.kind === 'mail' && <MailFields c={c} />}
           {c.kind !== 'notion' && <Field label="Color"><ColorDots value={c.color} colors={CONN_COLORS} onChange={(v) => patchConnection(c.id, (x) => { x.color = v })} /></Field>}
           <Field label="On" sub={c.off ? 'Paused: not checked and not shown' : undefined}><Toggle checked={!c.off} onChange={(v) => patchConnection(c.id, (x) => { if (v) delete x.off; else x.off = true })} /></Field>
           {c.kind === 'notion' ? <NotionPages c={c} /> : !c.off && <Preview c={c} />}

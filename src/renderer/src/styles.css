@@ -2368,3 +2368,37 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 .cal-events { display: flex; flex-direction: column; gap: 1px; padding: 4px; border-radius: 10px; }
 .agenda-day .cal-events { margin-bottom: 6px; }
 .ag-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+
+/* mail, Todoist, now playing */
+.mail-head { display: flex; align-items: baseline; gap: 6px; padding: 2px 8px 6px; text-align: left; }
+.mail-head strong { font-size: 1.7em; font-weight: 650; line-height: 1; font-variant-numeric: tabular-nums; }
+.feed-row.mail { align-items: center; }
+.mail-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: transparent; }
+.feed-row.mail.unread .mail-dot { background: var(--accent); }
+.feed-row.mail .mail-from { font-size: 0.92em; color: var(--muted); }
+.feed-row.mail.unread .mail-from { color: var(--fg); font-weight: 600; }
+.feed-row.mail.unread .mail-subject { font-weight: 550; }
+.nowrap { white-space: nowrap; }
+.text-left { text-align: left; }
+.feed-row.task { align-items: flex-start; }
+.todo-ring { width: 17px; height: 17px; margin-top: 1px; border-radius: 50%; border: 1.6px solid var(--faint); display: grid; place-items: center; flex-shrink: 0; color: transparent; transition: background var(--dur), color var(--dur); }
+.todo-ring:hover { color: var(--fg-2); background: var(--hover); }
+.feed-row.task.p4 .todo-ring { border-color: #ff453a; } .feed-row.task.p3 .todo-ring { border-color: #ff9f0a; } .feed-row.task.p2 .todo-ring { border-color: #0a84ff; }
+.media-panel { height: 100%; display: flex; align-items: center; gap: 12px; padding: 4px; min-width: 0; }
+.media-panel.empty { flex-direction: column; justify-content: center; gap: 6px; }
+.media-art { width: 84px; height: 84px; border-radius: 10px; object-fit: cover; flex-shrink: 0; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }
+.media-art.none { display: grid; place-items: center; background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--muted); box-shadow: none; }
+.media-panel.look-big { flex-direction: column; align-items: stretch; text-align: center; }
+.media-panel.look-big .media-art { width: 100%; height: auto; aspect-ratio: 1; max-height: 60%; object-fit: contain; background: transparent; box-shadow: none; }
+.media-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.media-title { font-weight: 650; font-size: 1.05em; }
+.media-artist { font-size: 0.9em; }
+.media-bar { position: relative; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--fg) 12%, transparent); margin: 6px 0 14px; }
+.media-bar span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--fg-2); }
+.media-bar em { position: absolute; top: 6px; font-style: normal; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.media-bar em:last-child { right: 0; }
+.media-ctl { display: flex; align-items: center; gap: 6px; }
+.media-panel.look-big .media-ctl { justify-content: center; }
+.media-ctl button { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-2); }
+.media-ctl button:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
+.media-ctl button.main { width: 36px; height: 36px; background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }

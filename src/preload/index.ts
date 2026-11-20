@@ -93,7 +93,17 @@ const api = {
     fetch: (spec: unknown, force?: boolean) => ipcRenderer.invoke('conn:fetch', spec, force),
     notionList: (id: string) => ipcRenderer.invoke('conn:notionList', id),
     notionImport: (id: string, ids: string[]) => ipcRenderer.invoke('conn:notionImport', id, ids),
-    notionPush: (id: string, op: unknown) => ipcRenderer.invoke('conn:notionPush', id, op)
+    notionPush: (id: string, op: unknown) => ipcRenderer.invoke('conn:notionPush', id, op),
+    todoistClose: (id: string, task: string) => ipcRenderer.invoke('conn:todoistClose', id, task)
+  },
+  media: {
+    watch: (on: boolean) => ipcRenderer.invoke('media:watch', on),
+    control: (cmd: string) => ipcRenderer.invoke('media:control', cmd),
+    onState: (cb: (s: unknown) => void) => {
+      const fn = (_e: unknown, s: unknown): void => cb(s)
+      ipcRenderer.on('media:state', fn)
+      return () => ipcRenderer.removeListener('media:state', fn)
+    }
   },
   notion: {
     available: () => ipcRenderer.invoke('notion:available'),

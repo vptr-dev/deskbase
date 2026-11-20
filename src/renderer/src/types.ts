@@ -163,7 +163,7 @@ export type WidgetType =
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
   | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
   | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'launcher' | 'search' | 'quote' | 'battery'
-  | 'network' | 'calculator' | 'recent' | 'dbchart' | 'activity' | 'deadlines' | 'events' | 'feed' | 'github'
+  | 'network' | 'calculator' | 'recent' | 'dbchart' | 'activity' | 'deadlines' | 'events' | 'feed' | 'github' | 'mail' | 'todoist' | 'media'
 export interface Widget {
   id: string
   type: WidgetType
@@ -559,7 +559,7 @@ export interface AppData {
 }
 
 // ---------- connections ----------
-export type ConnectionKind = 'notion' | 'calendar' | 'rss' | 'github'
+export type ConnectionKind = 'notion' | 'calendar' | 'rss' | 'github' | 'mail' | 'todoist'
 export interface Connection {
   id: string
   kind: ConnectionKind
@@ -569,6 +569,8 @@ export interface Connection {
   color: string
   /** GitHub: owner/name of each repository; none = what is assigned to you */
   repos: string[]
+  /** mail: the IMAP account (the app password is kept encrypted elsewhere) */
+  account?: { preset: string; host: string; port: number; user: string }
   createdAt: number
   /** paused: not fetched or shown */
   off?: boolean

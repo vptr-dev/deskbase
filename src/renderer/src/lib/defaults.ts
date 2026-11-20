@@ -3,7 +3,7 @@ import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 15
+export const SCHEMA = 16
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -262,13 +262,14 @@ export const DEFAULT_PRESETS: AssistantPreset[] = [
 ]
 export const DEFAULT_AI_SETTINGS: AssistantSettings = { instructions: '', access: 'ask', temperature: null, length: 'normal', effort: 'medium', presets: [] }
 
-const CONN_KINDS = ['notion', 'calendar', 'rss', 'github']
+const CONN_KINDS = ['notion', 'calendar', 'rss', 'github', 'mail', 'todoist']
 function normalizeConnections(raw: any): Connection[] {
   if (!Array.isArray(raw)) return []
   return raw.filter((c) => c && typeof c === 'object' && typeof c.id === 'string' && CONN_KINDS.includes(c.kind)).map((c) => ({
     id: c.id, kind: c.kind, name: typeof c.name === 'string' ? c.name : '', url: typeof c.url === 'string' ? c.url : '',
     color: typeof c.color === 'string' ? c.color : '#0a84ff', repos: Array.isArray(c.repos) ? c.repos.filter((r: any) => typeof r === 'string') : [],
-    createdAt: Number(c.createdAt) || Date.now(), ...(c.off ? { off: true } : {})
+    createdAt: Number(c.createdAt) || Date.now(), ...(c.off ? { off: true } : {}),
+    ...(c.account && typeof c.account === 'object' ? { account: { preset: String(c.account.preset ?? 'other'), host: String(c.account.host ?? ''), port: Number(c.account.port) || 993, user: String(c.account.user ?? '') } } : {})
   }))
 }
 

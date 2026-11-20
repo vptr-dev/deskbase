@@ -31,7 +31,7 @@ import { NotionImportDialog } from './components/NotionImport'
 import { ValuesDialog } from './components/Values'
 import { HistoryDialog } from './components/History'
 import { applyImport, refreshFromNotion } from './lib/importer'
-import { loadFeed, startConnections, useFeeds } from './lib/connections'
+import { loadFeed, startConnections, useFeeds, useMedia } from './lib/connections'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { isDesktop } from './lib/api'
 import { applyCustomCss, applyLook } from './lib/look'
@@ -305,7 +305,7 @@ function useDesktopWidgets(): void {
   useEffect(() => (ready ? watchHistory() : undefined), [ready])
   // Unpackaged runs and the browser preview only: lets automated checks drive the app.
   useEffect(() => {
-    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, addDeskSet, runCommand, addSpace, switchSpace, applyImport, api, openView, setOverlay, openPage, useFeeds, loadFeed } }).catch(() => {})
+    api.info().then((i) => { if (!i.packaged) (window as any).__desk = { act, getData, addDesktopWidget, addDeskSet, runCommand, addSpace, switchSpace, applyImport, api, openView, setOverlay, openPage, useFeeds, useMedia, loadFeed } }).catch(() => {})
   }, [])
 }
 

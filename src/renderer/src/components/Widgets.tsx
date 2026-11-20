@@ -23,7 +23,7 @@ import { Marks, findBlock } from './Blocks'
 import { plainText } from '../lib/links'
 import { CalculatorWidget, NetworkWidget, RecentWidget } from './PanelKit3'
 import { ActivityWidget, DbChartWidget, DeadlinesWidget } from './PanelKit4'
-import { EventsWidget, FeedWidget, GitHubWidget } from './PanelKit5'
+import { EventsWidget, FeedWidget, GitHubWidget, MailWidget, MediaWidget, TodoistWidget } from './PanelKit5'
 import { eventsByDay, useCalendarEvents } from '../lib/connections'
 
 /** Partial widget used by both dashboards and desktop widgets. */
@@ -60,6 +60,9 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'activity', name: 'Activity', icon: 'grid', desc: 'Every day you got things done as a heatmap, with your streak', w: 4, h: 2, group: 'Track', config: { source: 'all', weeks: 20 } },
   { type: 'events', name: 'Events', icon: 'calendarSync', desc: 'What is next on your Google, Outlook or Apple calendars', w: 3, h: 4, group: 'Plan', config: { days: 14, count: 8 } },
   { type: 'feed', name: 'News feed', icon: 'rss', desc: 'The latest posts from a blog, news site or channel', w: 3, h: 4, group: 'More', config: { count: 6, summary: true } },
+  { type: 'mail', name: 'Inbox', icon: 'mail', desc: 'Unread mail and the latest messages from your inbox', w: 3, h: 4, group: 'Work', config: { count: 6 } },
+  { type: 'todoist', name: 'Todoist', icon: 'checkSquare', desc: 'Todoist tasks due today, checked off from the desktop', w: 3, h: 4, group: 'Work', config: { show: 'today', count: 8 } },
+  { type: 'media', name: 'Now playing', icon: 'music', desc: 'What Spotify, your browser or any player is playing, with controls', w: 4, h: 2, group: 'More', config: { look: 'card' } },
   { type: 'github', name: 'GitHub', icon: 'pr', desc: 'Open issues and pull requests', w: 4, h: 4, group: 'Work', config: { show: 'all', count: 8 } },
   { type: 'deadlines', name: 'Coming up', icon: 'hourglass', desc: 'Deadlines, due tasks and dated rows with the days left', w: 3, h: 3, group: 'Plan', config: { days: 60, count: 6 } },
   { type: 'network', name: 'Network', icon: 'wifi', desc: 'Download and upload speed with a live graph', w: 3, h: 2, group: 'Track', config: { graph: true } },
@@ -422,6 +425,9 @@ export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfi
     case 'events': return <EventsWidget cfg={c} />
     case 'feed': return <FeedWidget cfg={c} />
     case 'github': return <GitHubWidget cfg={c} />
+    case 'mail': return <MailWidget cfg={c} />
+    case 'todoist': return <TodoistWidget cfg={c} />
+    case 'media': return <MediaWidget cfg={c} />
     case 'calculator': return <CalculatorWidget cfg={c} setConfig={setConfig} />
     case 'recent': return <RecentWidget cfg={c} />
     case 'timer': return <TimerWidget cfg={c} setConfig={setConfig} />
@@ -455,6 +461,9 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
     case 'activity': return 'Activity'
     case 'deadlines': return 'Coming up'
     case 'events': return 'Events'
+    case 'media': return ''
+    case 'mail': { const cn = d.connections.find((x) => x.id === w.config.conn) ?? d.connections.find((x) => x.kind === 'mail'); return cn?.name || 'Inbox' }
+    case 'todoist': return w.config.show === 'all' ? 'Todoist' : w.config.show === 'week' ? 'This week' : 'Today'
     case 'feed': { const cn = d.connections.find((x) => x.id === w.config.conn) ?? d.connections.find((x) => x.kind === 'rss'); return cn?.name || 'News' }
     case 'github': { const cn = d.connections.find((x) => x.id === w.config.conn) ?? d.connections.find((x) => x.kind === 'github'); return cn?.name || 'GitHub' }
     case 'table': return d.pages[w.config.pageId]?.title || 'Table'

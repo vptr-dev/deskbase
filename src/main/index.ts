@@ -1,3 +1,4 @@
+import { registerMedia } from './media'
 import { registerConnections } from './connections'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, shell, Tray } from 'electron'
 import fs from 'fs'
@@ -405,6 +406,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc()
     registerAi()
     registerConnections()
+    registerMedia()
     createWindow()
     applyTray()
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })

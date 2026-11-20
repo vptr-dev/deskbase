@@ -158,7 +158,11 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
       </>}
       {w.type === 'agenda' && <><Field label="Days"><Segmented small value={c.days ?? 5} onChange={(v) => set('days', v)} options={[3, 5, 7, 14].map((n) => ({ value: n, label: String(n) }))} /></Field>
         <Field label="Calendar events"><Toggle checked={c.events !== false} onChange={(v) => set('events', v)} /></Field></>}
-      {(w.type === 'events' || w.type === 'feed' || w.type === 'github') && <ConnFields type={w.type} c={c} set={set} />}
+      {(w.type === 'events' || w.type === 'feed' || w.type === 'github' || w.type === 'mail' || w.type === 'todoist') && <ConnFields type={w.type} c={c} set={set} />}
+      {w.type === 'media' && <>
+        <Field label="Look"><Segmented small value={c.look ?? 'card'} onChange={(v) => set('look', v)} options={[{ value: 'card', label: 'Cover' }, { value: 'big', label: 'Big cover' }, { value: 'line', label: 'Text only' }]} /></Field>
+        <Field label="Show"><Chip on={c.progress !== false} label="Progress" onChange={(v) => set('progress', v)} /><Chip on={c.app !== false} label="App name" onChange={(v) => set('app', v)} /></Field>
+      </>}
       {w.type === 'database' && <>{dbPicker(false)}
         {db && (
           <Field label="View">
@@ -591,10 +595,10 @@ export function StyleFields({ style, set, desktop, inherit, part }: { style: Wid
   )
 }
 
-function ConnFields({ type, c, set }: { type: 'events' | 'feed' | 'github'; c: Record<string, any>; set: (k: string, v: any) => void }): JSX.Element {
-  const kind = type === 'events' ? 'calendar' : type === 'feed' ? 'rss' : 'github'
+function ConnFields({ type, c, set }: { type: 'events' | 'feed' | 'github' | 'mail' | 'todoist'; c: Record<string, any>; set: (k: string, v: any) => void }): JSX.Element {
+  const kind = type === 'events' ? 'calendar' : type === 'feed' ? 'rss' : type
   const conns = useData((d) => d.connections.filter((x) => x.kind === kind))
-  const name = (x: { name: string; url: string; repos: string[] }): string => x.name || x.repos.join(', ') || x.url.replace(/^https?:\/\//, '').slice(0, 40) || 'Untitled'
+  const name = (x: { name: string; url: string; repos: string[]; account?: { user: string } }): string => x.name || x.account?.user || x.repos.join(', ') || x.url.replace(/^https?:\/\//, '').slice(0, 40) || 'Untitled'
   return <>
     {!conns.length && <div className="field-note"><Icon name="plug" size={13} /> <button className="link-btn" onClick={() => openView('@connections')}>Add a connection</button></div>}
     {type === 'events' && conns.length > 1 && (
@@ -603,7 +607,7 @@ function ConnFields({ type, c, set }: { type: 'events' | 'feed' | 'github'; c: R
       </Field>
     )}
     {type !== 'events' && conns.length > 1 && (
-      <Field label={type === 'feed' ? 'Feed' : 'Account'}>
+      <Field label={type === 'feed' ? 'Feed' : type === 'mail' ? 'Inbox' : 'Account'}>
         <select className="input input-sm" value={c.conn ?? ''} onChange={(e) => set('conn', e.target.value || undefined)}>
           <option value="">{name(conns[0])}</option>
           {conns.slice(1).map((x) => <option key={x.id} value={x.id}>{name(x)}</option>)}
@@ -612,6 +616,8 @@ function ConnFields({ type, c, set }: { type: 'events' | 'feed' | 'github'; c: R
     )}
     {type === 'events' && <Field label="Looking ahead"><Segmented small value={String(c.days ?? 14)} onChange={(v) => set('days', Number(v))} options={[{ value: '1', label: 'Today' }, { value: '7', label: 'Week' }, { value: '14', label: '2 weeks' }, { value: '31', label: 'Month' }]} /></Field>}
     {type === 'github' && <Field label="Show"><Segmented small value={c.show ?? 'all'} onChange={(v) => set('show', v)} options={[{ value: 'all', label: 'Both' }, { value: 'issues', label: 'Issues' }, { value: 'prs', label: 'Pull requests' }]} /></Field>}
+    {type === 'mail' && <Field label="Only unread"><Toggle checked={!!c.unreadOnly} onChange={(v) => set('unreadOnly', v)} /></Field>}
+    {type === 'todoist' && <Field label="Show"><Segmented small value={c.show ?? 'today'} onChange={(v) => set('show', v)} options={[{ value: 'today', label: 'Today and late' }, { value: 'week', label: 'Next 7 days' }, { value: 'all', label: 'Everything' }]} /></Field>}
     {type === 'feed' && <Field label="Summaries"><Toggle checked={c.summary !== false} onChange={(v) => set('summary', v)} /></Field>}
     <Field label="How many"><Segmented small value={String(c.count ?? (type === 'feed' ? 6 : 8))} onChange={(v) => set('count', Number(v))} options={['4', '6', '8', '12'].map((n) => ({ value: n, label: n }))} /></Field>
   </>

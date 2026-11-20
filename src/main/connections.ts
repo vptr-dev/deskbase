@@ -4,7 +4,8 @@
 import { app, ipcMain, net, safeStorage } from 'electron'
 import fs from 'fs'
 import path from 'path'
-import { type ConnSpec, type FeedResult, feedUrl, githubItems, parseFeed, parseIcs } from '../shared/feeds'
+import { ImapFlow } from 'imapflow'
+import { type ConnSpec, type FeedItem, type FeedResult, feedUrl, githubItems, mailPreset, parseFeed, parseIcs, todoistItems } from '../shared/feeds'
 import type { ImportResult, NotionPageInfo } from '../shared/import-types'
 import { notionApiImport, notionApiPush, notionApiSearch, type NotionPush } from './notion-api'
 
@@ -51,6 +52,80 @@ async function github(spec: ConnSpec): Promise<FeedResult> {
   return { ok: true, at: Date.now(), title: title ?? repos.join(', '), items }
 }
 
+async function mail(spec: ConnSpec): Promise<FeedResult> {
+  const pass = secret(spec.id)
+  const a = spec.account
+  if (!a?.host || !a.user) throw new Error('Fill in the email address and the server.')
+  if (!pass) throw new Error('Paste the app password first.')
+  const client = new ImapFlow({ host: a.host, port: a.port || 993, secure: true, auth: { user: a.user, pass }, logger: false, connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 60000 })
+  client.on('error', () => { /* reported through the calls below */ })
+  try {
+    await client.connect()
+  } catch (e: any) {
+    if (e?.authenticationFailed) throw new Error('The server did not accept the address and app password.')
+    const msg = String(e?.message ?? '')
+    throw new Error(e?.code === 'ENOTFOUND' ? `Could not find the server ${a.host}.` : e?.code === 'ECONNREFUSED' ? `${a.host} refused the connection.` : /SSL|TLS|certificate/i.test(msg) ? `${a.host} did not answer over a secure connection on port ${a.port || 993}.` : e?.code === 'ETIMEDOUT' || /timeout/i.test(msg) ? `${a.host} did not answer in time.` : msg || 'Could not connect to the mail server.')
+  }
+  try {
+    const status = await client.status('INBOX', { unseen: true, messages: true })
+    const gmail = /gmail|googlemail/i.test(a.host)
+    const web = mailPreset(a.preset).web
+    const lock = await client.getMailboxLock('INBOX')
+    let items: FeedItem[] = []
+    try {
+      const total = typeof client.mailbox === 'object' && client.mailbox ? client.mailbox.exists : 0
+      if (total) {
+        const msgs = await client.fetchAll(`${Math.max(1, total - 29)}:*`, { uid: true, envelope: true, flags: true, internalDate: true, ...(gmail ? { emailId: true } : {}) })
+        items = msgs.reverse().map((m) => {
+          const from = m.envelope?.from?.[0]
+          const date = m.internalDate ? new Date(m.internalDate as any).getTime() : m.envelope?.date ? new Date(m.envelope.date as any).getTime() : undefined
+          let url = web
+          if (gmail && m.emailId) { try { url = `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(a.user)}#all/${BigInt(m.emailId).toString(16)}` } catch { /* keep the inbox */ } }
+          return { id: String(m.uid), title: (m.envelope?.subject ?? '').trim() || '(no subject)', url, kind: 'mail' as const, author: from?.name || from?.address, ...(date ? { date } : {}), unread: !m.flags?.has('\\Seen') }
+        })
+      }
+    } finally { lock.release() }
+    return { ok: true, at: Date.now(), title: a.user, unread: status ? status.unseen ?? 0 : items.filter((i) => i.unread).length, items }
+  } finally {
+    await client.logout().catch(() => { client.close() })
+  }
+}
+
+async function todoist(spec: ConnSpec): Promise<FeedResult> {
+  const token = secret(spec.id)
+  if (!token) throw new Error('Paste the API token first.')
+  const h = { Authorization: `Bearer ${token}` }
+  const get = async (p: string): Promise<any> => {
+    const r = await net.fetch('https://api.todoist.com/api/v1' + p, { headers: { 'User-Agent': UA, ...h } })
+    if (r.status === 401 || r.status === 403) throw new Error('Todoist did not accept the token.')
+    if (!r.ok) throw new Error(`Todoist answered ${r.status}.`)
+    return r.json()
+  }
+  const all = async (p: string): Promise<any[]> => {
+    const out: any[] = []
+    let cursor: string | null = null
+    for (let i = 0; i < 10; i++) {
+      const j = await get(`${p}${p.includes('?') ? '&' : '?'}limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+      if (Array.isArray(j)) return j
+      out.push(...(j.results ?? []))
+      cursor = j.next_cursor ?? null
+      if (!cursor) break
+    }
+    return out
+  }
+  const [tasks, projects] = await Promise.all([all('/tasks'), all('/projects').catch(() => [])])
+  const names = Object.fromEntries(projects.map((p: any) => [String(p.id), String(p.name ?? '')]))
+  return { ok: true, at: Date.now(), title: 'Todoist', items: todoistItems(tasks, names) }
+}
+
+async function todoistClose(id: string, task: string): Promise<void> {
+  const token = secret(id)
+  if (!token) throw new Error('This Todoist connection has no token.')
+  const r = await net.fetch(`https://api.todoist.com/api/v1/tasks/${encodeURIComponent(task)}/close`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'User-Agent': UA } })
+  if (!r.ok) throw new Error(`Todoist answered ${r.status}.`)
+  for (const [k, v] of cache) if (k.startsWith(JSON.stringify([id]).slice(0, -1)) && v.items) cache.set(k, { ...v, items: v.items.filter((i) => i.id !== task) })
+}
+
 async function fetchSpec(spec: ConnSpec): Promise<FeedResult> {
   try {
     if (spec.kind === 'calendar') {
@@ -67,6 +142,8 @@ async function fetchSpec(spec: ConnSpec): Promise<FeedResult> {
       return { ok: true, at: Date.now(), title: r.title, items: r.items.slice(0, 80) }
     }
     if (spec.kind === 'github') return await github(spec)
+    if (spec.kind === 'mail') return await mail(spec)
+    if (spec.kind === 'todoist') return await todoist(spec)
     if (spec.kind === 'notion') {
       const token = secret(spec.id)
       if (!token) throw new Error('Paste the integration token first.')
@@ -80,7 +157,7 @@ async function fetchSpec(spec: ConnSpec): Promise<FeedResult> {
 }
 
 async function fetchConn(spec: ConnSpec, force: boolean): Promise<FeedResult> {
-  const key = JSON.stringify([spec.id, spec.kind, spec.url, spec.repos])
+  const key = JSON.stringify([spec.id, spec.kind, spec.url, spec.repos, spec.account ?? null])
   const hit = cache.get(key)
   if (!force && hit && Date.now() - hit.at < FRESH) return hit
   const running = inflight.get(key)
@@ -114,5 +191,6 @@ export function registerConnections(): void {
   ipcMain.handle('conn:fetch', (_e, spec: ConnSpec, force?: boolean) => fetchConn(spec, !!force))
   ipcMain.handle('conn:notionList', async (_e, id: string): Promise<NotionPageInfo[]> => notionApiSearch(token(id)))
   ipcMain.handle('conn:notionImport', async (_e, id: string, ids: string[]): Promise<ImportResult> => notionApiImport(token(id), ids, id))
+  ipcMain.handle('conn:todoistClose', (_e, id: string, task: string) => todoistClose(id, task))
   ipcMain.handle('conn:notionPush', async (_e, id: string, op: NotionPush) => notionApiPush(token(id), op))
 }

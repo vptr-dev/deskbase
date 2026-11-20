@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import type { ConnSpec, FeedEvent, FeedItem, FeedResult } from '../../../shared/feeds'
 import type { AppData, Block, Connection, ConnectionKind, Page } from '../types'
 import { act, getData, toast, useApp, useData } from '../store'
-import { api, isDesktop } from './api'
+import { type MediaState, api, isDesktop } from './api'
 import { refreshFromNotion } from './importer'
 import { uid } from './util'
 
@@ -13,17 +13,21 @@ export const CONN_INFO: Record<ConnectionKind, { name: string; icon: string; des
   calendar: { name: 'Calendar', icon: 'calendarSync', desc: 'Google, Outlook or Apple calendar through its ICS link' },
   rss: { name: 'News feed', icon: 'rss', desc: 'Any RSS or Atom feed: blogs, news, YouTube channels' },
   github: { name: 'GitHub', icon: 'pr', desc: 'Open issues and pull requests' },
-  notion: { name: 'Notion', icon: 'notion', desc: 'Pages and databases kept in sync, to-dos both ways' }
+  notion: { name: 'Notion', icon: 'notion', desc: 'Pages and databases kept in sync, to-dos both ways' },
+  mail: { name: 'Mail', icon: 'mail', desc: 'Gmail, iCloud, Yahoo or any IMAP inbox with an app password' },
+  todoist: { name: 'Todoist', icon: 'checkSquare', desc: 'Your Todoist tasks, checked off from here' }
 }
 
 export const CONN_COLORS = ['#0a84ff', '#30d158', '#ff9f0a', '#ff375f', '#bf5af2', '#64d2ff', '#ffd60a', '#ac8e68']
 
 const FRESH = 5 * 60 * 1000
-const REFRESH = 15 * 60 * 1000
+const REFRESH = 5 * 60 * 1000
+/** how old fetched things may get before the next refresh, by kind */
+const MAX_AGE: Partial<Record<ConnectionKind, number>> = { mail: 4 * 60 * 1000, todoist: 4 * 60 * 1000 }
 
 export const useFeeds = create<{ results: Record<string, FeedResult>; busy: Record<string, boolean>; secrets: string[] }>(() => ({ results: {}, busy: {}, secrets: [] }))
 
-export const specOf = (c: Connection): ConnSpec => ({ id: c.id, kind: c.kind, url: c.url, repos: c.repos })
+export const specOf = (c: Connection): ConnSpec => ({ id: c.id, kind: c.kind, url: c.url, repos: c.repos, ...(c.account ? { account: { ...c.account } } : {}) })
 
 export async function loadFeed(c: Connection, force = false): Promise<FeedResult> {
   useFeeds.setState((s) => ({ busy: { ...s.busy, [c.id]: true } }))
@@ -55,7 +59,7 @@ export function useFeed(id: string | undefined): { conn?: Connection; result?: F
     if (!conn || conn.off || conn.kind === 'notion') return
     const r = useFeeds.getState().results[conn.id]
     if (!r || Date.now() - r.at > FRESH) void loadFeed(conn)
-  }, [conn?.id, conn?.url, conn?.repos.join(','), conn?.off])
+  }, [conn?.id, conn?.url, conn?.repos.join(','), conn?.off, JSON.stringify(conn?.account ?? null)])
   return { conn, result, busy }
 }
 
@@ -97,7 +101,7 @@ export function addConnection(kind: ConnectionKind, init: Partial<Connection> = 
   const id = uid()
   act((d) => {
     const used = new Set(d.connections.map((c) => c.color))
-    d.connections.push({ id, kind, name: '', url: '', color: CONN_COLORS.find((c) => !used.has(c)) ?? CONN_COLORS[0], repos: [], createdAt: Date.now(), ...init })
+    d.connections.push({ id, kind, name: '', url: '', color: CONN_COLORS.find((c) => !used.has(c)) ?? CONN_COLORS[0], repos: [], createdAt: Date.now(), ...(kind === 'mail' ? { account: { preset: 'gmail', host: 'imap.gmail.com', port: 993, user: '' } } : {}), ...init })
   })
   return id
 }
@@ -175,10 +179,16 @@ export function startConnections(): () => void {
   const offWatch = watchNotionChecks()
   const tick = (): void => {
     const d = getData()
-    for (const c of d.connections) if (!c.off && c.kind !== 'notion' && useFeeds.getState().results[c.id]) void loadFeed(c, true)
+    for (const c of d.connections) {
+      const r = useFeeds.getState().results[c.id]
+      if (!c.off && c.kind !== 'notion' && r && Date.now() - r.at >= (MAX_AGE[c.kind] ?? 14 * 60 * 1000)) void loadFeed(c, true)
+    }
+    notionTicks++
+    if (notionTicks % 3) return
     const api = Object.values(d.pages).filter((p) => p.source?.via && !p.deletedAt && !p.rowOf && (!p.parentId || !d.pages[p.parentId]?.source)).map((p) => p.id)
     if (api.length && isDesktop) refreshFromNotion(api, true).catch(() => {})
   }
+  let notionTicks = 0
   const first = setTimeout(() => {
     const d = getData()
     const ids = Object.values(d.pages).filter((p) => p.source?.via && !p.deletedAt && !p.rowOf && (!p.parentId || !d.pages[p.parentId]?.source)).map((p) => p.id)
@@ -189,3 +199,30 @@ export function startConnections(): () => void {
 }
 
 export const itemsOf = (r: FeedResult | undefined): FeedItem[] => r?.items ?? []
+
+/** Closes a Todoist task; it leaves the list right away. */
+export async function closeTodoist(connId: string, taskId: string): Promise<void> {
+  useFeeds.setState((s) => {
+    const r = s.results[connId]
+    return r?.items ? { results: { ...s.results, [connId]: { ...r, items: r.items.filter((i) => i.id !== taskId) } } } : {}
+  })
+  try { await api.conn.todoistClose(connId, taskId) } catch (e: any) {
+    toast(e?.message ?? 'Could not reach Todoist', { kind: 'error' })
+    const c = getData().connections.find((x) => x.id === connId)
+    if (c) void loadFeed(c, true)
+  }
+}
+
+// ---------- now playing ----------
+export const useMedia = create<{ state: MediaState; watchers: number }>(() => ({ state: { none: true }, watchers: 0 }))
+let offMedia: (() => void) | null = null
+
+/** What is playing in Windows; listens only while something shows it. */
+export function useNowPlaying(): MediaState {
+  useEffect(() => {
+    if (!offMedia) offMedia = api.media.onState((s) => useMedia.setState({ state: s }))
+    void api.media.watch(true)
+    return () => { void api.media.watch(false) }
+  }, [])
+  return useMedia((s) => s.state)
+}

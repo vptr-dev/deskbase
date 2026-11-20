@@ -25,6 +25,7 @@
     "@anthropic-ai/sdk": "1.10.0",
     "electron-updater": "6.3.9",
     "fflate": "0.8.3",
+    "imapflow": "2.10.2",
     "immer": "10.1.1",
     "katex": "0.16.11",
     "koffi": "2.14.1",

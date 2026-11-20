@@ -8,7 +8,7 @@ import { markdownToBlocks } from '../../../shared/markdown'
 import { act, addTask, getData, openPage, setTaskDone, toast, upsert, useApp } from '../store'
 import type { AppData, AssistantChat, AssistantMessage, AssistantSettings, Page, PageType } from '../types'
 import { api } from './api'
-import { useFeeds } from './connections'
+import { useFeeds, useMedia } from './connections'
 import { COLORS, newPage, typeInfo } from './defaults'
 import { addOption, addRow, cellValue, datedRows, propText, rowsOf, setRowProp } from './db'
 import { pageToMarkdown } from './exporters'
@@ -103,6 +103,7 @@ To read something that is not shown here, reply with only a fenced code block wh
 {"name":"read_page","args":{"page":"page title"}}  a page's content (a database lists its rows)
 {"name":"list_tasks","args":{"filter":"today|overdue|week|undated|done|all","page":"optional page title"}}
 {"name":"calendar","args":{"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}}  tasks, dated rows, deadlines and calendar events between two days
+{"name":"connections","args":{"kind":"mail|github|rss|todoist|all"}}  the latest from connected services: unread mail, GitHub issues and pull requests, news feeds, Todoist tasks, and what is playing
 Never guess what a page says; look it up.`
 
 const ACTION_TEXT = (auto: boolean): string => `## Making changes
@@ -206,6 +207,27 @@ function runTool(d: AppData, c: AiToolCall): string {
       items.sort((x, y) => x[0].localeCompare(y[0]))
       return items.length ? `${from} to ${to}:\n${items.map((x) => '- ' + x[1]).join('\n')}` : `Nothing between ${from} and ${to}.`
     }
+    case 'connections': {
+      const want = typeof a.kind === 'string' && a.kind !== 'all' ? a.kind : null
+      const out: string[] = []
+      const results = useFeeds.getState().results
+      for (const cn of d.connections) {
+        if (cn.off || cn.kind === 'notion' || cn.kind === 'calendar' || (want && cn.kind !== want)) continue
+        const r = results[cn.id]
+        const name = cn.name || r?.title || cn.kind
+        if (!r) { out.push(`${name} (${cn.kind}): not loaded yet`); continue }
+        if (!r.ok && !r.items?.length) { out.push(`${name} (${cn.kind}): error: ${r.error}`); continue }
+        const items = (r.items ?? []).slice(0, cn.kind === 'mail' ? 15 : 12)
+        const line = (i: (typeof items)[number]): string => cn.kind === 'mail' ? `${i.unread ? '(unread) ' : ''}${i.author ?? ''}: ${i.title}${i.date ? ' · ' + new Date(i.date).toISOString().slice(0, 16).replace('T', ' ') : ''}`
+          : cn.kind === 'todoist' ? `${i.title}${i.due ? ' · due ' + i.due + (i.dueTime ? ' ' + i.dueTime : '') : ''}${i.project ? ' · ' + i.project : ''}${(i.priority ?? 1) > 1 ? ' · p' + (5 - (i.priority ?? 1)) : ''}`
+          : cn.kind === 'github' ? `${i.kind === 'pr' ? 'PR' : 'Issue'} ${i.repo}#${i.number} (${i.state}): ${i.title}`
+          : `${i.title}${i.date ? ' · ' + new Date(i.date).toISOString().slice(0, 10) : ''}${i.summary ? ' — ' + i.summary.slice(0, 140) : ''}`
+        out.push(`${name} (${cn.kind}${cn.kind === 'mail' ? `, ${r.unread ?? 0} unread` : ''}):\n${items.map((i) => '- ' + line(i)).join('\n') || '- nothing'}`)
+      }
+      const m = useMedia.getState().state
+      if ((!want || want === 'media') && m.title) out.push(`Now playing: ${m.title}${m.artist ? ' by ' + m.artist : ''}${m.playing ? '' : ' (paused)'}`)
+      return out.length ? out.join('\n\n') : 'No connections are set up. They are added on the Connections page.'
+    }
     default: return `There is no lookup called "${c.name}".`
   }
 }
@@ -217,6 +239,7 @@ export const describeTool = (c: AiToolCall): string => {
     case 'read_page': return `Read ${a.page ?? 'a page'}`
     case 'list_tasks': return `Listed ${a.filter && a.filter !== 'all' ? a.filter + ' ' : ''}tasks`
     case 'calendar': return 'Looked at the calendar'
+    case 'connections': return `Checked ${a.kind && a.kind !== 'all' ? a.kind : 'connections'}`
     default: return c.name
   }
 }

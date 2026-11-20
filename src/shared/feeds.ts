@@ -1,10 +1,13 @@
 // Connections that bring things in from outside: calendar feeds (ICS), news feeds (RSS and Atom)
 // and GitHub. The parsers are plain functions so the main process and the browser preview share them.
 
-export type ConnKind = 'notion' | 'calendar' | 'rss' | 'github'
+export type ConnKind = 'notion' | 'calendar' | 'rss' | 'github' | 'mail' | 'todoist'
+
+/** A mail account (IMAP). The password stays in the main process. */
+export interface MailAccount { preset: string; host: string; port: number; user: string }
 
 /** What the main process needs to fetch a connection. Secrets stay in the main process. */
-export interface ConnSpec { id: string; kind: ConnKind; url: string; repos: string[] }
+export interface ConnSpec { id: string; kind: ConnKind; url: string; repos: string[]; account?: MailAccount }
 
 export interface FeedEvent {
   id: string
@@ -30,7 +33,15 @@ export interface FeedItem {
   /** milliseconds */
   date?: number
   summary?: string
-  kind?: 'post' | 'issue' | 'pr'
+  kind?: 'post' | 'issue' | 'pr' | 'mail' | 'task'
+  /** mail: not read yet */
+  unread?: boolean
+  /** tasks: YYYY-MM-DD, and the time when there is one */
+  due?: string
+  dueTime?: string
+  /** tasks: 1 (normal) to 4 (urgent) */
+  priority?: number
+  project?: string
   repo?: string
   number?: number
   author?: string
@@ -48,6 +59,8 @@ export interface FeedResult {
   title?: string
   events?: FeedEvent[]
   items?: FeedItem[]
+  /** mail: unread messages in the inbox */
+  unread?: number
 }
 
 const pad = (n: number): string => String(n).padStart(2, '0')
@@ -370,4 +383,31 @@ export function githubItems(list: any[], repo?: string): FeedItem[] {
 export function repoOf(s: string): string | null {
   const m = /(?:github\.com\/)?([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[/?#].*)?$/i.exec(s.trim())
   return m ? `${m[1]}/${m[2]}` : null
+}
+
+// ---------- mail ----------
+
+export const MAIL_PRESETS: { id: string; name: string; host: string; port: number; web: string; passwordUrl?: string }[] = [
+  { id: 'gmail', name: 'Gmail', host: 'imap.gmail.com', port: 993, web: 'https://mail.google.com/mail/u/0/#inbox', passwordUrl: 'https://myaccount.google.com/apppasswords' },
+  { id: 'icloud', name: 'iCloud', host: 'imap.mail.me.com', port: 993, web: 'https://www.icloud.com/mail', passwordUrl: 'https://account.apple.com/account/manage' },
+  { id: 'yahoo', name: 'Yahoo', host: 'imap.mail.yahoo.com', port: 993, web: 'https://mail.yahoo.com', passwordUrl: 'https://login.yahoo.com/account/security' },
+  { id: 'fastmail', name: 'Fastmail', host: 'imap.fastmail.com', port: 993, web: 'https://app.fastmail.com', passwordUrl: 'https://app.fastmail.com/settings/security/apps' },
+  { id: 'other', name: 'Other', host: '', port: 993, web: '' }
+]
+export const mailPreset = (id: string | undefined): (typeof MAIL_PRESETS)[number] => MAIL_PRESETS.find((p) => p.id === id) ?? MAIL_PRESETS[MAIL_PRESETS.length - 1]
+
+// ---------- Todoist ----------
+
+/** Todoist tasks (API v1 or REST v2) as feed items, with project names. */
+export function todoistItems(tasks: any[], projects: Record<string, string>): FeedItem[] {
+  return (Array.isArray(tasks) ? tasks : []).filter((t) => t && !t.checked && !t.is_completed).map((t) => {
+    const dt: string | undefined = t.due?.datetime ?? undefined
+    const d: string | undefined = t.due?.date ?? undefined
+    return {
+      id: String(t.id), title: String(t.content ?? ''), url: `https://app.todoist.com/app/task/${t.id}`, kind: 'task',
+      ...(d ? { due: String(d).slice(0, 10) } : {}), ...(dt && /T\d\d:\d\d/.test(dt) ? { dueTime: localTime(new Date(dt)) } : {}),
+      priority: Number(t.priority) || 1, project: projects[String(t.project_id)] ?? undefined,
+      date: Date.parse(t.added_at ?? t.created_at) || undefined
+    } as FeedItem
+  }).sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999') || (b.priority ?? 1) - (a.priority ?? 1))
 }
