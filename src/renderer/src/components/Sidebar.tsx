@@ -187,6 +187,7 @@ export function Sidebar(): JSX.Element {
         <button className="nav-item" onClick={() => setOverlay('search')}><Icon name="search" size={15} /> <span>Search</span><kbd>Ctrl K</kbd></button>
         <button className="nav-item" onClick={() => setOverlay('newPage', { parentId: null })}><Icon name="plus" size={15} /> <span>New page</span><kbd>Ctrl N</kbd></button>
         <button className={`nav-item ${current === '@desktop' ? 'active' : ''}`} onClick={() => openView('@desktop')}><Icon name="monitor" size={15} /> <span>Desktop</span></button>
+        <button className={`nav-item ${current === '@assistant' ? 'active' : ''}`} onClick={() => openView('@assistant')}><Icon name="sparkle" size={15} /> <span>Assistant</span></button>
         <button className="nav-item" onClick={() => setOverlay('values')}><Icon name="diamond" size={15} /> <span>Values</span></button>
       </nav>
 

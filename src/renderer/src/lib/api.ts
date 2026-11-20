@@ -1,6 +1,6 @@
 import { download } from './util'
 import { migrate } from '../../../main/migrations'
-import { type AiConfig, type ChatMessage, listOpenAiModels, providerInfo, streamOllama, streamOpenAi } from '../../../shared/ai-core'
+import { type AiConfig, type AiProvider, type ChatMessage, type ChatOptions, PROVIDERS, listOpenAiModels, providerInfo, streamOllama, streamOpenAi } from '../../../shared/ai-core'
 import type { ImportResult, NotionPageInfo } from '../../../shared/import-types'
 
 export interface AppInfo {
@@ -72,10 +72,10 @@ export interface Bridge {
   }
   ai: {
     getConfig(): Promise<AiConfig>
-    setConfig(patch: Partial<AiConfig> & { key?: string | null }): Promise<AiConfig>
-    models(): Promise<string[]>
+    setConfig(patch: Partial<Pick<AiConfig, 'provider' | 'baseUrl' | 'model' | 'enabled'>> & { key?: string | null; target?: AiProvider }): Promise<AiConfig>
+    models(provider?: AiProvider): Promise<string[]>
     detect(): Promise<{ provider: AiConfig['provider']; models: string[] }[]>
-    chat(id: string, system: string, messages: ChatMessage[]): Promise<string>
+    chat(id: string, system: string, messages: ChatMessage[], opts?: ChatOptions & { effort?: 'low' | 'medium' | 'high' }): Promise<string>
     abort(id: string): Promise<void>
     onChunk(cb: (id: string, text: string, thinking?: boolean) => void): () => void
   }
@@ -99,42 +99,63 @@ const OLD_KEY = 'planner:data'
 
 // Browser preview: talks to local OpenAI-compatible servers directly (Ollama allows localhost origins).
 const webAi = (() => {
+  // The browser preview keeps its settings in local storage (keys only for local testing).
+  type Slot = { baseUrl: string; model: string; key?: string }
+  type W = { provider: AiProvider; enabled: boolean; slots: Partial<Record<AiProvider, Slot>> }
   const listeners = new Set<(id: string, t: string, thinking?: boolean) => void>()
   const ctrls = new Map<string, AbortController>()
-  const read = (): AiConfig & { key?: string } => {
-    try { return { provider: 'ollama', baseUrl: providerInfo('ollama').baseUrl, model: '', enabled: true, hasKey: false, ...JSON.parse(localStorage.getItem(AI_KEY) ?? '{}') } } catch { return { provider: 'ollama', baseUrl: providerInfo('ollama').baseUrl, model: '', enabled: true, hasKey: false } }
+  const read = (): W => {
+    try { const j = JSON.parse(localStorage.getItem(AI_KEY) ?? '{}'); return { provider: j.provider ?? 'ollama', enabled: j.enabled !== false, slots: j.slots ?? (j.model ? { [j.provider ?? 'ollama']: { baseUrl: j.baseUrl, model: j.model, key: j.key } } : {}) } } catch { return { provider: 'ollama', enabled: true, slots: {} } }
   }
-  const pub = (c: AiConfig & { key?: string }): AiConfig => ({ provider: c.provider, baseUrl: c.baseUrl, model: c.model, enabled: c.enabled, hasKey: Boolean(c.key) })
+  const save = (w: W): void => { try { localStorage.setItem(AI_KEY, JSON.stringify(w)) } catch { /* ignore */ } }
+  const slot = (w: W, p: AiProvider): Slot => { const i = providerInfo(p); const x = w.slots[p] ?? { baseUrl: i.baseUrl, model: i.defaultModel }; return { ...x, baseUrl: i.fixedUrl ? i.baseUrl : x.baseUrl || i.baseUrl } }
+  const pub = (w: W): AiConfig => {
+    const d = slot(w, w.provider)
+    const providers = Object.fromEntries(PROVIDERS.map((p) => { const x = slot(w, p.id); return [p.id, { baseUrl: x.baseUrl, model: x.model, hasKey: Boolean(x.key) }] })) as AiConfig['providers']
+    return { provider: w.provider, baseUrl: d.baseUrl, model: d.model, enabled: w.enabled, hasKey: Boolean(d.key), providers }
+  }
   return {
     getConfig: async () => {
-      const c = read()
-      if (!c.model) {
-        try { const m = await listOpenAiModels(c.baseUrl, undefined, c.provider); if (m[0]) { c.model = m[0]; localStorage.setItem(AI_KEY, JSON.stringify(c)) } } catch { /* none */ }
+      const w = read()
+      if (!slot(w, w.provider).model) {
+        try { const m = await listOpenAiModels(slot(w, w.provider).baseUrl, undefined, w.provider); if (m[0]) { w.slots[w.provider] = { ...slot(w, w.provider), model: m[0] }; save(w) } } catch { /* none */ }
       }
-      return pub(c)
+      return pub(w)
     },
     setConfig: async (patch: any) => {
-      const c: any = { ...read(), ...patch }
-      if (patch.key === null) delete c.key
-      try { localStorage.setItem(AI_KEY, JSON.stringify(c)) } catch { /* ignore */ }
-      return pub(c)
+      const w = read()
+      if (patch.provider) w.provider = patch.provider
+      if (typeof patch.enabled === 'boolean') w.enabled = patch.enabled
+      const t: AiProvider = patch.target ?? w.provider
+      const sl = { ...slot(w, t), ...(w.slots[t] ?? {}) }
+      if (typeof patch.baseUrl === 'string') sl.baseUrl = patch.baseUrl
+      if (typeof patch.model === 'string') sl.model = patch.model
+      if (patch.key === null) delete sl.key
+      else if (typeof patch.key === 'string' && patch.key) sl.key = patch.key
+      w.slots[t] = sl
+      save(w)
+      return pub(w)
     },
-    models: async () => { const c = read(); return listOpenAiModels(c.baseUrl, c.key, c.provider) },
+    models: async (p?: AiProvider) => { const w = read(); const pr = p ?? w.provider; const x = slot(w, pr); return listOpenAiModels(x.baseUrl, x.key, pr) },
     detect: async () => {
       const out: { provider: AiConfig['provider']; models: string[] }[] = []
       for (const p of ['ollama', 'lmstudio'] as const) { try { out.push({ provider: p, models: await listOpenAiModels(providerInfo(p).baseUrl, undefined, p) }) } catch { /* not running */ } }
       return out
     },
-    chat: async (id: string, system: string, messages: ChatMessage[]) => {
-      const c = read()
-      if (c.provider === 'anthropic') throw new Error('Anthropic works in the desktop app.')
+    chat: async (id: string, system: string, messages: ChatMessage[], opts: ChatOptions = {}) => {
+      const w = read()
+      const p = opts.provider ?? w.provider
+      if (p === 'anthropic') throw new Error('Anthropic works in the desktop app.')
+      const x = slot(w, p)
+      const model = opts.model || x.model
       const ctrl = new AbortController()
       ctrls.set(id, ctrl)
       try {
         const onText = (t: string): void => listeners.forEach((l) => l(id, t))
         const onThinking = (): void => listeners.forEach((l) => l(id, '', true))
-        if (c.provider === 'ollama') return await streamOllama({ baseUrl: c.baseUrl, model: c.model, system, messages, signal: ctrl.signal, onText, onThinking })
-        return await streamOpenAi({ baseUrl: c.baseUrl, key: c.key, model: c.model, system, messages, signal: ctrl.signal, onText: (t) => listeners.forEach((l) => l(id, t)), onThinking: () => listeners.forEach((l) => l(id, '', true)) })
+        const common = { model, system, messages, signal: ctrl.signal, onText, onThinking, temperature: opts.temperature, maxTokens: opts.maxTokens }
+        if (p === 'ollama') return await streamOllama({ baseUrl: x.baseUrl, ...common })
+        return await streamOpenAi({ baseUrl: x.baseUrl, key: x.key, ...common })
       } catch (e) { if (ctrl.signal.aborted) return ''; throw e } finally { ctrls.delete(id) }
     },
     abort: async (id: string) => { ctrls.get(id)?.abort() },

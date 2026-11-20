@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { newTab, reopenTab } from '../lib/tabs'
 import { createPage, getData, openPage, openView, purgePage, replaceData, restorePage, setOverlay, setSettings, toast, useApp, useData, act, undo, redo } from '../store'
-import { ACCENTS, PAGE_TYPES, typeInfo } from '../lib/defaults'
+import { ACCENTS, DEFAULT_PRESETS, PAGE_TYPES, typeInfo } from '../lib/defaults'
+import type { AssistantPreset, AssistantSettings as AssistantSettingsT } from '../types'
 import { api, isDesktop, type AppInfo, type UpdateStatus } from '../lib/api'
 import { exportAll, tasksToCsv } from '../lib/exporters'
 import { pageFromTemplate } from '../lib/db'
 import { timeAgo, today } from '../lib/util'
-import { Button, ConfirmButton, Empty, Modal, Segmented, SideIndex, Toggle, useSectionIndex } from './ui'
+import { Button, ConfirmButton, Empty, IconPickerButton, Modal, Segmented, SideIndex, Toggle, useSectionIndex } from './ui'
 import { Glyph, Icon } from './Icon'
-import { PROVIDERS, providerInfo, type AiConfig, type AiProvider } from '../../../shared/ai-core'
+import { PROVIDERS, type AiConfig } from '../../../shared/ai-core'
 import { toggleAssistant } from './Assistant'
 import { QuickAdd } from './TaskItems'
 import { PlaceSearch } from './PanelKit'
@@ -123,6 +124,7 @@ export function CommandPalette(): JSX.Element {
       { id: 'c-reopen', icon: 'rotate-ccw', title: 'Reopen closed tab', sub: 'Ctrl Shift T', run: () => reopenTab() },
       { id: 'c-desktop', icon: 'monitor', title: 'Desktop', sub: 'Panels and workspaces', run: () => openView('@desktop') },
       { id: 'c-look', icon: 'palette', title: 'Appearance', sub: 'Themes, surface, fonts', run: () => openView('@appearance') },
+      { id: 'c-assistant', icon: 'sparkle', title: 'Assistant', sub: 'Chats', run: () => openView('@assistant') },
       ...(['glass', 'blur', 'frosted', 'solid'] as const).map((v) => ({ id: 'c-surface-' + v, icon: 'layers', title: 'Surface: ' + v[0].toUpperCase() + v.slice(1), run: () => setSettings((x) => { x.look = { ...x.look, surface: v } }) })),
       { id: 'c-values', icon: 'gem', title: 'Values and rules', sub: 'Your own numbers', run: () => setOverlay('values') },
       { id: 'c-quickadd', icon: 'square-check-big', title: 'Quick add task', sub: 'Ctrl Shift Space', run: () => setOverlay('quickAdd') },
@@ -326,67 +328,102 @@ export function SettingsDialog(): JSX.Element {
   )
 }
 
+function ProviderRow({ p, cfg, onSaved }: { p: (typeof PROVIDERS)[number]; cfg: AiConfig; onSaved: (c: AiConfig) => void }): JSX.Element {
+  const slot = cfg.providers[p.id]
+  const [key, setKey] = useState('')
+  const [url, setUrl] = useState(slot?.baseUrl ?? p.baseUrl)
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const [open, setOpen] = useState(false)
+  const check = async (): Promise<void> => {
+    setStatus({ ok: true, text: 'Checking…' })
+    try {
+      const m = await api.ai.models(p.id)
+      setStatus({ ok: true, text: m.length ? `Connected · ${m.length} model${m.length === 1 ? '' : 's'}` : 'Connected, but no models are installed' })
+      if (m.length && !cfg.providers[p.id]?.model) onSaved(await api.ai.setConfig({ target: p.id, model: m[0] }))
+    } catch (e: any) { setStatus({ ok: false, text: e?.message ?? 'Could not connect' }) }
+  }
+  const save = async (patch: { key?: string | null; baseUrl?: string }): Promise<void> => { onSaved(await api.ai.setConfig({ target: p.id, ...patch })); setTimeout(check, 0) }
+  const ready = p.local || p.id === 'custom' ? true : !!slot?.hasKey
+  return (
+    <div className={`provider-row ${open ? 'open' : ''}`}>
+      <button className="provider-head" onClick={() => { setOpen(!open); if (!open && ready) check() }}>
+        <span className={`provider-dot ${slot?.hasKey || (p.local && status?.ok) ? 'on' : ''}`} />
+        <span className="grow">{p.name}</span>
+        <span className="muted small ellipsis">{slot?.model || (p.needsKey ? (slot?.hasKey ? 'Key saved' : 'No key') : '')}</span>
+        {cfg.provider === p.id && <span className="provider-default">Default</span>}
+        <Icon name={open ? 'up' : 'down'} size={13} />
+      </button>
+      {open && (
+        <div className="provider-body">
+          {!p.fixedUrl && <Row label="Server address"><input className="input input-sm w-220" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => save({ baseUrl: url })} /></Row>}
+          {(p.needsKey || p.id === 'custom') && (
+            <Row label="API key" sub={slot?.hasKey ? 'Saved and encrypted on this computer' : 'Stored encrypted on this computer, never in exports'}>
+              <input type="password" className="input input-sm w-220" placeholder={slot?.hasKey ? '••••••••••••' : 'Paste key'} value={key} onChange={(e) => setKey(e.target.value)} />
+              <Button small disabled={!key.trim()} onClick={async () => { await save({ key: key.trim() }); setKey('') }}>Save</Button>
+              {slot?.hasKey && <Button small kind="ghost" onClick={() => save({ key: null })}>Remove</Button>}
+              {p.keyUrl && !slot?.hasKey && <Button small kind="ghost" icon="external" onClick={() => api.openExternal(p.keyUrl!)}>Get a key</Button>}
+            </Row>
+          )}
+          <Row label="Use for new chats"><Toggle checked={cfg.provider === p.id} onChange={async (v) => { if (v) onSaved(await api.ai.setConfig({ provider: p.id })) }} /></Row>
+          {status && <p className={`small ${status.ok ? 'muted' : 'danger'}`}>{status.text}</p>}
+          {p.local && status && !status.ok && <p className="muted small">Install {p.id === 'ollama' ? <><b>Ollama</b> from ollama.com and run <code>ollama pull llama3.2</code></> : <><b>LM Studio</b> from lmstudio.ai and start its server</>}; it shows up here.</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PresetEditor(): JSX.Element {
+  const presets = useData((d) => d.assistant.settings.presets)
+  const set = (fn: (list: AssistantPreset[]) => void): void => act((d) => { fn(d.assistant.settings.presets) }, { key: 'aipresets' })
+  return (
+    <div className="preset-list">
+      {presets.map((p) => (
+        <div key={p.id} className="preset-edit">
+          <div className="row gap-sm">
+            <IconPickerButton size="sm" value={p.icon} onChange={(v) => set((l) => { const x = l.find((y) => y.id === p.id); if (x) x.icon = v })} />
+            <input className="input input-sm grow" value={p.name} placeholder="Name" onChange={(e) => set((l) => { const x = l.find((y) => y.id === p.id); if (x) x.name = e.target.value })} />
+            <button className="icon-btn" title="Delete" onClick={() => set((l) => { l.splice(l.findIndex((y) => y.id === p.id), 1) })}><Icon name="trash" size={13} /></button>
+          </div>
+          <textarea className="input input-area" rows={2} value={p.instructions} placeholder="How the assistant should act in this role" onChange={(e) => set((l) => { const x = l.find((y) => y.id === p.id); if (x) x.instructions = e.target.value })} />
+        </div>
+      ))}
+      <div className="row gap-sm">
+        <Button small kind="ghost" icon="plus" onClick={() => set((l) => { l.push({ id: Math.random().toString(36).slice(2, 10), name: 'New role', icon: 'sparkle', instructions: '' }) })}>Add a role</Button>
+        <Button small kind="ghost" icon="restore" onClick={() => act((d) => { d.assistant.settings.presets = DEFAULT_PRESETS.map((p) => ({ ...p })) })}>Built-in roles</Button>
+      </div>
+    </div>
+  )
+}
+
 function AssistantSettings(): JSX.Element {
   const [cfg, setCfg] = useState<AiConfig | null>(null)
-  const [models, setModels] = useState<string[]>([])
-  const [key, setKey] = useState('')
-  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => { api.ai.getConfig().then((c) => { setCfg(c); refresh() }) }, [])
-  const refresh = async (): Promise<void> => {
-    setBusy(true)
-    try {
-      const m = await api.ai.models()
-      setModels(m)
-      setStatus({ ok: true, text: m.length ? `Connected · ${m.length} model${m.length === 1 ? '' : 's'} available` : 'Connected, but no models are installed' })
-    } catch (e: any) {
-      setModels([])
-      setStatus({ ok: false, text: e?.message ?? 'Could not connect' })
-    } finally { setBusy(false) }
-  }
-  const save = async (patch: Partial<AiConfig> & { key?: string | null }): Promise<void> => {
-    const c = await api.ai.setConfig(patch)
-    setCfg(c)
-  }
-  if (!cfg) return <div className="muted">Loading…</div>
-  const info = providerInfo(cfg.provider)
+  const st = useData((d) => d.assistant.settings)
+  useEffect(() => { api.ai.getConfig().then(setCfg).catch(() => {}) }, [])
+  const set = (fn: (s: AssistantSettingsT) => void, key?: string): void => act((d) => { fn(d.assistant.settings) }, key ? { key } : undefined)
   return (
     <>
       <h3>Assistant</h3>
-      <p className="muted small">Chat with an AI that can see the open page and your tasks, and add tasks, pages, habits and goals for you. Press Ctrl J to open it. Local models keep everything on this computer.</p>
-      <Row label="Provider">
-        <select id="ai-provider" className="input input-sm" value={cfg.provider} onChange={async (e) => {
-          const p = e.target.value as AiProvider
-          await save({ provider: p, baseUrl: providerInfo(p).baseUrl, model: providerInfo(p).defaultModel })
-          setStatus(null); setModels([]); setTimeout(refresh, 0)
-        }}>
-          {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+      <p className="muted small">Chat in the side panel (Ctrl J) or on the Assistant page. Each chat can use its own provider and model. Local models keep everything on this computer.</p>
+      <div className="section-label">Providers</div>
+      {!cfg ? <div className="muted small">Loading…</div> : <div className="provider-list">{PROVIDERS.map((p) => <ProviderRow key={p.id} p={p} cfg={cfg} onSaved={setCfg} />)}</div>}
+      <div className="section-label mt">What it may see and do</div>
+      <Row label="Access" sub={{ none: 'Only what you type in the chat', read: 'Reads your pages, tasks and databases; changes nothing', ask: 'Reads, and suggests changes for you to approve', auto: 'Reads and makes changes right away (you can undo)' }[st.access]}>
+        <Segmented small value={st.access} onChange={(v) => set((s) => { s.access = v })} options={[{ value: 'none', label: 'Nothing' }, { value: 'read', label: 'Read' }, { value: 'ask', label: 'Ask first' }, { value: 'auto', label: 'Do it' }]} />
       </Row>
-      {cfg.provider !== 'anthropic' && cfg.provider !== 'openai' && (
-        <Row label="Server address"><input id="ai-url" className="input input-sm w-220" value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} onBlur={() => save({ baseUrl: cfg.baseUrl }).then(refresh)} /></Row>
-      )}
-      {(info.needsKey || cfg.provider === 'custom') && (
-        <Row label="API key" sub={cfg.hasKey ? 'Saved and encrypted on this computer' : 'Stored encrypted on this computer, never in exports'}>
-          <input id="ai-key" type="password" className="input input-sm w-220" placeholder={cfg.hasKey ? '••••••••••••' : 'Paste key'} value={key} onChange={(e) => setKey(e.target.value)} />
-          <Button small disabled={!key.trim()} onClick={async () => { await save({ key: key.trim() }); setKey(''); refresh() }}>Save</Button>
-          {cfg.hasKey && <Button small kind="ghost" onClick={() => save({ key: null })}>Remove</Button>}
-        </Row>
-      )}
-      <Row label="Model">
-        <input id="ai-model" className="input input-sm w-220" list="ai-models" value={cfg.model} placeholder="Model name" onChange={(e) => setCfg({ ...cfg, model: e.target.value })} onBlur={() => save({ model: cfg.model })} />
-        <datalist id="ai-models">{models.map((m) => <option key={m} value={m} />)}</datalist>
-        <Button small kind="ghost" icon="restore" title="Refresh" disabled={busy} onClick={refresh} />
+      <div className="section-label mt">How it answers</div>
+      <Row label="About you" sub="Sent with every chat: who you are, what you are working on, how you like answers">
+        <textarea className="input input-area w-320" rows={3} value={st.instructions} placeholder="I'm a student; keep plans light and use 24-hour times." onChange={(e) => set((s) => { s.instructions = e.target.value }, 'aiinstr')} />
       </Row>
-      {models.length > 0 && (
-        <div className="row wrap gap-xs mt-sm">
-          {models.slice(0, 12).map((m) => <button key={m} className={`chip-btn ${cfg.model === m ? 'active' : ''}`} onClick={() => save({ model: m })}>{m}</button>)}
-        </div>
-      )}
-      {status && <p className={`small ${status.ok ? 'muted' : 'danger'}`}>{status.ok ? '● ' : ''}{status.text}</p>}
-      {info.local && !status?.ok && (
-        <p className="muted small">Install <b>Ollama</b> from ollama.com, run <code>ollama pull llama3.2</code>, and it will appear here.</p>
-      )}
+      <Row label="Length"><Segmented small value={st.length} onChange={(v) => set((s) => { s.length = v })} options={[{ value: 'short', label: 'Short' }, { value: 'normal', label: 'Normal' }, { value: 'long', label: 'Long' }]} /></Row>
+      <Row label="Creativity" sub="Local, OpenAI, Gemini and OpenRouter models; Claude models choose their own">
+        <Toggle checked={st.temperature !== null} onChange={(v) => set((s) => { s.temperature = v ? 0.7 : null })} />
+        {st.temperature !== null && <><input type="range" min={0} max={1.5} step={0.1} value={st.temperature} onChange={(e) => set((s) => { s.temperature = Number(e.target.value) }, 'aitemp')} /><span className="muted small w-40">{st.temperature.toFixed(1)}</span></>}
+      </Row>
+      <Row label="Thinking" sub="How hard Claude models think before answering"><Segmented small value={st.effort} onChange={(v) => set((s) => { s.effort = v })} options={[{ value: 'low', label: 'Quick' }, { value: 'medium', label: 'Normal' }, { value: 'high', label: 'Deep' }]} /></Row>
+      <div className="section-label mt">Roles</div>
+      <p className="muted small">Pick a role for a chat from the top of the chat.</p>
+      <PresetEditor />
     </>
   )
 }

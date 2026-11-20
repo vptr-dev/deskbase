@@ -2,29 +2,39 @@
 // OpenAI, anything custom) are called with fetch so this file runs in both the main process
 // and a plain browser. Anthropic goes through the official SDK in the main process.
 
-export type AiProvider = 'ollama' | 'lmstudio' | 'openai' | 'anthropic' | 'custom'
+export type AiProvider = 'ollama' | 'lmstudio' | 'openai' | 'anthropic' | 'gemini' | 'openrouter' | 'custom'
 
 export interface AiConfig {
+  /** the default for new chats */
   provider: AiProvider
   baseUrl: string
   model: string
   hasKey: boolean
   enabled: boolean
+  /** every provider's address, saved key and last model */
+  providers: Record<AiProvider, { baseUrl: string; hasKey: boolean; model: string }>
 }
+
+/** What one request uses; anything left out comes from the defaults. */
+export interface ChatOptions { provider?: AiProvider; model?: string; temperature?: number | null; maxTokens?: number | null }
 
 export interface ChatMessage { role: 'user' | 'assistant'; content: string }
 
-export const PROVIDERS: { id: AiProvider; name: string; baseUrl: string; local: boolean; needsKey: boolean; defaultModel: string }[] = [
-  { id: 'ollama', name: 'Ollama (local)', baseUrl: 'http://localhost:11434', local: true, needsKey: false, defaultModel: '' },
-  { id: 'lmstudio', name: 'LM Studio (local)', baseUrl: 'http://localhost:1234', local: true, needsKey: false, defaultModel: '' },
-  { id: 'anthropic', name: 'Anthropic', baseUrl: 'https://api.anthropic.com', local: false, needsKey: true, defaultModel: 'claude-opus-5-5' },
-  { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com', local: false, needsKey: true, defaultModel: '' },
-  { id: 'custom', name: 'Other OpenAI-compatible', baseUrl: 'http://localhost:8080', local: false, needsKey: false, defaultModel: '' }
+export const PROVIDERS: { id: AiProvider; name: string; short: string; baseUrl: string; local: boolean; needsKey: boolean; defaultModel: string; fixedUrl?: boolean; keyUrl?: string }[] = [
+  { id: 'ollama', name: 'Ollama (local)', short: 'Ollama', baseUrl: 'http://localhost:11434', local: true, needsKey: false, defaultModel: '' },
+  { id: 'lmstudio', name: 'LM Studio (local)', short: 'LM Studio', baseUrl: 'http://localhost:1234', local: true, needsKey: false, defaultModel: '' },
+  { id: 'anthropic', name: 'Anthropic', short: 'Anthropic', baseUrl: 'https://api.anthropic.com', local: false, needsKey: true, defaultModel: 'claude-opus-5-5', fixedUrl: true, keyUrl: 'https://console.anthropic.com/settings/keys' },
+  { id: 'openai', name: 'OpenAI', short: 'OpenAI', baseUrl: 'https://api.openai.com', local: false, needsKey: true, defaultModel: '', fixedUrl: true, keyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'gemini', name: 'Google Gemini', short: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', local: false, needsKey: true, defaultModel: '', fixedUrl: true, keyUrl: 'https://aistudio.google.com/apikey' },
+  { id: 'openrouter', name: 'OpenRouter', short: 'OpenRouter', baseUrl: 'https://openrouter.ai/api', local: false, needsKey: true, defaultModel: '', fixedUrl: true, keyUrl: 'https://openrouter.ai/keys' },
+  { id: 'custom', name: 'Other OpenAI-compatible', short: 'Custom', baseUrl: 'http://localhost:8080', local: false, needsKey: false, defaultModel: '' }
 ]
 
 export const providerInfo = (p: AiProvider): (typeof PROVIDERS)[number] => PROVIDERS.find((x) => x.id === p) ?? PROVIDERS[0]
 
 const trimUrl = (u: string): string => u.replace(/\/+$/, '').replace(/\/v1$/, '')
+/** The OpenAI-style API root of a server: Gemini's compatible endpoint has no /v1. */
+const apiRoot = (u: string): string => (/\/openai$/.test(u.replace(/\/+$/, '')) ? u.replace(/\/+$/, '') : `${trimUrl(u)}/v1`)
 
 export async function listOpenAiModels(baseUrl: string, key?: string, provider?: AiProvider): Promise<string[]> {
   const base = trimUrl(baseUrl)
@@ -37,20 +47,26 @@ export async function listOpenAiModels(baseUrl: string, key?: string, provider?:
       }
     } catch { /* fall through to /v1/models */ }
   }
-  const r = await fetch(`${base}/v1/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(6000) })
+  const r = await fetch(`${apiRoot(baseUrl)}/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(8000) })
+  if (r.status === 401 || r.status === 403) throw new Error('The API key was rejected.')
   if (!r.ok) throw new Error(`Server answered ${r.status}`)
   const j = await r.json()
-  return (j.data ?? []).map((m: any) => m.id as string).sort()
+  return (j.data ?? []).map((m: any) => String(m.id).replace(/^models\//, '')).sort()
 }
 
 /** Streams a chat completion. Calls onText with each new piece and resolves with the full text. */
 export async function streamOpenAi(opts: {
   baseUrl: string; key?: string; model: string; system: string; messages: ChatMessage[]; signal: AbortSignal; onText: (t: string) => void; onThinking?: () => void
+  temperature?: number | null; maxTokens?: number | null
 }): Promise<string> {
-  const r = await fetch(`${trimUrl(opts.baseUrl)}/v1/chat/completions`, {
+  const r = await fetch(`${apiRoot(opts.baseUrl)}/chat/completions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(opts.key ? { Authorization: `Bearer ${opts.key}` } : {}) },
-    body: JSON.stringify({ model: opts.model, stream: true, messages: [{ role: 'system', content: opts.system }, ...opts.messages] }),
+    headers: { 'Content-Type': 'application/json', ...(opts.key ? { Authorization: `Bearer ${opts.key}` } : {}), 'X-Title': 'Deskbase' },
+    body: JSON.stringify({
+      model: opts.model, stream: true, messages: [{ role: 'system', content: opts.system }, ...opts.messages],
+      ...(typeof opts.temperature === 'number' ? { temperature: opts.temperature } : {}),
+      ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {})
+    }),
     signal: opts.signal
   })
   if (!r.ok || !r.body) {
@@ -89,6 +105,7 @@ export async function streamOpenAi(opts: {
 /** Ollama's native API lets us size the context window to fit the page (its default of 4096 is too small). */
 export async function streamOllama(opts: {
   baseUrl: string; model: string; system: string; messages: ChatMessage[]; signal: AbortSignal; onText: (t: string) => void; onThinking?: () => void
+  temperature?: number | null; maxTokens?: number | null
 }): Promise<string> {
   const chars = opts.system.length + opts.messages.reduce((n, m) => n + m.content.length, 0)
   let ctx = 8192
@@ -96,7 +113,7 @@ export async function streamOllama(opts: {
   const r = await fetch(`${trimUrl(opts.baseUrl)}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: opts.model, stream: true, options: { num_ctx: ctx }, messages: [{ role: 'system', content: opts.system }, ...opts.messages] }),
+    body: JSON.stringify({ model: opts.model, stream: true, options: { num_ctx: ctx, ...(typeof opts.temperature === 'number' ? { temperature: opts.temperature } : {}), ...(opts.maxTokens ? { num_predict: opts.maxTokens } : {}) }, messages: [{ role: 'system', content: opts.system }, ...opts.messages] }),
     signal: opts.signal
   })
   if (!r.ok || !r.body) {
@@ -133,7 +150,7 @@ export async function streamOllama(opts: {
 /** Some servers stream only reasoning and never the answer; ask once more without streaming. */
 async function fallback(opts: { baseUrl: string; key?: string; model: string; system: string; messages: ChatMessage[]; signal: AbortSignal; onText: (t: string) => void }): Promise<string> {
   if (opts.signal.aborted) return ''
-  const r = await fetch(`${trimUrl(opts.baseUrl)}/v1/chat/completions`, {
+  const r = await fetch(`${apiRoot(opts.baseUrl)}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(opts.key ? { Authorization: `Bearer ${opts.key}` } : {}) },
     body: JSON.stringify({ model: opts.model, stream: false, messages: [{ role: 'system', content: opts.system }, ...opts.messages] }),
@@ -167,7 +184,27 @@ export function extractActions(text: string): { clean: string; actions: AiAction
 export type AiAction =
   | { type: 'add_task'; title: string; due?: string; time?: string; priority?: number; tags?: string[]; difficulty?: string; notes?: string; subtasks?: string[] }
   | { type: 'create_page'; title: string; pageType?: string; icon?: string; markdown?: string }
-  | { type: 'append_to_page'; markdown: string }
+  | { type: 'append_to_page'; markdown: string; page?: string }
   | { type: 'add_habit'; name: string; icon?: string; kind?: 'good' | 'bad' }
   | { type: 'add_goal'; title: string; milestones?: string[]; deadline?: string }
   | { type: 'add_journal'; text: string; mood?: number }
+  | { type: 'complete_task'; id: string }
+  | { type: 'update_task'; id: string; title?: string; due?: string | null; time?: string | null; priority?: number; notes?: string }
+  | { type: 'add_row'; database: string; title: string; props?: Record<string, unknown> }
+  | { type: 'rename_page'; page: string; title: string }
+
+/** Pulls ```tool fenced JSON blocks (read-only lookups the app answers) out of a reply. */
+export function extractToolCalls(text: string): { clean: string; calls: AiToolCall[] } {
+  const calls: AiToolCall[] = []
+  const clean = text.replace(/```tool\s*\n([\s\S]*?)```/g, (whole, body) => {
+    try {
+      const parsed = JSON.parse(body)
+      const list = Array.isArray(parsed) ? parsed : [parsed]
+      for (const c of list) if (c && typeof c.name === 'string') calls.push({ name: c.name, args: c.args && typeof c.args === 'object' ? c.args : {} })
+      return ''
+    } catch { return whole }
+  })
+  return { clean: clean.trim(), calls }
+}
+
+export interface AiToolCall { name: string; args: Record<string, any> }

@@ -1,9 +1,9 @@
-import type { AppData, Block, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
+import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 13
+export const SCHEMA = 14
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -221,7 +221,7 @@ export function freshData(): AppData {
     settings: { ...DEFAULT_SETTINGS },
     recent: [],
     tags: {},
-    assistant: { messages: [] },
+    assistant: { chats: [], active: null, settings: { ...DEFAULT_AI_SETTINGS, presets: DEFAULT_PRESETS.map((p) => ({ ...p })) } },
     countdowns: [],
     values: {},
     rules: [],
@@ -253,6 +253,41 @@ function normBlocks(list: any[]): Block[] {
   })
 }
 
+export const DEFAULT_PRESETS: AssistantPreset[] = [
+  { id: 'planner', name: 'Planner', icon: 'calendar-check', instructions: 'Act as a calm planning coach. Turn plans into dated tasks with realistic times, keep days light, and point out what can wait.' },
+  { id: 'writer', name: 'Writer', icon: 'pen-line', instructions: 'Act as an editor. Keep the user\'s voice, make writing clearer and shorter, and show changed text in full.' },
+  { id: 'study', name: 'Study coach', icon: 'graduation-cap', instructions: 'Act as a study coach. Explain simply, quiz the user with short questions, and plan revision in small sessions.' },
+  { id: 'brainstorm', name: 'Brainstorm', icon: 'lightbulb', instructions: 'Give many varied ideas quickly as a list, then say which three look best and why.' }
+]
+export const DEFAULT_AI_SETTINGS: AssistantSettings = { instructions: '', access: 'ask', temperature: null, length: 'normal', effort: 'medium', presets: [] }
+
+function normalizeAssistant(raw: any): AppData['assistant'] {
+  const r = obj(raw)
+  const msg = (m: any): AssistantMessage | null => (m && typeof m.content === 'string' && (m.role === 'user' || m.role === 'assistant') ? { id: String(m.id ?? uid()), role: m.role, content: m.content, at: Number(m.at) || Date.now(), ...(Array.isArray(m.applied) ? { applied: m.applied } : {}), ...(m.tool ? { tool: true } : {}) } : null)
+  let chats: AssistantChat[] = Array.isArray(r.chats) ? r.chats.filter((c: any) => c && c.id).map((c: any) => ({
+    id: String(c.id), title: typeof c.title === 'string' ? c.title : 'Chat', pinned: Boolean(c.pinned), createdAt: Number(c.createdAt) || Date.now(), updatedAt: Number(c.updatedAt) || Date.now(),
+    messages: (Array.isArray(c.messages) ? c.messages : []).map(msg).filter(Boolean), provider: c.provider ?? null, model: c.model ?? null, preset: c.preset ?? null
+  })) : []
+  // Data saved before chats existed had one list of messages.
+  if (!Array.isArray(r.chats) && Array.isArray(r.messages) && r.messages.length) {
+    const messages = r.messages.map(msg).filter(Boolean) as AssistantMessage[]
+    const first = messages.find((m) => m.role === 'user')
+    chats = [{ id: uid(), title: first ? first.content.slice(0, 48) : 'Chat', createdAt: messages[0]?.at ?? Date.now(), updatedAt: messages[messages.length - 1]?.at ?? Date.now(), messages }]
+  }
+  const st = obj(r.settings)
+  const presets = Array.isArray(st.presets) ? st.presets.filter((p: any) => p && p.id && typeof p.name === 'string').map((p: any) => ({ id: String(p.id), name: p.name, icon: typeof p.icon === 'string' ? p.icon : 'sparkle', instructions: typeof p.instructions === 'string' ? p.instructions : '' })) : DEFAULT_PRESETS.map((p) => ({ ...p }))
+  const settings: AssistantSettings = {
+    instructions: typeof st.instructions === 'string' ? st.instructions.slice(0, 8000) : '',
+    access: ['none', 'read', 'ask', 'auto'].includes(st.access) ? st.access : 'ask',
+    temperature: typeof st.temperature === 'number' ? Math.max(0, Math.min(1.5, st.temperature)) : null,
+    length: st.length === 'short' || st.length === 'long' ? st.length : 'normal',
+    effort: st.effort === 'low' || st.effort === 'high' ? st.effort : 'medium',
+    presets
+  }
+  const active = typeof r.active === 'string' && chats.some((c) => c.id === r.active) ? r.active : chats[0]?.id ?? null
+  return { chats, active, settings }
+}
+
 export function normalize(raw: any): AppData {
   if (!raw || typeof raw !== 'object' || !raw.pages) return freshData()
   const base = freshData()
@@ -265,7 +300,7 @@ export function normalize(raw: any): AppData {
     focus: Array.isArray(raw.focus) ? raw.focus : [],
     recent: Array.isArray(raw.recent) ? raw.recent : [],
     tags: obj(raw.tags),
-    assistant: { messages: Array.isArray(raw.assistant?.messages) ? raw.assistant.messages : [] },
+    assistant: normalizeAssistant(raw.assistant),
     countdowns: Array.isArray(raw.countdowns) ? raw.countdowns.filter((c: any) => c && typeof c === 'object' && c.id).map((c: any) => ({ title: '', date: '', color: '#0a84ff', ...c, icon: emojiToIcon(c.icon, 'calendar') })) : [],
     values: obj(raw.values),
     rules: Array.isArray(raw.rules) ? raw.rules.filter((r: any) => r && typeof r === 'object' && r.id && r.valueId) : [],

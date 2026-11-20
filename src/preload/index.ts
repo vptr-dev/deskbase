@@ -77,9 +77,9 @@ const api = {
   ai: {
     getConfig: () => ipcRenderer.invoke('ai:getConfig'),
     setConfig: (patch: unknown) => ipcRenderer.invoke('ai:setConfig', patch),
-    models: () => ipcRenderer.invoke('ai:models'),
+    models: (provider?: string) => ipcRenderer.invoke('ai:models', provider),
     detect: () => ipcRenderer.invoke('ai:detect'),
-    chat: (id: string, system: string, messages: unknown) => ipcRenderer.invoke('ai:chat', id, system, messages),
+    chat: (id: string, system: string, messages: unknown, opts?: unknown) => ipcRenderer.invoke('ai:chat', id, system, messages, opts),
     abort: (id: string) => ipcRenderer.invoke('ai:abort', id),
     onChunk: (cb: (id: string, text: string, thinking?: boolean) => void) => {
       const fn = (_e: unknown, id: string, text: string, thinking?: boolean): void => cb(id, text, thinking)

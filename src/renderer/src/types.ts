@@ -495,7 +495,42 @@ export interface Settings {
 
 export interface Countdown { id: string; title: string; date: string; icon: string; color: string; yearly?: boolean }
 
-export interface AssistantMessage { id: string; role: 'user' | 'assistant'; content: string; at: number; applied?: number[] }
+export interface AssistantMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  at: number
+  /** actions in this reply that were applied */
+  applied?: number[]
+  /** results of lookups the assistant asked for; sent to the model, shown only as a note */
+  tool?: boolean
+}
+/** Nothing: no workspace data. Read: can look things up. Ask: suggests changes to approve. Auto: makes changes itself (with undo). */
+export type AiAccess = 'none' | 'read' | 'ask' | 'auto'
+export interface AssistantChat {
+  id: string
+  title: string
+  pinned?: boolean
+  createdAt: number
+  updatedAt: number
+  messages: AssistantMessage[]
+  /** provider and model for this chat; empty uses the default */
+  provider?: string | null
+  model?: string | null
+  preset?: string | null
+}
+export interface AssistantPreset { id: string; name: string; icon: string; instructions: string }
+export interface AssistantSettings {
+  /** always sent: who the user is, how to answer */
+  instructions: string
+  access: AiAccess
+  /** 0–1.5; null leaves it to the model (Claude models take none) */
+  temperature: number | null
+  length: 'short' | 'normal' | 'long'
+  /** how hard Claude models think */
+  effort: 'low' | 'medium' | 'high'
+  presets: AssistantPreset[]
+}
 
 export interface AppData {
   schema: number
@@ -510,7 +545,7 @@ export interface AppData {
   settings: Settings
   recent: string[]
   tags: Record<string, string>
-  assistant: { messages: AssistantMessage[] }
+  assistant: { chats: AssistantChat[]; active: string | null; settings: AssistantSettings }
   countdowns: Countdown[]
   values: Record<string, TrackedValue>
   rules: ValueRule[]

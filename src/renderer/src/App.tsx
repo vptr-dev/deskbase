@@ -26,7 +26,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { DesktopPage } from './pages/DesktopPage'
 import { AppearancePage } from './pages/AppearancePage'
 import type { Page } from './types'
-import { AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
+import { AssistantPage, AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
 import { NotionImportDialog } from './components/NotionImport'
 import { ValuesDialog } from './components/Values'
 import { HistoryDialog } from './components/History'
@@ -387,7 +387,7 @@ function MainApp(): JSX.Element {
   const view = isView(current) ? current : null
 
   return (
-    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${assistantOpen ? 'assistant-open' : ''}`}>
+    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${assistantOpen && current !== '@assistant' ? 'assistant-open' : ''}`}>
       <Sidebar />
       <main className="main">
         {tabCount > 1 && <TabStrip captionSpace={!assistantOpen} />}
@@ -395,7 +395,7 @@ function MainApp(): JSX.Element {
           {collapsed && <button className="icon-btn no-drag" title="Show sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = false })}><Icon name="sidebar" size={16} /></button>}
           <button className="icon-btn no-drag" title="Back (Ctrl+[)" onClick={goBack}><Icon name="left" size={15} stroke={2} /></button>
           <button className="icon-btn no-drag" title="Forward (Ctrl+])" onClick={goForward}><Icon name="right" size={15} stroke={2} /></button>
-          {view ? <div className="crumbs"><span className="crumb"><Icon name={view === '@desktop' ? 'monitor' : 'palette'} size={14} /> {view === '@desktop' ? 'Desktop' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
+          {view ? <div className="crumbs"><span className="crumb"><Icon name={view === '@desktop' ? 'monitor' : view === '@assistant' ? 'sparkle' : 'palette'} size={14} /> {view === '@desktop' ? 'Desktop' : view === '@assistant' ? 'Assistant' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
           <div className="spacer" />
           <FocusMini />
           <SaveIndicator />
@@ -428,7 +428,7 @@ function MainApp(): JSX.Element {
           {!assistantOpen && tabCount < 2 && <div className="caption-space" />}
         </header>
         <div className="scroll">
-          {view === '@desktop' ? <DesktopPage key="desktop" /> : view === '@appearance' ? <AppearancePage key="appearance" /> : page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
+          {view === '@desktop' ? <DesktopPage key="desktop" /> : view === '@appearance' ? <AppearancePage key="appearance" /> : view === '@assistant' ? <AssistantPage key="assistant" /> : page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
             <StartView />
           )}
         </div>

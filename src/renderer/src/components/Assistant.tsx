@@ -1,157 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
-import { emojiToIcon } from '../../../shared/emoji-icons'
-import { create } from 'zustand'
-import { act, addTask, getData, openPage, setOverlay, toast, upsert, useApp, useData } from '../store'
-import type { AiAction, AiConfig, ChatMessage } from '../../../shared/ai-core'
-import { extractActions, providerInfo } from '../../../shared/ai-core'
-import { markdownToBlocks } from '../../../shared/markdown'
-import type { AppData, PageType } from '../types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { openView, setOverlay, toast, useApp, useData } from '../store'
+import type { AiConfig, AiProvider } from '../../../shared/ai-core'
+import { PROVIDERS, extractActions, extractToolCalls, providerInfo } from '../../../shared/ai-core'
+import type { AssistantChat } from '../types'
 import { api } from '../lib/api'
-import { COLORS, newPage, typeInfo } from '../lib/defaults'
-import { pageToMarkdown } from '../lib/exporters'
-import { habitDoneOn, habitScheduled } from '../lib/habits'
-import { addDays, longDate, today, uid } from '../lib/util'
-import { ensureEntry } from '../pages/JournalPage'
+import {
+  applyActions, chatOf, deleteChat, describeAction, describeTool, newChat, openChat, patchChat, retry, send, stop, toggleAssistant, useAssistant, useRun
+} from '../lib/assistant'
 import { Glyph, Icon } from './Icon'
-import { Button } from './ui'
+import { Button, Popover } from './ui'
 
-export const useAssistant = create<{ open: boolean }>(() => ({ open: false }))
-export const toggleAssistant = (): void => useAssistant.setState((s) => ({ open: !s.open }))
-
-// ---------- context ----------
-function buildSystem(d: AppData, pageId: string | null): string {
-  const t = today()
-  const live = (pid: string): boolean => Boolean(d.pages[pid] && !d.pages[pid].deletedAt)
-  const tasks = Object.values(d.tasks).filter((x) => !x.done && live(x.pageId))
-  const fmt = (x: (typeof tasks)[number]): string => `- ${x.title}${x.due ? ` (due ${x.due}${x.time ? ' ' + x.time : ''})` : ''}${x.priority ? ` [priority ${x.priority}]` : ''}${x.tags.length ? ' #' + x.tags.join(' #') : ''}`
-  const overdue = tasks.filter((x) => x.due && x.due < t)
-  const due = tasks.filter((x) => x.due === t)
-  const soon = tasks.filter((x) => x.due && x.due > t && x.due <= addDays(t, 7))
-  const undated = tasks.filter((x) => !x.due).slice(0, 25)
-  const habits = Object.values(d.habits).filter((h) => !h.archived && live(h.pageId) && habitScheduled(h, t))
-  const goals = Object.values(d.goals).filter((g) => !g.done && live(g.pageId))
-  const page = pageId ? d.pages[pageId] : undefined
-  let pageText = page ? pageToMarkdown(page.id) : ''
-  if (pageText.length > 12000) pageText = pageText.slice(0, 12000) + '\n…(page continues)'
-  return [
-    `You are the assistant inside the user's personal workspace app on their computer (pages, tasks, notes, habits and desktop panels). Today is ${longDate(t)} (${t}). The workspace on screen is "${d.desktop.spaces.find((s) => s.id === d.desktop.active)?.name ?? 'Main'}".`,
-    'Be concise, warm and practical. Use short Markdown: brief paragraphs and bullet lists. No long preambles.',
-    '',
-    'When the user asks you to add, create, plan or change something in the app, also include ONE fenced code block whose language is `actions`, containing a JSON array. The user reviews and applies it. Supported actions:',
-    '{"type":"add_task","title":"…","due":"YYYY-MM-DD","time":"HH:MM","priority":0-3,"tags":["…"],"notes":"…","subtasks":["…"]}',
-    '{"type":"create_page","title":"…","pageType":"doc|tasks|habits|journal|goals|tracker","icon":"emoji","markdown":"page content in Markdown"}',
-    '{"type":"append_to_page","markdown":"…"}  (adds to the page that is open now)',
-    '{"type":"add_habit","name":"…","icon":"emoji","kind":"good|bad"}',
-    '{"type":"add_goal","title":"…","milestones":["…"],"deadline":"YYYY-MM-DD"}',
-    '{"type":"add_journal","text":"…","mood":1-5}',
-    'Only include fields you know. Never invent actions the user did not ask for. Do not mention the JSON in your prose.',
-    '',
-    '## Current state',
-    overdue.length ? `Overdue tasks:\n${overdue.slice(0, 25).map(fmt).join('\n')}` : 'No overdue tasks.',
-    due.length ? `Due today:\n${due.map(fmt).join('\n')}` : 'Nothing due today.',
-    soon.length ? `Next 7 days:\n${soon.slice(0, 25).map(fmt).join('\n')}` : '',
-    undated.length ? `Tasks without a date:\n${undated.map(fmt).join('\n')}` : '',
-    habits.length ? `Habits today:\n${habits.map((h) => `- ${h.name}: ${h.kind === 'bad' ? 'quitting' : habitDoneOn(h, t) ? 'done' : 'not yet'}`).join('\n')}` : '',
-    goals.length ? `Active goals:\n${goals.map((g) => `- ${g.title}${g.deadline ? ` (by ${g.deadline})` : ''}`).join('\n')}` : '',
-    page ? `\n## Open page: “${page.title || 'Untitled'}” (${typeInfo(page.type).name})\n${pageText}` : ''
-  ].filter((x) => x !== '').join('\n')
-}
-
-// ---------- actions ----------
-function findOrCreatePage(type: PageType, title: string): string {
-  const d = getData()
-  const found = Object.values(d.pages).find((p) => p.type === type && !p.deletedAt)
-  if (found) return found.id
-  const p = newPage(type, title)
-  act((dr) => { dr.pages[p.id] = p; dr.rootOrder.push(p.id) })
-  return p.id
-}
-
-function describe(a: AiAction): { icon: string; text: string } {
-  switch (a.type) {
-    case 'add_task': return { icon: 'square-check-big', text: `Task: ${a.title}${a.due ? ` · ${a.due}${a.time ? ' ' + a.time : ''}` : ''}${a.subtasks?.length ? ` · ${a.subtasks.length} subtasks` : ''}` }
-    case 'create_page': return { icon: a.icon || 'file-text', text: `New page: ${a.title}` }
-    case 'append_to_page': return { icon: 'plus', text: `Add to this page: ${a.markdown.split('\n')[0].slice(0, 60)}` }
-    case 'add_habit': return { icon: a.icon || 'repeat', text: `Habit: ${a.name}` }
-    case 'add_goal': return { icon: 'target', text: `Goal: ${a.title}${a.milestones?.length ? ` · ${a.milestones.length} milestones` : ''}` }
-    case 'add_journal': return { icon: 'notebook-pen', text: `Journal: ${a.text.slice(0, 60)}` }
-    default: return { icon: 'circle', text: (a as any).type }
-  }
-}
-
-function applyAction(a: AiAction): boolean {
-  const cur = useApp.getState().current
-  const d = getData()
-  const PAGE_TYPES: PageType[] = ['doc', 'tasks', 'board', 'habits', 'journal', 'goals', 'tracker', 'calendar', 'focus', 'today', 'database', 'dashboard']
-  switch (a.type) {
-    case 'add_task': {
-      if (!a.title) return false
-      const here = cur && ['tasks', 'board'].includes(d.pages[cur]?.type) ? cur : findOrCreatePage('tasks', 'To-do')
-      const diff = ['trivial', 'easy', 'medium', 'hard', 'epic'].includes(a.difficulty ?? '') ? (a.difficulty as any) : 'easy'
-      addTask(here, {
-        title: a.title,
-        due: /^\d{4}-\d{2}-\d{2}$/.test(a.due ?? '') ? a.due : null,
-        time: /^\d{2}:\d{2}$/.test(a.time ?? '') ? a.time : null,
-        priority: Math.max(0, Math.min(3, Number(a.priority) || 0)) as 0 | 1 | 2 | 3,
-        tags: (a.tags ?? []).map((t) => String(t).toLowerCase().replace(/^#/, '').replace(/\s+/g, '-')),
-        difficulty: diff,
-        notes: a.notes ?? '',
-        subtasks: (a.subtasks ?? []).map((s) => ({ id: uid(), title: String(s), done: false }))
-      })
-      return true
-    }
-    case 'create_page': {
-      const type = PAGE_TYPES.includes(a.pageType as PageType) ? (a.pageType as PageType) : 'doc'
-      const p = newPage(type, a.title || 'Untitled')
-      if (a.icon) p.icon = emojiToIcon(a.icon, 'file-text')
-      else if (type === 'doc') p.icon = 'file-text'
-      if (a.markdown) p.blocks = markdownToBlocks(a.markdown)
-      act((dr) => { dr.pages[p.id] = p; dr.rootOrder.push(p.id) })
-      openPage(p.id)
-      return true
-    }
-    case 'append_to_page': {
-      if (!cur || !a.markdown) return false
-      const blocks = markdownToBlocks(a.markdown)
-      act((dr) => {
-        const p = dr.pages[cur]
-        if (!p) return
-        const last = p.blocks[p.blocks.length - 1]
-        if (last && last.type === 'p' && !last.text) p.blocks.pop()
-        p.blocks.push(...blocks)
-        if (p.type !== 'doc') p.view = { ...(p.view ?? {}), notes: true }
-      })
-      return true
-    }
-    case 'add_habit': {
-      if (!a.name) return false
-      const pid = findOrCreatePage('habits', 'Habits')
-      const n = Object.keys(getData().habits).length
-      upsert('habits', { id: uid(), pageId: pid, name: a.name, icon: emojiToIcon(a.icon, 'circle-check'), color: COLORS[n % COLORS.length], kind: a.kind === 'bad' ? 'bad' : 'good', target: 1, days: [0, 1, 2, 3, 4, 5, 6], log: {}, difficulty: 'easy', stat: null, createdAt: Date.now(), order: n })
-      return true
-    }
-    case 'add_goal': {
-      if (!a.title) return false
-      const pid = findOrCreatePage('goals', 'Goals')
-      const n = Object.keys(getData().goals).length
-      upsert('goals', { id: uid(), pageId: pid, title: a.title, why: '', icon: 'target', deadline: /^\d{4}-\d{2}-\d{2}$/.test(a.deadline ?? '') ? a.deadline : null, milestones: (a.milestones ?? []).map((m) => ({ id: uid(), title: String(m), done: false })), progressMode: 'milestones', manual: 0, color: COLORS[n % COLORS.length], done: false, createdAt: Date.now(), category: '', difficulty: 'hard', order: n })
-      return true
-    }
-    case 'add_journal': {
-      if (!a.text) return false
-      const pid = findOrCreatePage('journal', 'Journal')
-      const id = ensureEntry(pid, today())
-      act((dr) => {
-        const j = dr.journal[id]
-        j.text = j.text ? `${j.text}\n\n${a.text}` : a.text
-        if (a.mood && a.mood >= 1 && a.mood <= 5) j.mood = a.mood
-        j.updatedAt = Date.now()
-      })
-      return true
-    }
-  }
-  return false
-}
+export { toggleAssistant, useAssistant }
 
 // ---------- tiny Markdown renderer (no HTML injection) ----------
 function inline(s: string): (string | JSX.Element)[] {
@@ -204,145 +63,290 @@ function Md({ text }: { text: string }): JSX.Element {
   return <div className="md">{out}</div>
 }
 
-// ---------- panel ----------
+// ---------- model picker ----------
+let cfgCache: AiConfig | null = null
+function useAiConfig(): AiConfig | null {
+  const [cfg, setCfg] = useState<AiConfig | null>(cfgCache)
+  useEffect(() => { api.ai.getConfig().then((c) => { cfgCache = c; setCfg(c) }).catch(() => {}) }, [])
+  return cfg
+}
+
+const usable = (cfg: AiConfig, p: AiProvider): boolean => providerInfo(p).local || p === 'custom' || cfg.providers[p]?.hasKey || (p === cfg.provider && cfg.hasKey)
+
+function ModelPicker({ chat, cfg }: { chat: AssistantChat; cfg: AiConfig }): JSX.Element {
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  const [open, setOpen] = useState<AiProvider | null>(null)
+  const [models, setModels] = useState<Record<string, string[] | string>>({})
+  const p = (chat.provider as AiProvider) || cfg.provider
+  const model = chat.model || cfg.providers[p]?.model || (p === cfg.provider ? cfg.model : '')
+  const load = (pr: AiProvider): void => {
+    setOpen(open === pr ? null : pr)
+    if (models[pr]) return
+    api.ai.models(pr).then((m) => setModels((x) => ({ ...x, [pr]: m }))).catch((e) => setModels((x) => ({ ...x, [pr]: e?.message ?? 'Could not connect' })))
+  }
+  const pick = (pr: AiProvider, m: string): void => { patchChat(chat.id, (c) => { c.provider = pr; c.model = m }); void api.ai.setConfig({ target: pr, model: m }); setEl(null) }
+  return (
+    <>
+      <button className="model-pick no-drag" title="Model for this chat" onClick={(e) => setEl(e.currentTarget)}>
+        <span className="ellipsis">{providerInfo(p).short}{model ? ` · ${model}` : ''}</span><Icon name="down" size={12} />
+      </button>
+      {el && (
+        <Popover anchor={el} onClose={() => setEl(null)} width={320}>
+          <div className="model-menu">
+            {PROVIDERS.filter((x) => usable(cfg, x.id)).map((x) => {
+              const list = models[x.id]
+              return (
+                <div key={x.id} className="model-group">
+                  <button className={`model-prov ${p === x.id ? 'active' : ''}`} onClick={() => load(x.id)}>
+                    <span className="grow">{x.name}</span><Icon name={open === x.id ? 'up' : 'down'} size={12} />
+                  </button>
+                  {open === x.id && (
+                    <div className="model-list">
+                      {!list && <span className="muted small pad">Loading…</span>}
+                      {typeof list === 'string' && <span className="danger small pad">{list}</span>}
+                      {Array.isArray(list) && list.length === 0 && <span className="muted small pad">No models found</span>}
+                      {Array.isArray(list) && list.slice(0, 60).map((m) => (
+                        <button key={m} className={`model-item ${p === x.id && model === m ? 'active' : ''}`} onClick={() => pick(x.id, m)}>
+                          <span className="ellipsis">{m}</span>{p === x.id && model === m && <Icon name="check" size={12} />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            <button className="model-prov muted" onClick={() => { setEl(null); setOverlay('settings', 'assistant') }}><Icon name="settings" size={13} /> Add a provider or key</button>
+          </div>
+        </Popover>
+      )}
+    </>
+  )
+}
+
+function PresetPicker({ chat }: { chat: AssistantChat }): JSX.Element {
+  const presets = useData((d) => d.assistant.settings.presets)
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  const cur = presets.find((p) => p.id === chat.preset)
+  return (
+    <>
+      <button className={`model-pick no-drag ${cur ? 'on' : ''}`} title="Role for this chat" onClick={(e) => setEl(e.currentTarget)}>
+        <Glyph value={cur?.icon ?? 'sparkle'} size={12} /><span className="ellipsis">{cur?.name ?? 'General'}</span>
+      </button>
+      {el && (
+        <Popover anchor={el} onClose={() => setEl(null)} width={240}>
+          <div className="model-menu">
+            <button className={`model-item ${!cur ? 'active' : ''}`} onClick={() => { patchChat(chat.id, (c) => { c.preset = null }); setEl(null) }}><Icon name="sparkle" size={13} /><span className="grow">General</span></button>
+            {presets.map((p) => (
+              <button key={p.id} className={`model-item ${cur?.id === p.id ? 'active' : ''}`} title={p.instructions} onClick={() => { patchChat(chat.id, (c) => { c.preset = p.id }); setEl(null) }}>
+                <Glyph value={p.icon} size={13} /><span className="grow ellipsis">{p.name}</span>
+              </button>
+            ))}
+            <button className="model-prov muted" onClick={() => { setEl(null); setOverlay('settings', 'assistant') }}><Icon name="edit" size={13} /> Edit roles</button>
+          </div>
+        </Popover>
+      )}
+    </>
+  )
+}
+
+// ---------- one chat ----------
 const QUICK = [
   { label: 'Plan my day', prompt: 'Look at my tasks, habits and goals and plan my day. Suggest an order and time blocks. Add tasks only if something important is missing.' },
   { label: 'Summarize this page', prompt: 'Summarize the open page in a few bullet points.' },
   { label: 'Turn this page into tasks', prompt: 'Turn the actionable items on the open page into tasks with sensible due dates.' },
-  { label: 'Weekly review', prompt: 'Give me a short weekly review: what I finished, what is overdue, and three priorities for next week.' }
+  { label: 'Weekly review', prompt: 'Give me a short weekly review: what I finished, what is overdue, and three priorities for next week.' },
+  { label: 'What is coming up?', prompt: 'What do I have coming up in the next two weeks? Look at the calendar.' }
 ]
 
-export function AssistantPanel(): JSX.Element | null {
-  const open = useAssistant((s) => s.open)
-  const messages = useData((d) => d.assistant.messages)
+const ACCESS_NAME = { none: 'Sees nothing', read: 'Can read', ask: 'Asks before changes', auto: 'Makes changes' } as const
+
+export function ChatView({ chatId, wide }: { chatId: string; wide?: boolean }): JSX.Element {
+  const chat = useData((d) => chatOf(d, chatId))
+  const access = useData((d) => d.assistant.settings.access)
   const current = useApp((s) => s.current)
-  const pageTitle = useData((d) => (current ? d.pages[current]?.title : '') ?? '')
-  const [cfg, setCfg] = useState<AiConfig | null>(null)
+  const pageTitle = useData((d) => (current && !current.startsWith('@') ? d.pages[current]?.title ?? null : null))
+  const run = useRun((s) => s.runs[chatId])
+  const cfg = useAiConfig()
   const [input, setInput] = useState('')
-  const [streaming, setStreaming] = useState<{ id: string; text: string; thinking?: boolean } | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => { if (open) { api.ai.getConfig().then(setCfg); setTimeout(() => inputRef.current?.focus(), 50) } }, [open])
-  useEffect(() => api.ai.onChunk((id, t, thinking) => setStreaming((s) => (s && s.id === id ? { id, text: s.text + t, thinking: s.thinking || !!thinking } : s))), [])
-  useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }) }, [messages.length, streaming?.text])
-
-  if (!open) return null
-
-  const send = async (text: string): Promise<void> => {
-    const content = text.trim()
-    if (!content || streaming) return
-    setError(null)
-    setInput('')
-    const userMsg = { id: uid(), role: 'user' as const, content, at: Date.now() }
-    act((d) => { d.assistant.messages.push(userMsg) }, { history: false })
-    const history: ChatMessage[] = [...getData().assistant.messages].slice(-20).map((m) => ({ role: m.role, content: m.content }))
-    const id = uid()
-    setStreaming({ id, text: '' })
-    try {
-      const full = await api.ai.chat(id, buildSystem(getData(), useApp.getState().current), history)
-      if (!full.trim()) setError('The model returned an empty reply. Try again or pick another model.')
-      else act((d) => { d.assistant.messages.push({ id: uid(), role: 'assistant', content: full, at: Date.now() }); if (d.assistant.messages.length > 200) d.assistant.messages.splice(0, d.assistant.messages.length - 200) }, { history: false })
-    } catch (e: any) {
-      setError(e?.message ?? String(e))
-    } finally {
-      setStreaming(null)
-    }
-  }
-
-  const stop = (): void => { if (streaming) api.ai.abort(streaming.id) }
-  const applyAll = (msgId: string, actions: AiAction[], idx?: number): void => {
-    const which = idx === undefined ? actions.map((_, i) => i) : [idx]
-    let ok = 0
-    for (const i of which) if (applyAction(actions[i])) ok++
-    act((d) => {
-      const m = d.assistant.messages.find((x) => x.id === msgId)
-      if (m) m.applied = [...new Set([...(m.applied ?? []), ...which])]
-    }, { history: false })
-    toast(ok === 1 ? 'Added' : `Added ${ok} items`)
-  }
-
-  const ready = cfg?.model && (!providerInfo(cfg.provider).needsKey || cfg.hasKey)
-
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50) }, [chatId])
+  useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }) }, [chat?.messages.length, run?.text, run?.looking])
+  if (!chat) return <div className="muted pad">This chat is gone.</div>
+  const p = (chat.provider as AiProvider) || cfg?.provider || 'ollama'
+  const hasModel = Boolean(chat.model || cfg?.providers[p]?.model || (cfg && p === cfg.provider && cfg.model))
+  const ready = !!cfg && hasModel && usable(cfg, p)
+  const busy = !!run?.stream
+  const go = (text: string): void => { if (!text.trim() || busy) return; setInput(''); void send(chatId, text) }
+  const visible = chat.messages.filter((m) => !m.tool)
   return (
-    <aside className="assistant" aria-label="Assistant">
-      <div className="assistant-head drag">
-        <Icon name="sparkle" size={16} className="accent" />
-        <span className="strong">Assistant</span>
-        <span className="muted small ellipsis">{cfg?.model ? cfg.model : ''}</span>
+    <div className={`chat ${wide ? 'wide' : ''}`}>
+      <div className="chat-bar">
+        {cfg && <ModelPicker chat={chat} cfg={cfg} />}
+        <PresetPicker chat={chat} />
         <div className="spacer" />
-        <button className="icon-btn no-drag" title="New chat" onClick={() => act((d) => { d.assistant.messages = [] }, { history: false })}><Icon name="edit" size={14} /></button>
-        <button className="icon-btn no-drag" title="Assistant settings" onClick={() => setOverlay('settings', 'assistant')}><Icon name="settings" size={14} /></button>
-        <button className="icon-btn no-drag" title="Close (Ctrl+J)" onClick={toggleAssistant}><Icon name="x" size={14} /></button>
-        <div className="caption-space" />
+        <button className="chat-access no-drag" title="What the assistant may see and do (Settings → Assistant)" onClick={() => setOverlay('settings', 'assistant')}>
+          <Icon name={access === 'none' ? 'eye-off' : access === 'read' ? 'eye' : access === 'ask' ? 'shield' : 'zap'} size={12} />{ACCESS_NAME[access]}
+        </button>
       </div>
-
       <div className="assistant-list" ref={listRef}>
-        {!ready && cfg && (
+        {cfg && !ready && (
           <div className="assistant-setup glass">
             <div className="strong">Connect a model</div>
-            <p className="muted small">Use a local model with Ollama or LM Studio, or add an API key.</p>
+            <p className="muted small">Use a local model with Ollama or LM Studio, or add a key for Anthropic, OpenAI, Gemini or OpenRouter.</p>
             <Button small kind="primary" onClick={() => setOverlay('settings', 'assistant')}>Open settings</Button>
           </div>
         )}
-        {ready && messages.length === 0 && !streaming && (
+        {ready && visible.length === 0 && !busy && (
           <div className="assistant-quick">
-            {QUICK.map((q) => <button key={q.label} className="chip-btn" onClick={() => send(q.prompt)}>{q.label}</button>)}
+            {QUICK.map((q) => <button key={q.label} className="chip-btn" onClick={() => go(q.prompt)}>{q.label}</button>)}
           </div>
         )}
-        {messages.map((m) => {
+        {visible.map((m) => {
           if (m.role === 'user') return <div key={m.id} className="msg user">{m.content}</div>
-          const { clean, actions } = extractActions(m.content)
+          const { calls, clean: noTools } = extractToolCalls(m.content)
+          const { clean, actions } = extractActions(noTools)
           return (
             <div key={m.id} className="msg bot">
-              <Md text={clean} />
+              {calls.length > 0 && <div className="tool-notes">{calls.map((c, i) => <span key={i} className="tool-note"><Icon name="search" size={11} />{describeTool(c)}</span>)}</div>}
+              {clean && <Md text={clean} />}
               {actions.length > 0 && (
                 <div className="actions-card">
                   {actions.map((a, i) => {
-                    const dsc = describe(a)
+                    const dsc = describeAction(a)
                     const done = m.applied?.includes(i)
                     return (
                       <div key={i} className={`action-row ${done ? 'done' : ''}`}>
                         <Glyph value={dsc.icon} size={15} /><span className="grow ellipsis">{dsc.text}</span>
-                        {done ? <Icon name="check" size={14} className="accent" /> : <button className="link small" onClick={() => applyAll(m.id, actions, i)}>Add</button>}
+                        {done ? <Icon name="check" size={14} className="accent" /> : access === 'none' || access === 'read' ? null : <button className="link small" onClick={() => { applyActions(chatId, m.id, actions, [i]); toast('Done', { undo: true }) }}>Do it</button>}
                       </div>
                     )
                   })}
-                  {actions.length > 1 && !actions.every((_, i) => m.applied?.includes(i)) && (
-                    <Button small kind="primary" onClick={() => applyAll(m.id, actions.map((a) => a), undefined)}>Add all {actions.length}</Button>
+                  {actions.length > 1 && !actions.every((_, i) => m.applied?.includes(i)) && (access === 'ask' || access === 'auto') && (
+                    <Button small kind="primary" onClick={() => { const n = applyActions(chatId, m.id, actions); toast(`Made ${n} changes`, { undo: true }) }}>Do all {actions.length}</Button>
                   )}
                 </div>
               )}
             </div>
           )
         })}
-        {streaming && (
+        {busy && (
           <div className="msg bot">
-            {streaming.text ? <Md text={extractActions(streaming.text).clean.replace(/```actions[\s\S]*$/, '')} /> : <div className="typing-row"><div className="typing"><span /><span /><span /></div>{streaming.thinking && <span className="muted small">Thinking…</span>}</div>}
+            {run.looking && <div className="tool-notes"><span className="tool-note live"><Icon name="search" size={11} />{run.looking}</span></div>}
+            {run.text && !/^\s*```tool/.test(run.text) ? <Md text={extractActions(extractToolCalls(run.text).clean).clean.replace(/```(actions|tool)[\s\S]*$/, '')} /> : <div className="typing-row"><div className="typing"><span /><span /><span /></div>{run.thinking && <span className="muted small">Thinking…</span>}</div>}
           </div>
         )}
-        {error && <div className="msg error"><Icon name="x" size={13} /> {error}</div>}
+        {run?.error && <div className="msg error"><Icon name="x" size={13} /> {run.error} <button className="link small" onClick={() => retry(chatId)}>Try again</button></div>}
       </div>
-
       <div className="assistant-input glass">
-        {current && pageTitle !== undefined && <div className="context-chip"><Icon name="note" size={12} /> {pageTitle || 'Untitled'}</div>}
-        <textarea
-          ref={inputRef}
-          id="assistant-input"
-          rows={2}
-          placeholder={ready ? 'Ask anything, or tell me what to add' : 'Connect a model to start'}
-          value={input}
-          disabled={!ready}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
-        />
-        <div className="row">
+        {pageTitle !== null && access !== 'none' && <div className="context-chip"><Icon name="note" size={12} /> {pageTitle || 'Untitled'}</div>}
+        <textarea ref={inputRef} rows={2} placeholder={ready ? 'Ask anything, or tell me what to do' : 'Connect a model to start'} value={input} disabled={!ready}
+          onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(input) } }} />
+        <div className="row gap-sm">
+          {visible.length > 1 && !busy && <button className="link small muted" onClick={() => retry(chatId)}>Answer again</button>}
           <div className="spacer" />
-          {streaming ? <Button small icon="stop" onClick={stop}>Stop</Button> : <Button small kind="primary" icon="right" disabled={!input.trim() || !ready} onClick={() => send(input)}>Send</Button>}
+          {busy ? <Button small icon="stop" onClick={() => stop(chatId)}>Stop</Button> : <Button small kind="primary" icon="right" disabled={!input.trim() || !ready} onClick={() => go(input)}>Send</Button>}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---------- chat list ----------
+function ChatRow({ c, active, onPick }: { c: AssistantChat; active: boolean; onPick: () => void }): JSX.Element {
+  const [renaming, setRenaming] = useState(false)
+  const running = useRun((s) => !!s.runs[c.id]?.stream)
+  if (renaming) return <input className="input input-sm chat-rename" autoFocus defaultValue={c.title} onBlur={(e) => { const t = e.target.value.trim(); if (t) patchChat(c.id, (x) => { x.title = t }); setRenaming(false) }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur() }} />
+  return (
+    <div className={`chat-row ${active ? 'active' : ''}`} onClick={onPick} onDoubleClick={() => setRenaming(true)}>
+      {c.pinned ? <Icon name="pin" size={12} className="accent" /> : running ? <span className="dot-live" /> : <Icon name="sparkle" size={12} className="muted" />}
+      <span className="grow ellipsis">{c.title || 'New chat'}</span>
+      <span className="chat-row-actions">
+        <button className="icon-btn" title={c.pinned ? 'Unpin' : 'Pin'} onClick={(e) => { e.stopPropagation(); patchChat(c.id, (x) => { x.pinned = !x.pinned }) }}><Icon name="pin" size={12} /></button>
+        <button className="icon-btn" title="Rename" onClick={(e) => { e.stopPropagation(); setRenaming(true) }}><Icon name="edit" size={12} /></button>
+        <button className="icon-btn danger" title="Delete" onClick={(e) => { e.stopPropagation(); deleteChat(c.id) }}><Icon name="trash" size={12} /></button>
+      </span>
+    </div>
+  )
+}
+
+export function ChatList({ onPick }: { onPick?: () => void }): JSX.Element {
+  const chats = useData((d) => d.assistant.chats)
+  const active = useData((d) => d.assistant.active)
+  const [q, setQ] = useState('')
+  const list = useMemo(() => {
+    const ql = q.trim().toLowerCase()
+    const hit = (c: AssistantChat): boolean => !ql || c.title.toLowerCase().includes(ql) || c.messages.some((m) => !m.tool && m.content.toLowerCase().includes(ql))
+    return [...chats].filter(hit).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.updatedAt - a.updatedAt)
+  }, [chats, q])
+  const pinned = list.filter((c) => c.pinned)
+  const rest = list.filter((c) => !c.pinned)
+  const pick = (id: string): void => { openChat(id); onPick?.() }
+  return (
+    <div className="chat-list">
+      <div className="chat-search"><Icon name="search" size={13} /><input placeholder="Search chats" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      {pinned.length > 0 && <><div className="section-label">Pinned</div>{pinned.map((c) => <ChatRow key={c.id} c={c} active={c.id === active} onPick={() => pick(c.id)} />)}</>}
+      {rest.length > 0 && <>{pinned.length > 0 && <div className="section-label">Chats</div>}{rest.map((c) => <ChatRow key={c.id} c={c} active={c.id === active} onPick={() => pick(c.id)} />)}</>}
+      {!list.length && <div className="muted small pad">{q ? 'No chats match.' : 'No chats yet.'}</div>}
+    </div>
+  )
+}
+
+function useActiveChat(): string | null {
+  const active = useData((d) => d.assistant.active)
+  const exists = useData((d) => d.assistant.chats.some((c) => c.id === d.assistant.active))
+  useEffect(() => { if (!exists) newChat(false) }, [exists])
+  return exists ? active : null
+}
+
+// ---------- side panel ----------
+export function AssistantPanel(): JSX.Element | null {
+  const open = useAssistant((s) => s.open)
+  const current = useApp((s) => s.current)
+  if (!open || current === '@assistant') return null
+  return <SidePanel />
+}
+
+function SidePanel(): JSX.Element {
+  const id = useActiveChat()
+  const title = useData((d) => chatOf(d, d.assistant.active)?.title ?? '')
+  const [listEl, setListEl] = useState<HTMLElement | null>(null)
+  return (
+    <aside className="assistant" aria-label="Assistant">
+      <div className="assistant-head drag">
+        <button className="chat-title no-drag" title="Chats" onClick={(e) => setListEl(e.currentTarget)}>
+          <Icon name="sparkle" size={15} className="accent" /><span className="strong ellipsis">{title && title !== 'New chat' ? title : 'Assistant'}</span><Icon name="down" size={12} />
+        </button>
+        <div className="spacer" />
+        <button className="icon-btn no-drag" title="New chat" onClick={() => newChat()}><Icon name="edit" size={14} /></button>
+        <button className="icon-btn no-drag" title="Open as a page" onClick={() => openView('@assistant')}><Icon name="expand" size={14} /></button>
+        <button className="icon-btn no-drag" title="Close (Ctrl+J)" onClick={toggleAssistant}><Icon name="x" size={14} /></button>
+        <div className="caption-space" />
+      </div>
+      {listEl && <Popover anchor={listEl} onClose={() => setListEl(null)} width={300}><div className="chat-pop"><ChatList onPick={() => setListEl(null)} /></div></Popover>}
+      {id && <ChatView key={id} chatId={id} />}
     </aside>
   )
 }
 
+// ---------- full page ----------
+export function AssistantPage(): JSX.Element {
+  const id = useActiveChat()
+  return (
+    <div className="page full page-assistant">
+      <div className="assistant-page">
+        <div className="assistant-side">
+          <div className="row gap-sm">
+            <Button small kind="primary" icon="plus" onClick={() => newChat(false)}>New chat</Button>
+            <div className="spacer" />
+            <button className="icon-btn" title="Assistant settings" onClick={() => setOverlay('settings', 'assistant')}><Icon name="settings" size={14} /></button>
+          </div>
+          <ChatList />
+        </div>
+        <div className="assistant-main glass">
+          {id && <ChatView key={id} chatId={id} wide />}
+        </div>
+      </div>
+    </div>
+  )
+}

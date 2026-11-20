@@ -15,11 +15,12 @@ Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com
 - **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts, text tone and colors, with its own section for the desktop panels.
 - **Pages** in tabs, with columns, tabs blocks, inline databases, toggle headings, links between pages, backlinks, bookmarks, images, embeds, equations, buttons and synced blocks.
 - **Page history and templates** for pages and database rows.
+- **Assistant** in a side panel (Ctrl J) or a page of its own: chats with history, a provider and model per chat (Ollama, LM Studio, Anthropic, OpenAI, Gemini, OpenRouter), roles, and access from read-only to making changes with undo.
 - **To-dos, databases** (relations, rollups, formulas; table, board, gallery, list, calendar, timeline and chart views), **habits, journal and goals**, with **Notion import** that keeps tabs, columns, colors, formatting and real databases with their views.
 
 ## Your data
 
-Everything stays on your computer in `%APPDATA%\Deskbase\data`, saved automatically with daily backups. Weather panels look up only the place you set; bookmarks and embeds load only the addresses you add.
+Everything stays on your computer in `%APPDATA%\Deskbase\data`, saved automatically with daily backups. Weather panels look up only the place you set; bookmarks and embeds load only the addresses you add. The assistant sends a chat only to the provider that chat uses; local models keep it on this computer.
 
 ## Development
 

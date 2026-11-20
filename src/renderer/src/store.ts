@@ -150,8 +150,8 @@ export const fireConfetti = (): void => { if (!getData().settings.reduceMotion) 
 
 // ---------- navigation ----------
 /** Views that aren't pages. */
-export type View = '@desktop' | '@appearance'
-export const isView = (id: string | null): id is View => id === '@desktop' || id === '@appearance'
+export type View = '@desktop' | '@appearance' | '@assistant'
+export const isView = (id: string | null): id is View => id === '@desktop' || id === '@appearance' || id === '@assistant'
 
 /** Bring the main window forward when something is opened from a desktop widget. */
 function reveal(): void {

@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 13
+export const CURRENT_SCHEMA = 14
 
 type Raw = Record<string, any>
 
@@ -210,6 +210,18 @@ migrations[11] = (d) => {
 // 12 → 13: database relations, rollups and formulas, timeline and chart views, templates (pages and
 // rows marked as templates), and how much Blur and Frosted panels blur. All optional; nothing to change.
 migrations[12] = (d) => d
+
+// 13 → 14: the assistant keeps several chats instead of one list of messages, and has its own
+// settings (instructions, presets, access, length). The old messages become the first chat.
+migrations[13] = (d) => {
+  const a = d.assistant && typeof d.assistant === 'object' ? d.assistant : {}
+  if (Array.isArray(a.chats)) return d
+  const messages: Raw[] = Array.isArray(a.messages) ? a.messages.filter((m: Raw) => m && typeof m.content === 'string') : []
+  const first = messages.find((m) => m.role === 'user')
+  const id = 'c' + Date.now().toString(36)
+  const chats = messages.length ? [{ id, title: first ? String(first.content).slice(0, 48) : 'Chat', createdAt: Number(messages[0].at) || Date.now(), updatedAt: Number(messages[messages.length - 1].at) || Date.now(), messages }] : []
+  return { ...d, assistant: { chats, active: chats.length ? id : null } }
+}
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}
