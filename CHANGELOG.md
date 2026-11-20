@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.11.1 — 2026-11-20
+
 - Page icons are optional: a page without one shows only its title, with Add icon and Add cover appearing while you point at the top of the page.
 - Softer text: the default text color is a soft charcoal instead of black, with a choice of tones (default, soft, ink, warm, cool or your own color for light and dark mode) and a Soft edges setting that softens the edges of letters, in Appearance → Text.
 - Lines can have a text color and a background color. Backgrounds fade out at the edges instead of ending in a hard box.
