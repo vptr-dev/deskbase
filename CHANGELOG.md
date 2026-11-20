@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.15.0 — 2026-11-20
+
 - Connections page: add, check, pause and remove connections to calendars, news feeds, GitHub and Notion. Each shows when it was last checked and what came in.
 - Calendars from Google, Outlook or Apple through their ICS link: events (repeating ones included) show on the Calendar page, in the Agenda panel and in a new Events panel, each calendar in its own color. The assistant sees them too.
 - News feeds: any RSS or Atom feed in a News feed panel, with summaries.
