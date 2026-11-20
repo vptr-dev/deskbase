@@ -27,6 +27,18 @@ export type BlockType =
   | 'toggle'
   | 'divider'
   | 'table'
+  | 'toggle-h1'
+  | 'toggle-h2'
+  | 'toggle-h3'
+  | 'toc'
+  | 'bookmark'
+  | 'image'
+  | 'embed'
+  | 'equation'
+  | 'button'
+  | 'columns'
+  | 'link'
+  | 'synced'
 
 export interface Block {
   id: string
@@ -38,6 +50,18 @@ export interface Block {
   color?: string
   indent?: number
   rows?: string[][]
+  /** bookmark, image and embed address */
+  url?: string
+  /** what a bookmark found at its address */
+  meta?: { title?: string; desc?: string; site?: string; icon?: string }
+  /** columns: each column holds its own blocks */
+  cols?: Block[][]
+  /** link: the page id; synced: "pageId/blockId" of the original block */
+  ref?: string
+  /** divider look, image width, button look */
+  style?: string
+  /** what a button does */
+  action?: { kind: 'link' | 'page' | 'todos'; target: string }
 }
 
 export interface Page {

@@ -18,6 +18,7 @@ const api = {
   loginItem: (on?: boolean) => ipcRenderer.invoke('app:loginItem', on),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
   launch: (target: string) => ipcRenderer.invoke('app:launch', target),
+  linkInfo: (url: string) => ipcRenderer.invoke('net:linkInfo', url),
   displays: () => ipcRenderer.invoke('app:displays'),
   onOpenPage: (cb: (id: string) => void) => {
     const fn = (_e: unknown, id: string): void => cb(id)

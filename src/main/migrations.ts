@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 9
+export const CURRENT_SCHEMA = 10
 
 type Raw = Record<string, any>
 
@@ -177,6 +177,20 @@ migrations[8] = (d) => {
   if (!desktop) return d
   const style = desktop.style && typeof desktop.style === 'object' ? desktop.style : {}
   return { ...d, desktop: { ...desktop, style: { borderWidth: 1, borderColor: '', titleStyle: 'caps', ...style } } }
+}
+
+// 9 → 10: new block kinds (columns, bookmarks, images, embeds, equations, buttons, links,
+// synced blocks). Existing blocks only need a text string, which older data may lack.
+migrations[9] = (d) => {
+  const pages = d.pages && typeof d.pages === 'object' ? d.pages : null
+  if (!pages) return d
+  const out: Raw = {}
+  for (const [id, p] of Object.entries<Raw>(pages)) {
+    out[id] = p && Array.isArray(p.blocks)
+      ? { ...p, blocks: p.blocks.filter((b: Raw) => b && typeof b === 'object').map((b: Raw) => ({ ...b, text: typeof b.text === 'string' ? b.text : '' })) }
+      : p
+  }
+  return { ...d, pages: out }
 }
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {

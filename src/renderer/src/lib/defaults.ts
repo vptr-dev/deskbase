@@ -1,9 +1,9 @@
-import type { AppData, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
+import type { AppData, Block, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 9
+export const SCHEMA = 10
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -219,6 +219,18 @@ export function freshData(): AppData {
 const obj = (x: any): Record<string, any> => (x && typeof x === 'object' && !Array.isArray(x) ? x : {})
 
 /** Fill in anything missing so older or hand-edited files always load. */
+/** Keeps blocks well formed: an id and a text string each; columns hold lists of blocks. */
+function normBlocks(list: any[]): Block[] {
+  return list.filter((b) => b && typeof b === 'object').map((b) => {
+    const out: Block = { ...b, id: typeof b.id === 'string' && b.id ? b.id : uid(), type: typeof b.type === 'string' ? b.type : 'p', text: typeof b.text === 'string' ? b.text : '' }
+    if (out.type === 'columns') {
+      const cols = Array.isArray(b.cols) ? b.cols.filter(Array.isArray).map((c: any[]) => normBlocks(c)) : []
+      out.cols = (cols.length >= 2 ? cols : [...cols, [], []].slice(0, 2)).map((c: Block[]) => (c.length ? c : [{ id: uid(), type: 'p', text: '' }]))
+    }
+    return out
+  })
+}
+
 export function normalize(raw: any): AppData {
   if (!raw || typeof raw !== 'object' || !raw.pages) return freshData()
   const base = freshData()
@@ -242,8 +254,9 @@ export function normalize(raw: any): AppData {
   }
   for (const p of Object.values(d.pages)) {
     p.icon = p.icon ? emojiToIcon(p.icon, typeInfo(p.type).icon) : ''
-    p.children = Array.isArray(p.children) ? p.children : []
-    p.blocks = p.blocks?.length ? p.blocks : [{ id: uid(), type: 'p', text: '' }]
+    p.children = Array.isArray(p.children) ? [...new Set(p.children.filter((c: unknown) => typeof c === 'string'))] : []
+    p.blocks = Array.isArray(p.blocks) ? normBlocks(p.blocks) : []
+    if (!p.blocks.length) p.blocks = [{ id: uid(), type: 'p', text: '' }]
     p.view = p.view ?? {}
     if (p.type === 'database') {
       const db = obj(p.db)

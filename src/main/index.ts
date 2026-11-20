@@ -4,6 +4,7 @@ import os from 'os'
 import path from 'path'
 import { createBackup, dataDir, listBackups, loadData, parseImport, readBackup, saveData } from './storage'
 import { checkForUpdates, getStatus, initUpdater, installUpdate } from './updater'
+import { linkInfo } from './linkinfo'
 import { registerAi } from './ai'
 import { importNotionExport, importNotionPages, listNotionPages, notionDbPath } from './notion'
 import { findPlace, sysStats, weather } from './sysinfo'
@@ -142,8 +143,19 @@ function createWindow(): void {
       backgroundThrottling: false
     }
   })
-  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'local-fonts' || permission === 'notifications' || permission === 'clipboard-sanitized-write'))
-  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) => permission === 'local-fonts' || permission === 'notifications' || permission === 'clipboard-sanitized-write')
+  const allowed = new Set(['local-fonts', 'notifications', 'clipboard-sanitized-write', 'fullscreen'])
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, cb) => cb(allowed.has(permission)))
+  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) => allowed.has(permission))
+  // Video players in embed blocks refuse to play without a web address naming the page that shows them;
+  // the app's pages have none (file://), so embeds name the app's home page instead.
+  mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*', 'https://player.vimeo.com/*'] },
+    (d, cb) => {
+      const ref = d.requestHeaders.Referer ?? d.requestHeaders.referer
+      if (!ref || /^(file:|http:\/\/(localhost|127\.0\.0\.1))/i.test(ref)) d.requestHeaders.Referer = 'https://github.com/vptr-dev/deskbase'
+      cb({ requestHeaders: d.requestHeaders })
+    }
+  )
 
   if (st.maximized) mainWindow.maximize()
   mainWindow.once('ready-to-show', () => { if (!(startHidden && keepRunning())) mainWindow?.show() })
@@ -347,6 +359,7 @@ function registerIpc(): void {
   ipcMain.handle('app:alwaysOnTop', (_e, on: boolean) => { mainWindow?.setAlwaysOnTop(on); return on })
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
   // Launcher panels: a website, an app link (mailto:, spotify:, steam:…) or a file, folder or program on this PC.
+  ipcMain.handle('net:linkInfo', (_e, url: string) => linkInfo(String(url ?? '')))
   ipcMain.handle('app:launch', async (_e, target: string) => {
     const t = String(target ?? '').trim()
     if (!t) return false

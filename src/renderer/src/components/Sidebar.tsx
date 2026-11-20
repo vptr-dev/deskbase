@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { act, duplicatePage, movePage, openPage, openView, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
+import { newTab, openFromClick } from '../lib/tabs'
 import { typeInfo } from '../lib/defaults'
 import { addSpace, removeSpace, switchSpace } from '../lib/desktop'
 import { api, type UpdateStatus } from '../lib/api'
@@ -49,6 +50,7 @@ function PageRow({ id, depth }: { id: string; depth: number }): JSX.Element | nu
   }
 
   const items = [
+    { label: 'Open in new tab', icon: 'app-window', hint: 'Ctrl click', onClick: () => newTab(id) },
     { label: 'Add subpage', icon: 'plus', onClick: () => setOverlay('newPage', { parentId: id }) },
     { label: 'Rename', icon: 'edit', onClick: () => setRenaming(true), hint: 'F2' },
     { label: page.favorite ? 'Remove from favorites' : 'Add to favorites', icon: 'star', onClick: () => updatePage(id, (p) => { p.favorite = !p.favorite }) },
@@ -71,7 +73,9 @@ function PageRow({ id, depth }: { id: string; depth: number }): JSX.Element | nu
         onDragOver={onDragOver}
         onDragLeave={() => setDrop(null)}
         onDrop={onDrop}
-        onClick={() => openPage(id)}
+        onClick={(e) => openFromClick(id, e)}
+        onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}
+        onAuxClick={(e) => { if (e.button === 1) openFromClick(id, e) }}
         onDoubleClick={() => setRenaming(true)}
         onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }) }}
         onKeyDown={(e) => { if (e.key === 'F2') setRenaming(true) }}
@@ -191,7 +195,7 @@ export function Sidebar(): JSX.Element {
           <>
             <div className="sidebar-section drag">Favorites</div>
             {favs.map((id) => (
-              <button key={id} className={`tree-row fav ${current === id ? 'active' : ''}`} style={{ paddingLeft: 8 }} onClick={() => openPage(id)}>
+              <button key={id} className={`tree-row fav ${current === id ? 'active' : ''}`} style={{ paddingLeft: 8 }} onClick={(e) => openFromClick(id, e)} onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }} onAuxClick={(e) => { if (e.button === 1) openFromClick(id, e) }}>
                 <span className="tree-chevron invisible" />
                 <span className="tree-icon"><Glyph value={pages[id].icon || typeInfo(pages[id].type).icon} size={15} color={pages[id].iconColor || undefined} /></span>
                 <span className="tree-title">{pages[id].title || 'Untitled'}</span>

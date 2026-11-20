@@ -33,47 +33,13 @@ import { isDesktop } from './lib/api'
 import { applyCustomCss, applyLook } from './lib/look'
 import { addDeskSet, addDesktopWidget, addSpace, runCommand, startDesktop, switchSpace } from './lib/desktop'
 import { WindowControls } from './components/WindowControls'
+import { renameLinks } from './lib/links'
+import { Backlinks } from './components/Blocks'
+import { TabStrip, StartView } from './components/Tabs'
+import { closeTab, cycleTab, goBack, goForward, newTab, openFromClick, reopenTab, restoreTabs, useTabs } from './lib/tabs'
 
 // Browser preview only: lets an import result be applied from the dev console for testing.
 if (!isDesktop) (window as any).__deskApplyImport = applyImport
-
-// ---------- navigation history ----------
-const back: string[] = []
-const fwd: string[] = []
-let navigating = false
-useApp.subscribe((s, prev) => {
-  if (s.current !== prev.current && prev.current && !navigating) {
-    back.push(prev.current)
-    if (back.length > 50) back.shift()
-    fwd.length = 0
-  }
-})
-let instantTimer = 0
-/** Back and forward show the page at once, without the entrance animation. */
-const go = (id: string): void => {
-  document.documentElement.dataset.nav = 'instant'
-  clearTimeout(instantTimer)
-  instantTimer = window.setTimeout(() => { delete document.documentElement.dataset.nav }, 500)
-  if (isView(id)) openView(id); else openPage(id)
-}
-function goBack(): void {
-  const id = back.pop()
-  const cur = useApp.getState().current
-  if (!id) return
-  if (cur) fwd.push(cur)
-  navigating = true
-  go(id)
-  navigating = false
-}
-function goForward(): void {
-  const id = fwd.pop()
-  const cur = useApp.getState().current
-  if (!id) return
-  if (cur) back.push(cur)
-  navigating = true
-  go(id)
-  navigating = false
-}
 
 function Breadcrumbs({ page }: { page: Page }): JSX.Element {
   const pages = useData((d) => d.pages)
@@ -85,7 +51,7 @@ function Breadcrumbs({ page }: { page: Page }): JSX.Element {
       {trail.map((c, i) => (
         <span key={c.id} className="crumb-wrap">
           {i > 0 && <span className="crumb-sep">/</span>}
-          <button className="crumb" onClick={() => openPage(c.id)}><Glyph value={c.icon || typeInfo(c.type).icon} size={14} color={c.iconColor || undefined} /> {c.title || 'Untitled'}</button>
+          <button className="crumb" onClick={(e) => openFromClick(c.id, e)} onAuxClick={(e) => { if (e.button === 1) openFromClick(c.id, e) }}><Glyph value={c.icon || typeInfo(c.type).icon} size={14} color={c.iconColor || undefined} /> {c.title || 'Untitled'}</button>
         </span>
       ))}
     </div>
@@ -122,7 +88,7 @@ function SubpageList({ page }: { page: Page }): JSX.Element | null {
   return (
     <div className="subpages">
       {kids.map((k) => (
-        <button key={k.id} className="subpage" onClick={() => openPage(k.id)}>
+        <button key={k.id} className="subpage" onClick={(e) => openFromClick(k.id, e)} onAuxClick={(e) => { if (e.button === 1) openFromClick(k.id, e) }} onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}>
           <Glyph value={k.icon || typeInfo(k.type).icon} size={15} color={k.iconColor || undefined} /><span className="subpage-title">{k.title || 'Untitled'}</span>
         </button>
       ))}
@@ -159,6 +125,7 @@ const randomCover = (): string => COVERS[Math.floor(Math.random() * COVERS.lengt
 function PageView({ id }: { id: string }): JSX.Element | null {
   const page = useData((d) => d.pages[id])
   const titleRef = useRef<HTMLInputElement>(null)
+  const titleWas = useRef<string | null>(null)
   useEffect(() => {
     if ((window as any).__lastCreated === id && page && !page.title) titleRef.current?.focus()
   }, [id])
@@ -178,6 +145,8 @@ function PageView({ id }: { id: string }): JSX.Element | null {
           value={page.title}
           readOnly={page.locked}
           onChange={(e) => updatePage(id, (p) => { p.title = e.target.value }, 'title:' + id)}
+          onFocus={(e) => { titleWas.current = e.currentTarget.value }}
+          onBlur={(e) => { const was = titleWas.current; titleWas.current = null; if (was !== null && was !== e.currentTarget.value) renameLinks(was || 'Untitled', e.currentTarget.value || 'Untitled') }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && page.type === 'doc') {
               e.preventDefault()
@@ -190,6 +159,7 @@ function PageView({ id }: { id: string }): JSX.Element | null {
       <SubpageList page={page} />
       {showNotes && <div className="page-notes glass"><BlockEditor pageId={id} locked={page.locked} /></div>}
       <PageBody page={page} />
+      {page.type !== 'dashboard' && <Backlinks pageId={id} />}
     </div>
   )
 }
@@ -300,6 +270,12 @@ function useShortcuts(): void {
       else if (mod && k === 'j') { e.preventDefault(); toggleAssistant() }
       else if (mod && k === '\\') { e.preventDefault(); setSettings((s) => { s.sidebarCollapsed = !s.sidebarCollapsed }) }
       else if (mod && e.shiftKey && k === 'l') { e.preventDefault(); const dark = document.documentElement.dataset.theme === 'dark'; setSettings((s) => { s.theme = dark ? 'light' : 'dark' }) }
+      else if (mod && e.shiftKey && k === 't') { e.preventDefault(); reopenTab() }
+      else if (mod && k === 't') { e.preventDefault(); newTab() }
+      else if (mod && k === 'w') { e.preventDefault(); closeTab() }
+      else if (mod && e.key === 'Tab') { e.preventDefault(); cycleTab(e.shiftKey ? -1 : 1) }
+      else if (mod && e.key === 'PageDown') { e.preventDefault(); cycleTab(1) }
+      else if (mod && e.key === 'PageUp') { e.preventDefault(); cycleTab(-1) }
       else if (mod && k === '[') { e.preventDefault(); goBack() }
       else if (mod && k === ']') { e.preventDefault(); goForward() }
       else if (mod && (k === '=' || k === '+')) { e.preventDefault(); setSettings((s) => { s.fontSize = Math.min(18, s.fontSize + 1) }) }
@@ -357,6 +333,8 @@ function MainApp(): JSX.Element {
   const canRedo = useApp((s) => s.canRedo)
   const assistantOpen = useAssistant((s) => s.open)
   useEffect(() => { boot() }, [])
+  useEffect(() => { if (ready) restoreTabs() }, [ready])
+  const tabCount = useTabs((s) => s.tabs.length)
   useAppearance()
   useShortcuts()
   useTicker()
@@ -369,7 +347,8 @@ function MainApp(): JSX.Element {
     <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${assistantOpen ? 'assistant-open' : ''}`}>
       <Sidebar />
       <main className="main">
-        <header className="topbar drag">
+        {tabCount > 1 && <TabStrip captionSpace={!assistantOpen} />}
+        <header className={`topbar drag ${tabCount > 1 ? 'under-tabs' : ''}`}>
           {collapsed && <button className="icon-btn no-drag" title="Show sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = false })}><Icon name="sidebar" size={16} /></button>}
           <button className="icon-btn no-drag" title="Back (Ctrl+[)" onClick={goBack}><Icon name="left" size={15} stroke={2} /></button>
           <button className="icon-btn no-drag" title="Forward (Ctrl+])" onClick={goForward}><Icon name="right" size={15} stroke={2} /></button>
@@ -401,14 +380,11 @@ function MainApp(): JSX.Element {
               ]} />
             </span>
           )}
-          {!assistantOpen && <div className="caption-space" />}
+          {!assistantOpen && tabCount < 2 && <div className="caption-space" />}
         </header>
         <div className="scroll">
           {view === '@desktop' ? <DesktopPage key="desktop" /> : view === '@appearance' ? <AppearancePage key="appearance" /> : page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
-            <div className="no-page">
-              <div className="muted">No page open</div>
-              <button className="btn btn-primary" onClick={() => setOverlay('newPage', { parentId: null })}><Icon name="plus" size={15} /> New page</button>
-            </div>
+            <StartView />
           )}
         </div>
       </main>

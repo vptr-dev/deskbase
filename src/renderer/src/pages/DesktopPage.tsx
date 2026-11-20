@@ -258,7 +258,7 @@ export function DesktopPage(): JSX.Element {
               <div key={w.id} className={`desk-item ${selected === w.id ? 'active' : ''} ${w.hidden ? 'is-hidden' : ''}`} onClick={() => useDesk.setState({ selected: w.id })}>
                 <span className="widget-pick-icon sm"><Icon name={widgetDef(w.type).icon} size={15} /></span>
                 <span className="grow min0">
-                  <span className="ellipsis block">{widgetTitle(w, data) || widgetDef(w.type).name}</span>
+                  <span className="ellipsis d-block">{widgetTitle(w, data) || widgetDef(w.type).name}</span>
                 </span>
                 {w.locked && <Icon name="lock" size={13} className="muted" />}
                 <button className="icon-btn" title={w.hidden ? 'Show' : 'Hide'} onClick={(e) => { e.stopPropagation(); patchDesk(w.id, (x) => { x.hidden = !x.hidden }) }}><Icon name={w.hidden ? 'eyeOff' : 'eye'} size={14} /></button>

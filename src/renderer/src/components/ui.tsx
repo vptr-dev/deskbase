@@ -235,9 +235,11 @@ export function Empty({ icon, title, children }: { icon: string; title: string; 
 /** Auto-growing textarea. */
 const FIELD_SIZING = typeof CSS !== 'undefined' && CSS.supports('field-sizing', 'content')
 
-export function AutoText({ value, onChange, className = '', placeholder, onKeyDown, autoFocus, id, inputRef, onFocus, onBlur, spellCheck }: {
-  value: string; onChange: (v: string) => void; className?: string; placeholder?: string; onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void; autoFocus?: boolean; id?: string; inputRef?: (el: HTMLTextAreaElement | null) => void; onFocus?: () => void; onBlur?: () => void; spellCheck?: boolean
-}): JSX.Element {
+export interface AutoTextProps {
+  value: string; onChange: (v: string) => void; className?: string; placeholder?: string; onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void; autoFocus?: boolean; id?: string; inputRef?: (el: HTMLTextAreaElement | null) => void; onFocus?: () => void; onBlur?: () => void; spellCheck?: boolean; onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
+}
+
+export function AutoText({ value, onChange, className = '', placeholder, onKeyDown, autoFocus, id, inputRef, onFocus, onBlur, spellCheck, onPaste }: AutoTextProps): JSX.Element {
   const ref = useRef<HTMLTextAreaElement | null>(null)
   // The height follows the text through CSS (field-sizing: content). Measuring each field in JS
   // forced a layout per block and made big pages take seconds to open.
@@ -261,6 +263,7 @@ export function AutoText({ value, onChange, className = '', placeholder, onKeyDo
       onKeyDown={onKeyDown}
       onFocus={onFocus}
       onBlur={onBlur}
+      onPaste={onPaste}
     />
   )
 }

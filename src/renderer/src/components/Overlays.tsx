@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { newTab, reopenTab } from '../lib/tabs'
 import { createPage, getData, openPage, openView, purgePage, replaceData, restorePage, setOverlay, setSettings, toast, useApp, useData, act, undo, redo } from '../store'
 import { ACCENTS, PAGE_TYPES, typeInfo } from '../lib/defaults'
 import { api, isDesktop, type AppInfo, type UpdateStatus } from '../lib/api'
@@ -70,7 +71,7 @@ export function NewPageDialog(): JSX.Element {
 }
 
 // ---------- Search / command palette ----------
-interface Result { id: string; icon: string; title: string; sub?: string; run: () => void }
+interface Result { id: string; icon: string; title: string; sub?: string; run: () => void; page?: string }
 
 export function CommandPalette(): JSX.Element {
   const [q, setQ] = useState('')
@@ -84,7 +85,7 @@ export function CommandPalette(): JSX.Element {
     const pageMatch = (ql ? pages.filter((p) => (p.title || 'untitled').toLowerCase().includes(ql) || p.blocks.some((b) => b.text.toLowerCase().includes(ql))) : data.recent.map((id) => data.pages[id]).filter((p) => p && !p.deletedAt))
     for (const p of pageMatch.slice(0, 10)) {
       const hit = ql && !(p.title || '').toLowerCase().includes(ql) ? p.blocks.find((b) => b.text.toLowerCase().includes(ql))?.text : undefined
-      out.push({ id: 'p' + p.id, icon: p.icon || typeInfo(p.type).icon, title: p.title || 'Untitled', sub: hit ? hit.slice(0, 80) : p.rowOf ? `in ${data.pages[p.rowOf]?.title || 'Untitled'}` : typeInfo(p.type).name, run: () => openPage(p.id) })
+      out.push({ id: 'p' + p.id, icon: p.icon || typeInfo(p.type).icon, title: p.title || 'Untitled', sub: hit ? hit.slice(0, 80) : p.rowOf ? `in ${data.pages[p.rowOf]?.title || 'Untitled'}` : typeInfo(p.type).name, page: p.id, run: () => openPage(p.id) })
     }
     if (ql) {
       for (const t of Object.values(data.tasks).filter((t) => t.title.toLowerCase().includes(ql) || t.notes.toLowerCase().includes(ql)).slice(0, 8)) {
@@ -99,6 +100,8 @@ export function CommandPalette(): JSX.Element {
     }
     const cmds: Result[] = [
       { id: 'c-new', icon: 'plus', title: 'New page', sub: 'Ctrl N', run: () => setOverlay('newPage', { parentId: null }) },
+      { id: 'c-tab', icon: 'app-window', title: 'New tab', sub: 'Ctrl T', run: () => newTab() },
+      { id: 'c-reopen', icon: 'rotate-ccw', title: 'Reopen closed tab', sub: 'Ctrl Shift T', run: () => reopenTab() },
       { id: 'c-desktop', icon: 'monitor', title: 'Desktop', sub: 'Panels and workspaces', run: () => openView('@desktop') },
       { id: 'c-look', icon: 'palette', title: 'Appearance', sub: 'Themes, surface, fonts', run: () => openView('@appearance') },
       ...(['glass', 'blur', 'frosted', 'solid'] as const).map((v) => ({ id: 'c-surface-' + v, icon: 'layers', title: 'Surface: ' + v[0].toUpperCase() + v.slice(1), run: () => setSettings((x) => { x.look = { ...x.look, surface: v } }) })),
@@ -121,7 +124,7 @@ export function CommandPalette(): JSX.Element {
   }, [q, data])
   useEffect(() => setSel(0), [q])
   useEffect(() => { listRef.current?.querySelector('.active')?.scrollIntoView({ block: 'nearest' }) }, [sel])
-  const run = (r?: Result): void => { if (!r) return; setOverlay(null); r.run() }
+  const run = (r?: Result, inTab = false): void => { if (!r) return; setOverlay(null); if (inTab && r.page) newTab(r.page); else r.run() }
   return (
     <Modal onClose={() => setOverlay(null)} width={600} className="palette">
       <div className="palette-input">
@@ -129,13 +132,13 @@ export function CommandPalette(): JSX.Element {
         <input id="palette-q" autoFocus placeholder="Search pages, tasks, journal, or run a command" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(results.length - 1, s + 1)) }
           if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 1)) }
-          if (e.key === 'Enter') run(results[sel])
+          if (e.key === 'Enter') run(results[sel], e.ctrlKey || e.metaKey)
         }} />
       </div>
       <div className="palette-list" ref={listRef}>
         {!q && <div className="palette-section">Recent</div>}
         {results.map((r, i) => (
-          <button key={r.id} className={`palette-item ${i === sel ? 'active' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => run(r)}>
+          <button key={r.id} className={`palette-item ${i === sel ? 'active' : ''}`} onMouseEnter={() => setSel(i)} onClick={(e) => run(r, e.ctrlKey || e.metaKey)} onAuxClick={(e) => { if (e.button === 1) run(r, true) }}>
             <span className="palette-icon"><Glyph value={r.icon} size={16} /></span>
             <span className="palette-title">{r.title}</span>
             {r.sub && <span className="palette-sub">{r.sub}</span>}
@@ -172,7 +175,7 @@ export function TrashDialog(): JSX.Element {
 // ---------- Shortcuts ----------
 export const SHORTCUTS: [string, string][] = [
   ['Ctrl K', 'Search and commands'], ['Ctrl N', 'New page'], ['Ctrl \\', 'Toggle sidebar'], ['Ctrl ,', 'Settings'],
-  ['Ctrl J', 'Assistant'], ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'], ['Ctrl [ / Ctrl ]', 'Back / forward'], ['Ctrl /', 'Shortcuts'], ['Ctrl Shift L', 'Toggle dark mode'], ['Ctrl Shift Space', 'Quick add task (anywhere)'], ['Ctrl / Shift click', 'Select several tasks'],
+  ['Ctrl J', 'Assistant'], ['Ctrl Z / Ctrl Shift Z', 'Undo / redo'], ['Ctrl [ / Ctrl ]', 'Back / forward'], ['Ctrl T / Ctrl W', 'New tab / close tab'], ['Ctrl Tab', 'Next tab'], ['Ctrl Shift T', 'Reopen closed tab'], ['Ctrl or middle click', 'Open a page in a new tab'], ['Ctrl /', 'Shortcuts'], ['Ctrl Shift L', 'Toggle dark mode'], ['Ctrl Shift Space', 'Quick add task (anywhere)'], ['Ctrl / Shift click', 'Select several tasks'],
   ['Ctrl + / Ctrl -', 'Zoom text'], ['Ctrl 1…9', 'Open sidebar page 1…9'], ['/', 'Block menu (in a page)'], ['# , ## , ###', 'Headings'], ['- or *', 'Bulleted list'],
   ['[]', 'To-do block'], ['1.', 'Numbered list'], ['>>', 'Toggle block'], ['"', 'Quote'], ['---', 'Divider'], ['Tab / Shift Tab', 'Indent block'],
   ['Alt ↑ / Alt ↓', 'Move block'], ['Ctrl D', 'Duplicate block'], ['Ctrl Enter', 'Check a to-do block'], ['F2', 'Rename page in sidebar']

@@ -54,7 +54,7 @@ function CountdownRow({ r, onEdit }: { r: Row; onEdit: () => void }): JSX.Elemen
     <button className={`countdown-row ${r.days < 0 ? 'past' : ''}`} onClick={onEdit} disabled={r.game} title={r.game ? 'Wishlist release date' : 'Edit'}>
       <span className="countdown-icon" style={{ ['--c' as any]: r.color }}><Glyph value={r.icon} fallback="calendar" size={16} /></span>
       <span className="grow min0">
-        <span className="ellipsis block">{r.title || 'Untitled'}</span>
+        <span className="ellipsis d-block">{r.title || 'Untitled'}</span>
         <span className="muted small">{friendlyDay(r.date)}</span>
       </span>
       <span className="countdown-days">

@@ -35,7 +35,9 @@ const UI = {
   group: 'group', ungroup: 'ungroup', timerReset: 'timer-reset', listChecks: 'list-checks', calendarClock: 'calendar-clock', wallet: 'wallet',
   dumbbell: 'dumbbell', study: 'graduation-cap',
   battery: 'battery-medium', batteryCharging: 'battery-charging', globe: 'globe', rocket: 'rocket', moonStar: 'moon-star', quote: 'quote',
-  search: 'search', appWindow: 'app-window', flag: 'flag', gauge: 'gauge', stopwatch: 'timer', calendarRange: 'calendar-range', hourglass2: 'hourglass'
+  search: 'search', appWindow: 'app-window', flag: 'flag', gauge: 'gauge', stopwatch: 'timer', calendarRange: 'calendar-range', hourglass2: 'hourglass',
+  heading1: 'heading-1', heading2: 'heading-2', heading3: 'heading-3', toc: 'list-tree', embed: 'monitor-play', pointer: 'mouse-pointer-click',
+  columns2: 'columns-2', pageLink: 'file-symlink', sigma: 'sigma', bookmark: 'bookmark', imageUp: 'image-up', textCursor: 'text-cursor-input'
 }
 
 /** Icons offered in the icon picker, by group. */

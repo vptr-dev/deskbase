@@ -13,11 +13,12 @@ Download `Deskbase-Setup-x.y.z.exe` from the [latest release](https://github.com
 - **Desktop panels** that sit under your windows: tasks, pages (or just today's part), clocks in many styles, world clock, timers, stopwatch, sunrise and sunset, weather, moon, system use, battery, launcher, web search, study progress, table totals, month and more. Each has its own styles and parts to show or hide. Move, resize, lock and group them.
 - **Workspaces**, each with its own panel layout.
 - **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts and colors, with a separate look for the desktop panels.
-- **Pages, to-dos, databases, habits, journal and goals**, with **Notion import**.
+- **Pages** in tabs, with columns, toggle headings, links between pages, backlinks, bookmarks, images, embeds, equations, buttons and synced blocks.
+- **To-dos, databases, habits, journal and goals**, with **Notion import**.
 
 ## Your data
 
-Everything stays on your computer in `%APPDATA%\Deskbase\data`, saved automatically with daily backups. Weather panels look up only the place you set.
+Everything stays on your computer in `%APPDATA%\Deskbase\data`, saved automatically with daily backups. Weather panels look up only the place you set; bookmarks and embeds load only the addresses you add.
 
 ## Development
 

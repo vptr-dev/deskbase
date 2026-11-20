@@ -42,6 +42,8 @@ export interface Bridge {
   onOpenPage(cb: (id: string) => void): () => void
   showMain(): Promise<void>
   launch(target: string): Promise<boolean>
+  /** Title, description, site name and icon of a web page, for bookmarks. */
+  linkInfo(url: string): Promise<{ title?: string; desc?: string; site?: string; icon?: string }>
   win: {
     control(action: 'min' | 'max' | 'close'): Promise<void>
     isMax(): Promise<boolean>
@@ -196,6 +198,7 @@ const browserBridge: Bridge = {
   onOpenPage: () => () => {},
   showMain: async () => {},
   launch: async (t) => { if (/^https?:/i.test(t)) window.open(t, '_blank'); return true },
+  linkInfo: async (u) => { try { const h = new URL(u).hostname; return { site: h.replace(/^www\./, ''), icon: `https://${h}/favicon.ico` } } catch { return {} } },
   win: { control: async () => {}, isMax: async () => false, onMax: () => () => {} },
   // Preview stand-ins: fixed numbers, no network.
   sysStats: async () => ({ cpu: 29, ram: 61, ramUsed: 9.8e9, ramTotal: 16e9, disk: 63, diskFree: 180e9, diskTotal: 480e9, uptime: 36000 }),
