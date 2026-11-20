@@ -3,7 +3,7 @@ import { emojiToIcon } from '../../../shared/emoji-icons'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 11
+export const SCHEMA = 12
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -40,6 +40,14 @@ export const ACCENTS: { name: string; value: string }[] = [
 
 /** Page cover gradients; the colors live in styles.css as --cover-<id>. */
 export const COVERS = ['dawn', 'ocean', 'forest', 'sunset', 'aurora', 'dusk', 'peach', 'slate', 'mint', 'berry', 'sand', 'night']
+
+/** How a cover paints: one of the built-in gradients, or a picture from the web or this computer. */
+export function coverStyle(c: string | null | undefined): React.CSSProperties | null {
+  if (!c) return null
+  if (COVERS.includes(c)) return { background: `var(--cover-${c})` }
+  if (/^(https?:|data:image\/)/.test(c)) return { backgroundImage: `url("${c.replace(/"/g, '%22')}")`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  return null
+}
 
 /** Backdrops behind the glass; colors live in styles.css as --backdrop-<id>. 'mica' = the Windows material only. */
 export const BACKDROPS: { id: string; name: string }[] = [
@@ -227,9 +235,18 @@ const obj = (x: any): Record<string, any> => (x && typeof x === 'object' && !Arr
 function normBlocks(list: any[]): Block[] {
   return list.filter((b) => b && typeof b === 'object').map((b) => {
     const out: Block = { ...b, id: typeof b.id === 'string' && b.id ? b.id : uid(), type: typeof b.type === 'string' ? b.type : 'p', text: typeof b.text === 'string' ? b.text : '' }
-    if (out.type === 'columns') {
+    if (out.type === 'columns' || out.type === 'tabs') {
+      const min = out.type === 'columns' ? 2 : 1
       const cols = Array.isArray(b.cols) ? b.cols.filter(Array.isArray).map((c: any[]) => normBlocks(c)) : []
-      out.cols = (cols.length >= 2 ? cols : [...cols, [], []].slice(0, 2)).map((c: Block[]) => (c.length ? c : [{ id: uid(), type: 'p', text: '' }]))
+      while (cols.length < min) cols.push([])
+      const filled: Block[][] = cols.map((c: Block[]) => (c.length ? c : [{ id: uid(), type: 'p', text: '' }]))
+      out.cols = filled
+      if (out.type === 'tabs') out.labels = filled.map((_, i) => (Array.isArray(b.labels) && typeof b.labels[i] === 'string' ? b.labels[i] : ''))
+      if (out.type === 'columns') {
+        const w = Array.isArray(b.widths) && b.widths.length === filled.length && b.widths.every((x: any) => Number(x) > 0) ? b.widths.map(Number) : undefined
+        if (w) out.widths = w
+        else delete out.widths
+      }
     }
     return out
   })
@@ -315,7 +332,35 @@ export function normalize(raw: any): AppData {
     v.color = v.color ?? '#0a84ff'
   }
   d.rules = d.rules.filter((r) => d.values[r.valueId])
+  relinkReplaced(d)
   return d
+}
+
+/**
+ * A page imported again used to arrive as a new copy while the old one went to the trash, leaving
+ * panels and dashboard cards pointing at the trashed copy. They now follow the live copy.
+ */
+export function relinkReplaced(d: AppData): void {
+  const live = new Map<string, string>()
+  for (const p of Object.values(d.pages)) {
+    if (p.deletedAt || !p.source?.id) continue
+    const had = live.get(p.source.id)
+    if (!had || d.pages[had].createdAt < p.createdAt) live.set(p.source.id, p.id)
+  }
+  if (!live.size) return
+  const follow = (id: unknown): string | undefined => {
+    if (typeof id !== 'string') return undefined
+    const p = d.pages[id]
+    if (p && !p.deletedAt) return undefined
+    const to = p?.source?.id ? live.get(p.source.id) : undefined
+    return to && to !== id ? to : undefined
+  }
+  const fix = (cfg: Record<string, any> | undefined): void => {
+    if (!cfg) return
+    for (const k of ['pageId', 'dbId', 'page']) { const to = follow(cfg[k]); if (to) cfg[k] = to }
+  }
+  for (const w of d.desktop?.widgets ?? []) fix(w.config)
+  for (const p of Object.values(d.pages)) for (const w of p.widgets ?? []) fix(w.config)
 }
 
 const num = (v: any, lo: number, hi: number, dflt: number): number => {

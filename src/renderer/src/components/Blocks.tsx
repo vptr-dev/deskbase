@@ -5,7 +5,7 @@ import { getData, toast, updatePage, useData } from '../store'
 import { api } from '../lib/api'
 import { typeInfo } from '../lib/defaults'
 import { imageToDataUrl, pickImage } from '../lib/image'
-import { backlinks, hasInline, pageByTitle, pageForLink, parseInline, scrollToBlock } from '../lib/links'
+import { backlinks, hasInline, pageByTitle, pageForLink, parseInline, plainText, scrollToBlock } from '../lib/links'
 import { openFromClick } from '../lib/tabs'
 import { friendlyDay } from '../lib/util'
 import type { Block, Page } from '../types'
@@ -18,6 +18,30 @@ type Click = { ctrlKey?: boolean; metaKey?: boolean; button?: number; shiftKey?:
 const openLinkTitle = (title: string, e?: Click): void => openFromClick(pageForLink(title), e)
 
 // ---------- text with page links, dates and web links ----------
+
+/** Marks inside a mark (bold inside a link, a link inside strike-through…), drawn without chips. */
+export function Marks({ text }: { text: string }): JSX.Element {
+  const parts = parseInline(text)
+  if (parts.length === 1 && parts[0].kind === 'text') return <>{text}</>
+  return (
+    <>
+      {parts.map((p, i) => {
+        switch (p.kind) {
+          case 'bold': return <strong key={i}><Marks text={p.text} /></strong>
+          case 'bolditalic': return <strong key={i}><em>{p.text}</em></strong>
+          case 'italic': return <em key={i}><Marks text={p.text} /></em>
+          case 'strike': return <s key={i}><Marks text={p.text} /></s>
+          case 'code': return <code key={i} className="inline-code">{p.text}</code>
+          case 'link': return <span key={i} className="inline-link">{p.text}</span>
+          case 'url': return <span key={i} className="inline-link">{p.url.replace(/^https?:\/\/(www\.)?/, '')}</span>
+          case 'page': return <span key={i} className="inline-link">{p.title}</span>
+          case 'date': return <span key={i}>{friendlyDay(p.day) || p.day}</span>
+          default: return <span key={i}>{p.text}</span>
+        }
+      })}
+    </>
+  )
+}
 
 /** Draws a block's links and marks while it is not being edited; a click on plain text edits at that spot. */
 function RichView({ text, className, onPlace }: { text: string; className: string; onPlace: (pos: number) => void }): JSX.Element {
@@ -36,7 +60,16 @@ function RichView({ text, className, onPlace }: { text: string; className: strin
     <div className={`rich ${className}`} onMouseDown={place}>
       {parts.map((p, i) => {
         if (p.kind === 'text') return <span key={i} data-s={p.start} data-e={p.end} data-kind="text">{p.text}</span>
-        if (p.kind === 'bold') return <strong key={i} data-s={p.start} data-e={p.end}>{p.text}</strong>
+        if (p.kind === 'bold') return <strong key={i} data-s={p.start} data-e={p.end}><Marks text={p.text} /></strong>
+        if (p.kind === 'bolditalic') return <strong key={i} data-s={p.start} data-e={p.end}><em>{p.text}</em></strong>
+        if (p.kind === 'italic') return <em key={i} data-s={p.start} data-e={p.end}><Marks text={p.text} /></em>
+        if (p.kind === 'strike') return <s key={i} data-s={p.start} data-e={p.end}><Marks text={p.text} /></s>
+        if (p.kind === 'link') {
+          return (
+            <a key={i} data-act data-s={p.start} data-e={p.end} className="inline-link" href={p.url} title={p.url}
+              onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); api.launch(p.url) }}><Marks text={p.text} /></a>
+          )
+        }
         if (p.kind === 'code') return <code key={i} className="inline-code" data-s={p.start} data-e={p.end}>{p.text}</code>
         if (p.kind === 'url') {
           return (
@@ -112,7 +145,7 @@ const HEAD_LEVEL: Record<string, number> = { h1: 1, h2: 2, h3: 3, 'toggle-h1': 1
 
 export function TocBlock({ pageId }: { pageId: string }): JSX.Element {
   const blocks = useData((d) => d.pages[pageId]?.blocks)
-  const heads = useMemo(() => (blocks ?? []).filter((b) => HEAD_LEVEL[b.type] && b.text.trim()).map((b) => ({ id: b.id, text: b.text, level: HEAD_LEVEL[b.type] })), [blocks])
+  const heads = useMemo(() => (blocks ?? []).filter((b) => HEAD_LEVEL[b.type] && b.text.trim()).map((b) => ({ id: b.id, text: plainText(b.text), level: HEAD_LEVEL[b.type] })), [blocks])
   if (!heads.length) return <div className="toc toc-empty">No headings</div>
   return (
     <nav className="toc">
@@ -305,7 +338,7 @@ export function ButtonBlock({ block, locked, set, addTodos }: { block: Block; lo
 
 // ---------- link to page ----------
 
-export function PagePicker({ onPick, exclude }: { onPick: (id: string) => void; exclude?: string }): JSX.Element {
+export function PagePicker({ onPick, exclude, only }: { onPick: (id: string) => void; exclude?: string; only?: Page['type'] }): JSX.Element {
   const [q, setQ] = useState('')
   const pages = useData((d) => d.pages)
   const recent = useData((d) => d.recent)
@@ -313,7 +346,7 @@ export function PagePicker({ onPick, exclude }: { onPick: (id: string) => void; 
   const list = (ql
     ? Object.values(pages).filter((p) => !p.deletedAt && (p.title || 'untitled').toLowerCase().includes(ql))
     : [...recent.map((id) => pages[id]).filter(Boolean), ...Object.values(pages)].filter((p, i, all) => p && !p.deletedAt && all.indexOf(p) === i)
-  ).filter((p) => p.id !== exclude).slice(0, 8)
+  ).filter((p) => p.id !== exclude && !p.rowOf && (!only || p.type === only)).slice(0, 8)
   return (
     <div className="page-picker">
       <input className="input input-sm" autoFocus placeholder="Find a page" value={q} onChange={(e) => setQ(e.target.value)}

@@ -6,8 +6,9 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { unzipSync, strFromU8 } from 'fflate'
-import type { Block, BlockType } from '../renderer/src/types'
-import type { ImportPage, ImportResult, ImportTask, NotionPageInfo } from '../shared/import-types'
+import type { Block, BlockType, DbFilter, DbProp, DbView, PropType, ViewType } from '../renderer/src/types'
+import type { ImportPage, ImportResult, ImportRow, ImportTask, NotionPageInfo } from '../shared/import-types'
+import { emojiToIcon } from '../shared/emoji-icons'
 import { bid, markdownToBlocks, parseCsv, stripInline, tidy } from '../shared/markdown'
 
 type Row = Record<string, any>
@@ -42,13 +43,60 @@ const json = (s: string | null | undefined, fallback: any): any => {
 
 const isEmoji = (s: unknown): s is string => typeof s === 'string' && s.length > 0 && s.length <= 8 && !/^https?:|^\//.test(s)
 
+// ---------- colors ----------
+const COLOR_NAMES = new Set(['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'])
+
+/** Notion's "red" / "red_background" as a block's text color or background. */
+function colorOf(c: unknown): { color?: string; bg?: string } {
+  if (typeof c !== 'string') return {}
+  const name = c.replace(/_background$/, '')
+  if (!COLOR_NAMES.has(name)) return {}
+  return c.endsWith('_background') ? { bg: name } : { color: name }
+}
+
+const OPTION_HEX: Record<string, string> = {
+  default: '#8e8e93', gray: '#8e8e93', brown: '#a2845e', orange: '#ff9f0a', yellow: '#e5b000',
+  green: '#30d158', blue: '#0a84ff', purple: '#bf5af2', pink: '#ff375f', red: '#ff453a'
+}
+
+/** A Notion id (with or without dashes) from a link to a Notion page, if it is one. */
+function notionIdIn(link: string): string | null {
+  const m = /^(?:\/|https?:\/\/(?:www\.)?notion\.(?:so|site)\/)(?:[^?#]*?)([0-9a-f]{32})(?:[?#]|$)/i.exec(link)
+  if (!m) return null
+  const h = m[1].toLowerCase()
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+
+/** Files Notion keeps for itself can't be shown outside it; anything else on the web can. */
+const publicUrl = (u: unknown): u is string =>
+  typeof u === 'string' && /^https?:\/\//i.test(u) && !/prod-files-secure|secure\.notion-static\.com|file\.notion\.so|X-Amz-Signature/i.test(u)
+
+const coverUrl = (c: unknown): string | null => {
+  if (typeof c !== 'string' || !c) return null
+  if (c.startsWith('/images/')) return 'https://www.notion.so' + c
+  return publicUrl(c) ? c : null
+}
+
+/** Property ids safe to use as keys anywhere (Notion's look like "P>tC"). */
+const propId = (k: string): string => (k === 'title' ? 'title' : 'n_' + Array.from(k).map((ch) => (/[a-z0-9]/i.test(ch) ? ch : '_' + ch.charCodeAt(0).toString(36))).join(''))
+
+const day = (ms: unknown): string | undefined => {
+  const n = Number(ms)
+  if (!n) return undefined
+  const d = new Date(n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 class NotionReader {
   db: any
   blockStmt: any
   titleCache = new Map<string, string>()
-  stats = { pages: 0, blocks: 0, todos: 0, tasks: 0, tables: 0, skipped: 0, missing: 0 }
+  users = new Map<string, string>()
+  stats = { pages: 0, blocks: 0, todos: 0, tasks: 0, tables: 0, databases: 0, rows: 0, skipped: 0, missing: 0 }
   warnings: string[] = []
   seen = new Set<string>()
+  /** collection id → notion id of the database page made from it (linked views show the same one) */
+  collections = new Map<string, string>()
 
   constructor(db: any) {
     this.db = db
@@ -57,43 +105,103 @@ class NotionReader {
 
   block(id: string): Row | undefined { return this.blockStmt.get(id) }
 
-  /** Flattens Notion rich text, resolving page, date and user mentions. */
-  rich(prop: any): string {
-    if (!Array.isArray(prop)) return ''
-    return prop.map((seg: any[]) => {
-      const text: string = seg[0] ?? ''
-      const marks: any[] = seg[1] ?? []
-      for (const m of marks) {
-        if (m[0] === 'd' && m[1]) return this.dateText(m[1])
-        if (m[0] === 'p' && m[1]) return this.pageTitle(m[1])
-        if (m[0] === 'u') return '@someone'
-        if (m[0] === 'e') return m[1] ?? text
-      }
-      return text === '‣' ? '' : text
-    }).join('')
+  userName(id: unknown): string {
+    if (typeof id !== 'string') return 'someone'
+    if (!this.users.has(id)) {
+      let name = 'someone'
+      try {
+        const r = this.db.prepare('select * from notion_user where id = ?').get(id)
+        name = r?.name || [r?.given_name, r?.family_name].filter(Boolean).join(' ') || 'someone'
+      } catch { /* older caches have no user table */ }
+      this.users.set(id, name)
+    }
+    return this.users.get(id)!
   }
 
-  dateText(d: any): string {
-    const s = d.start_date ?? ''
+  /**
+   * Notion rich text as Deskbase text: **bold**, *italic*, ~~strike~~, `code`, [links](https://…),
+   * [[page mentions]] and @dates. `plain` drops the marks (titles, table cells, database values).
+   * `color` is set when all of the text has the same color, so the block can take it.
+   */
+  richInfo(prop: any, plain = false): { text: string; color?: string } {
+    if (!Array.isArray(prop)) return { text: '' }
+    const colors = new Set<string>()
+    let colored = 0
+    let total = 0
+    const text = prop.map((seg: any[]) => {
+      const raw: string = typeof seg?.[0] === 'string' ? seg[0] : ''
+      const marks: any[] = Array.isArray(seg?.[1]) ? seg[1] : []
+      let mention: string | null = null
+      let link = ''
+      let color = ''
+      const has = { b: false, i: false, s: false, c: false }
+      for (const m of marks) {
+        switch (m?.[0]) {
+          case 'd': if (m[1]) mention = this.dateText(m[1], plain); break
+          case 'p': if (m[1]) mention = plain ? this.pageTitle(m[1]) : `[[${this.pageTitle(m[1])}]]`; break
+          case 'u': mention = (plain ? '' : '@') + this.userName(m[1]); break
+          case 'e': mention = plain ? String(m[1] ?? '') : '`' + String(m[1] ?? '') + '`'; break
+          case 'a': link = typeof m[1] === 'string' ? m[1] : ''; break
+          case 'h': color = typeof m[1] === 'string' ? m[1] : ''; break
+          case 'b': has.b = true; break
+          case 'i': has.i = true; break
+          case 's': has.s = true; break
+          case 'c': has.c = true; break
+        }
+      }
+      if (mention !== null) return mention
+      if (raw === '‣') return ''
+      if (raw.trim()) { total++; if (color) { colored++; colors.add(color) } }
+      if (plain || !raw.trim()) return raw
+      const lead = /^\s*/.exec(raw)![0]
+      const trail = /\s*$/.exec(raw)![0]
+      let core = raw.slice(lead.length, raw.length - trail.length)
+      if (has.c) core = '`' + core.replace(/`/g, "'") + '`'
+      if (link) {
+        const to = notionIdIn(link)
+        if (to && this.block(to)) core = `[[${this.pageTitle(to)}]]`
+        else if (/^https?:\/\//i.test(link)) core = core === link ? link : `[${core}](${link})`
+      }
+      if (!has.c) {
+        if (has.b && has.i) core = `***${core}***`
+        else if (has.b) core = `**${core}**`
+        else if (has.i) core = `*${core}*`
+      }
+      if (has.s) core = `~~${core}~~`
+      return lead + core + trail
+    }).join('')
+    return { text, color: total && colored === total && colors.size === 1 ? [...colors][0] : undefined }
+  }
+
+  rich(prop: any, plain = false): string { return this.richInfo(prop, plain).text }
+
+  dateText(d: any, plain = false): string {
+    const at = plain ? '' : '@'
+    const s = d.start_date ? at + d.start_date : ''
     const t = d.start_time ? ` ${d.start_time}` : ''
-    return d.end_date ? `${s}${t} → ${d.end_date}` : `${s}${t}`
+    return d.end_date ? `${s}${t} → ${at}${d.end_date}` : `${s}${t}`
   }
 
   pageTitle(id: string): string {
     if (this.titleCache.has(id)) return this.titleCache.get(id)!
     const r = this.block(id)
-    const t = r ? this.rich(json(r.properties, {}).title) || 'Untitled' : 'Untitled'
+    let t = r ? this.rich(json(r.properties, {}).title, true) : ''
+    if (!t && r?.collection_id) {
+      const col = this.db.prepare('select name from collection where id = ?').get(r.collection_id)
+      t = col ? this.rich(json(col.name, []), true) : ''
+    }
+    t = t.trim() || 'Untitled'
     this.titleCache.set(id, t)
     return t
   }
 
   listPages(): NotionPageInfo[] {
-    const rows: Row[] = this.db.prepare("select id, type, properties, format, parent_id, parent_table from block where alive = 1 and type in ('page', 'collection_view_page')").all()
+    const rows: Row[] = this.db.prepare("select id, type, properties, format, parent_id, parent_table, collection_id from block where alive = 1 and type in ('page', 'collection_view_page')").all()
     const out: NotionPageInfo[] = []
     for (const r of rows) {
       if (r.parent_table === 'collection') continue // database rows
-      const title = this.rich(json(r.properties, {}).title)
-      if (!title.trim()) continue
+      const title = this.pageTitle(r.id)
+      if (!title.trim() || title === 'Untitled') continue
       const icon = json(r.format, {}).page_icon
       let parent = ''
       if (r.parent_table === 'block' && r.parent_id) {
@@ -105,96 +213,141 @@ class NotionReader {
     return out.sort((a, b) => a.title.localeCompare(b.title))
   }
 
+  /** Page-level look: cover and full width. */
+  pageLook(fmt: Row): Pick<ImportPage, 'cover' | 'fullWidth'> {
+    const cover = coverUrl(fmt.page_cover)
+    return { ...(cover ? { cover } : {}), ...(fmt.page_full_width ? { fullWidth: true } : {}) }
+  }
+
   importPage(id: string): ImportPage | null {
     const r = this.block(id)
     if (!r) { this.stats.missing++; return null }
     if (this.seen.has(id)) return null
     this.seen.add(id)
-    const props = json(r.properties, {})
     const fmt = json(r.format, {})
+    if (r.type === 'collection_view_page' || r.type === 'collection_view') {
+      return r.collection_id ? this.database(r, this.pageTitle(id)) : null
+    }
     const page: ImportPage = {
       notionId: id,
-      title: this.rich(props.title) || 'Untitled',
+      title: this.pageTitle(id),
       icon: isEmoji(fmt.page_icon) ? fmt.page_icon : '',
       type: 'doc',
       blocks: [],
-      children: []
+      children: [],
+      ...this.pageLook(fmt)
     }
     this.stats.pages++
-    if (r.type === 'collection_view_page' && r.collection_id) {
-      const db = this.collection(r.collection_id, page.title)
-      return db ? { ...db, notionId: id } : page
-    }
-    for (const c of json(r.content, [])) this.convert(c, 0, page)
-    page.blocks = tidy(page.blocks)
+    page.blocks = this.blocksOf(this.children(r), page)
     return page
   }
 
-  push(page: ImportPage, type: BlockType, text: string, indent: number, extra: Partial<Block> = {}): Block {
+  /** Converts a list of Notion block ids into Deskbase blocks. */
+  blocksOf(ids: string[], page: ImportPage, indent = 0): Block[] {
+    const out: Block[] = []
+    for (const c of ids) this.convert(c, indent, out, page)
+    return tidy(out)
+  }
+
+  push(out: Block[], type: BlockType, text: string, indent: number, extra: Partial<Block> = {}): Block {
     const b: Block = { id: bid(), type, text, ...(indent ? { indent: Math.min(4, indent) } : {}), ...extra }
-    page.blocks.push(b)
+    out.push(b)
     this.stats.blocks++
     return b
   }
 
-  children(r: Row): string[] { return json(r.content, []) }
+  children(r: Row): string[] { const c = json(r.content, []); return Array.isArray(c) ? c : [] }
 
-  convert(id: string, indent: number, page: ImportPage): void {
+  convert(id: string, indent: number, out: Block[], page: ImportPage): void {
     const r = this.block(id)
     if (!r) { this.stats.missing++; return }
     if (!r.alive) return
     const props = json(r.properties, {})
     const fmt = json(r.format, {})
-    const title = this.rich(props.title)
+    const info = this.richInfo(props.title)
+    const title = info.text
     const kids = this.children(r)
-    const sub = (ind = indent + 1): void => { for (const c of kids) this.convert(c, ind, page) }
+    // The block's own color, else the color all of its text has.
+    const look: Partial<Block> = { ...colorOf(info.color), ...colorOf(fmt.block_color) }
+    const sub = (ind = indent + 1): void => { for (const c of kids) this.convert(c, ind, out, page) }
+    const heading = (level: 1 | 2 | 3): void => {
+      const toggle = Boolean(fmt.toggleable)
+      const text = /^\*\*[^*]+\*\*$/.test(title) ? title.slice(2, -2) : title
+      this.push(out, (toggle ? `toggle-h${level}` : `h${level}`) as BlockType, text, indent, { ...look, ...(toggle ? { open: true } : {}) })
+      sub(toggle ? indent + 1 : indent)
+    }
     switch (r.type) {
-      case 'text': this.push(page, 'p', title, indent); sub(); return
-      case 'header': this.push(page, 'h1', title, indent); sub(fmt.toggleable ? indent + 1 : indent); return
-      case 'sub_header': this.push(page, 'h2', title, indent); sub(fmt.toggleable ? indent + 1 : indent); return
-      case 'sub_sub_header': this.push(page, 'h3', title, indent); sub(fmt.toggleable ? indent + 1 : indent); return
+      case 'text': this.push(out, 'p', title, indent, look); sub(); return
+      case 'header': heading(1); return
+      case 'sub_header': heading(2); return
+      case 'sub_sub_header':
+      case 'header_4': heading(3); return
       case 'to_do':
-        this.push(page, 'todo', title, indent, { checked: props.checked?.[0]?.[0] === 'Yes' })
+        this.push(out, 'todo', title, indent, { ...look, checked: props.checked?.[0]?.[0] === 'Yes' })
         this.stats.todos++
         sub(); return
-      case 'bulleted_list': this.push(page, 'bullet', title, indent); sub(); return
-      case 'numbered_list': this.push(page, 'number', title, indent); sub(); return
-      case 'quote': this.push(page, 'quote', title, indent); sub(); return
-      case 'divider': this.push(page, 'divider', '', 0); return
-      case 'code':
-      case 'equation': this.push(page, 'code', title, indent); return
+      case 'bulleted_list': this.push(out, 'bullet', title, indent, look); sub(); return
+      case 'numbered_list': this.push(out, 'number', title, indent, look); sub(); return
+      case 'quote': this.push(out, 'quote', title, indent, look); sub(); return
+      case 'divider': this.push(out, 'divider', '', 0); return
+      case 'code': this.push(out, 'code', this.rich(props.title, true), indent); return
+      case 'equation': this.push(out, 'equation', this.rich(props.title, true), indent); return
       case 'toggle':
-        this.push(page, 'toggle', title, indent, { open: false })
+        this.push(out, 'toggle', title, indent, { ...look, open: false })
         sub(); return
       case 'callout': {
+        // A Deskbase callout is one line: the callout's text (or its first line of text), with the
+        // rest of its content right under it.
         let text = title
         let rest = kids
         if (!text && kids.length) {
           const first = this.block(kids[0])
-          if (first && first.type === 'text') { text = this.rich(json(first.properties, {}).title); rest = kids.slice(1) }
+          if (first && first.type === 'text') { text = this.rich(json(first.properties, {}).title); rest = [...this.children(first), ...kids.slice(1)] }
         }
-        if (text) this.push(page, 'callout', text, indent)
-        for (const c of rest) this.convert(c, text ? indent + 1 : indent, page)
+        if (!text.trim()) { for (const c of rest) this.convert(c, indent, out, page); return }
+        const icon = isEmoji(fmt.page_icon) ? emojiToIcon(fmt.page_icon, 'lightbulb') : undefined
+        this.push(out, 'callout', text, indent, { ...colorOf(fmt.block_color), ...(icon && icon !== 'lightbulb' ? { icon } : {}) })
+        for (const c of rest) this.convert(c, indent + 1, out, page)
         return
       }
-      case 'tab':
-        // Tab labels are child text blocks; their children are the tab's content.
+      case 'tab': {
+        // Each tab is a child text block: its text is the tab's name, its children the tab's content.
+        const labels: string[] = []
+        const cols: Block[][] = []
         for (const c of kids) {
           const label = this.block(c)
-          if (!label) { this.stats.missing++; continue }
-          const name = this.rich(json(label.properties, {}).title)
-          if (name) this.push(page, 'h2', name, indent)
-          for (const cc of this.children(label)) this.convert(cc, indent, page)
+          if (!label || !label.alive) { if (!label) this.stats.missing++; continue }
+          labels.push(this.rich(json(label.properties, {}).title, true).trim())
+          cols.push(this.blocksOf(this.children(label), page))
         }
+        if (cols.length) this.push(out, 'tabs', '', indent, { labels, cols })
         return
-      case 'column_list':
+      }
+      case 'column_list': {
+        const cols: Block[][] = []
+        const widths: number[] = []
+        for (const c of kids) {
+          const col = this.block(c)
+          if (!col || !col.alive) { if (!col) this.stats.missing++; continue }
+          const content = col.type === 'column' ? this.children(col) : [c]
+          cols.push(this.blocksOf(content, page))
+          widths.push(Number(json(col.format, {}).column_ratio) || 0)
+        }
+        if (cols.length === 1) { out.push(...cols[0]); return }
+        if (!cols.length) return
+        const sum = widths.reduce((a, b) => a + b, 0)
+        const even = widths.some((w) => !w) || sum <= 0
+        this.push(out, 'columns', '', indent, { cols, ...(even ? {} : { widths: widths.map((w) => Math.round((w / sum) * 1000) / 1000) }) })
+        return
+      }
       case 'column':
       case 'transclusion_container':
         sub(indent); return
       case 'transclusion_reference': {
         const ref = fmt.transclusion_reference_pointer?.id
         const target = ref ? this.block(ref) : undefined
-        if (target) for (const c of this.children(target)) this.convert(c, indent, page)
+        if (target) for (const c of this.children(target)) this.convert(c, indent, out, page)
+        else this.stats.missing++
         return
       }
       case 'table': {
@@ -204,94 +357,263 @@ class NotionReader {
           const tr = this.block(rid)
           if (!tr) { this.stats.missing++; continue }
           const p = json(tr.properties, {})
-          rows.push(order.map((col) => this.rich(p[col])))
+          rows.push(order.map((col) => this.rich(p[col], true)))
         }
-        if (rows.length) { this.push(page, 'table', '', 0, { rows }); this.stats.tables++ }
+        if (rows.length) { this.push(out, 'table', '', 0, { rows }); this.stats.tables++ }
         return
       }
       case 'page': {
         const child = this.importPage(id)
         if (child) page.children.push(child)
+        this.push(out, 'link', this.pageTitle(id), indent, { ref: 'notion:' + id })
         return
       }
       case 'collection_view':
       case 'collection_view_page': {
         if (!r.collection_id) { this.stats.skipped++; return }
-        const child = this.collection(r.collection_id)
+        const known = this.collections.get(r.collection_id)
+        if (known) {
+          this.push(out, r.type === 'collection_view' ? 'database' : 'link', this.pageTitle(id), indent, { ref: 'notion:' + known })
+          return
+        }
+        const child = this.importPage(id)
         if (child) page.children.push(child)
+        this.push(out, r.type === 'collection_view' ? 'database' : 'link', this.pageTitle(id), indent, { ref: 'notion:' + id })
         return
       }
       case 'alias': {
         const to = fmt.alias_pointer?.id
-        if (to) this.push(page, 'p', '→ ' + this.pageTitle(to), indent)
+        if (to) this.push(out, 'link', this.pageTitle(to), indent, { ref: 'notion:' + to })
         return
       }
-      case 'bookmark':
+      case 'table_of_contents': this.push(out, 'toc', '', indent); return
+      case 'bookmark': {
+        const url = props.link?.[0]?.[0] ?? ''
+        if (!url) { this.stats.skipped++; return }
+        const meta = { title: this.rich(props.title, true) || undefined, desc: this.rich(props.description, true) || undefined, icon: publicUrl(fmt.bookmark_icon) ? fmt.bookmark_icon : undefined }
+        this.push(out, 'bookmark', '', indent, { url, meta })
+        return
+      }
+      case 'image': {
+        const src = fmt.display_source ?? props.source?.[0]?.[0] ?? ''
+        const cap = this.rich(props.caption, true)
+        if (publicUrl(src)) {
+          const w = Number(fmt.block_width) || 0
+          const style = !w || fmt.block_full_width ? undefined : w <= 220 ? '25' : w <= 420 ? '50' : w <= 600 ? '75' : undefined
+          this.push(out, 'image', cap, indent, { url: src, ...(style ? { style } : {}) })
+        } else {
+          // Uploads stay inside Notion; keep their name so nothing silently disappears.
+          const name = cap || this.rich(props.title, true) || 'Image'
+          this.push(out, 'callout', `${name} (an image stored in Notion)`, indent, { icon: 'image' })
+          this.stats.skipped++
+        }
+        return
+      }
       case 'embed':
-      case 'image':
       case 'video':
+      case 'audio':
+      case 'maps':
+      case 'figma':
+      case 'codepen':
+      case 'tweet':
+      case 'gist':
+      case 'drive':
+      case 'framer':
+      case 'excalidraw':
+      case 'typeform':
+      case 'miro':
+      case 'loom': {
+        const src = props.source?.[0]?.[0] ?? fmt.display_source ?? ''
+        if (publicUrl(src)) this.push(out, 'embed', this.rich(props.caption, true), indent, { url: src })
+        else this.stats.skipped++
+        return
+      }
       case 'file':
       case 'pdf': {
         const src = props.source?.[0]?.[0] ?? fmt.display_source ?? ''
-        const cap = this.rich(props.caption) || this.rich(props.title)
-        if (src || cap) this.push(page, 'p', [cap, src].filter(Boolean).join(' — '), indent)
+        const name = this.rich(props.title, true) || this.rich(props.caption, true)
+        if (publicUrl(src)) this.push(out, 'bookmark', '', indent, { url: src, meta: { title: name || undefined } })
+        else if (name) { this.push(out, 'callout', `${name} (a file stored in Notion)`, indent, { icon: 'file' }); this.stats.skipped++ }
+        return
+      }
+      case 'external_object_instance':
+      case 'link_preview': {
+        const url = fmt.uri ?? props.link?.[0]?.[0] ?? props.source?.[0]?.[0]
+        if (publicUrl(url)) this.push(out, 'bookmark', '', indent, { url })
+        else this.stats.skipped++
         return
       }
       case 'button':
       case 'breadcrumb':
-      case 'table_of_contents':
         this.stats.skipped++
         return
       default:
-        if (title) this.push(page, 'p', title, indent)
+        if (title) this.push(out, 'p', title, indent, look)
         else this.stats.skipped++
         sub()
     }
   }
 
-  /** An inline or full-page database becomes a to-do list (if it has dates/checkboxes/status) or a table. */
-  collection(collectionId: string, fallbackTitle = ''): ImportPage | null {
+  /** A Notion database (inline or full page): properties, views and rows, each row with its own content. */
+  database(r: Row, fallbackTitle = ''): ImportPage | null {
+    const collectionId: string = r.collection_id
     const col: Row | undefined = this.db.prepare('select * from collection where id = ?').get(collectionId)
     if (!col) { this.stats.missing++; return null }
-    const name = this.rich(json(col.name, [])) || fallbackTitle || 'Database'
-    const schema: Record<string, { name: string; type: string; options?: any[] }> = json(col.schema, {})
-    const icon = json(col.icon, null)
-    const rows: Row[] = this.db.prepare('select * from block where parent_id = ? and parent_table = ? and alive = 1').all(collectionId, 'collection')
-    const keys = Object.keys(schema)
-    const dateKey = keys.find((k) => schema[k].type === 'date')
-    const checkKey = keys.find((k) => schema[k].type === 'checkbox')
-    const statusKey = keys.find((k) => schema[k].type === 'status' || (schema[k].type === 'select' && /status|state|progress/i.test(schema[k].name)))
-    const tagKeys = keys.filter((k) => (schema[k].type === 'multi_select' || schema[k].type === 'select') && k !== statusKey)
-    const page: ImportPage = { title: name, icon: isEmoji(icon) ? icon : '', type: 'doc', blocks: [], children: [] }
-    this.stats.pages++
-    const read = (p: any, k: string): string => {
-      const v = p[k]
-      if (!v) return ''
-      if (schema[k]?.type === 'date') {
-        const d = v?.[0]?.[1]?.find?.((m: any[]) => m[0] === 'd')?.[1]
-        return d?.start_date ?? ''
-      }
-      return this.rich(v)
+    this.collections.set(collectionId, r.id)
+    const name = this.rich(json(col.name, []), true) || fallbackTitle || 'Database'
+    const schema: Record<string, { name: string; type: string; options?: any[]; number_format?: string }> = json(col.schema, {})
+    const colFmt = json(col.format, {})
+    const icon = json(col.icon, null) ?? json(r.format, {}).page_icon
+    const page: ImportPage = {
+      notionId: r.id, title: name, icon: isEmoji(icon) ? icon : '', type: 'database', blocks: [], children: [], rows: [],
+      ...this.pageLook({ ...json(r.format, {}), page_cover: col.cover ? json(col.cover, col.cover) : json(r.format, {}).page_cover })
     }
-    if (dateKey || checkKey || statusKey) {
-      page.type = 'tasks'
-      page.tasks = rows.map((row): ImportTask => {
-        const p = json(row.properties, {})
-        const status = statusKey ? read(p, statusKey) : ''
-        const done = (checkKey ? p[checkKey]?.[0]?.[0] === 'Yes' : false) || /done|complete|finished/i.test(status)
-        const tags = tagKeys.flatMap((k) => read(p, k).split(',').map((t) => t.trim().toLowerCase().replace(/\s+/g, '-')).filter(Boolean))
-        const extra = keys.filter((k) => k !== 'title' && ![dateKey, checkKey, statusKey, ...tagKeys].includes(k)).map((k) => {
-          const v = read(p, k)
-          return v ? `${schema[k].name}: ${v}` : ''
-        }).filter(Boolean)
-        return { title: this.rich(p.title) || 'Untitled', done, due: dateKey ? read(p, dateKey).slice(0, 10) || null : null, tags, notes: extra.join('\n') }
-      })
-      this.stats.tasks += page.tasks.length
-    } else {
-      const cols = ['title', ...keys.filter((k) => k !== 'title')]
-      const tableRows = [cols.map((k) => schema[k]?.name ?? k), ...rows.map((row) => { const p = json(row.properties, {}); return cols.map((k) => read(p, k)) })]
-      page.blocks.push({ id: bid(), type: 'table', text: '', rows: tableRows })
-      this.stats.tables++
+    this.stats.pages++
+    this.stats.databases++
+    const desc = this.rich(json(col.description, []))
+    if (desc) page.blocks.push({ id: bid(), type: 'p', text: desc })
+
+    // ---- properties ----
+    const TYPE: Record<string, PropType> = {
+      text: 'text', number: 'number', select: 'select', multi_select: 'multi', status: 'status', date: 'date',
+      checkbox: 'checkbox', url: 'url', email: 'text', phone_number: 'text', person: 'text', created_by: 'text',
+      last_edited_by: 'text', relation: 'text', file: 'text', created_time: 'date', last_edited_time: 'date'
+    }
+    const order: string[] = (colFmt.collection_page_properties ?? []).map((x: any) => x?.property).filter((k: any) => typeof k === 'string')
+    const keys = [...order.filter((k) => schema[k]), ...Object.keys(schema).filter((k) => !order.includes(k))].filter((k) => k !== 'title' && TYPE[schema[k]?.type])
+    const props: DbProp[] = keys.map((k) => {
+      const s = schema[k]
+      const type = TYPE[s.type]
+      const p: DbProp = { id: propId(k), name: s.name || 'Property', type }
+      if (type === 'select' || type === 'multi' || type === 'status') {
+        p.options = (s.options ?? []).filter((o) => o && o.value).map((o) => ({ id: 'o_' + propId(String(o.id ?? o.value)).replace(/^n_/, ''), name: String(o.value), color: OPTION_HEX[o.color] ?? OPTION_HEX.default }))
+      }
+      if (type === 'number') {
+        const f = s.number_format ?? ''
+        p.format = f === 'percent' ? 'percent' : /dollar|euro|pound|yen|rupee|won|yuan|real|lira|franc|krona|krone|peso|ruble|rand|ringgit|shekel|zloty|baht|forint|koruna|dirham|riyal|rupiah|leu|dong|currency/.test(f) ? 'currency' : f === 'number_with_commas' ? 'decimal' : 'plain'
+      }
+      return p
+    })
+    const byKey = new Map(keys.map((k, i) => [k, props[i]]))
+    const pid = (k: string): string | null => (k === 'title' ? '__title' : byKey.get(k)?.id ?? null)
+    const optionId = (prop: DbProp, value: string): string | undefined => {
+      const v = value.trim()
+      if (!v) return undefined
+      let o = prop.options!.find((x) => x.name === v)
+      if (!o) { o = { id: 'o_' + bid(), name: v, color: OPTION_HEX.default }; prop.options!.push(o) }
+      return o.id
+    }
+
+    // ---- views ----
+    const viewIds: string[] = json(r.view_ids, [])
+    const views: DbView[] = []
+    let manual: string[] = []
+    const VIEW: Record<string, ViewType> = { table: 'table', board: 'board', gallery: 'gallery', list: 'list', calendar: 'calendar', timeline: 'table' }
+    for (const vid of Array.isArray(viewIds) ? viewIds : []) {
+      const v: Row | undefined = this.db.prepare('select * from collection_view where id = ? and alive = 1').get(vid)
+      if (!v) continue
+      const vf = json(v.format, {})
+      const q = json(v.query2, {})
+      const type = VIEW[v.type] ?? 'table'
+      if (!manual.length) { const ps = json(v.page_sort, []); if (Array.isArray(ps)) manual = ps }
+      const list: any[] = vf[`${v.type}_properties`] ?? vf.table_properties ?? []
+      const vname = typeof v.name === 'string' && v.name.replace(/[\sㅤ]/g, '') ? v.name.trim() : ({ table: 'Table', board: 'Board', gallery: 'Gallery', list: 'List', calendar: 'Calendar' } as const)[type]
+      const view: DbView = { id: 'v_' + propId(vid).slice(2, 40), name: vname, type, filters: [], hidden: [] }
+      const known = (k: unknown): k is string => typeof k === 'string' && pid(k) !== null
+      view.hidden = list.filter((x) => x?.visible === false && known(x.property) && x.property !== 'title').map((x) => pid(x.property)!)
+      if (type === 'table') {
+        const widths: Record<string, number> = {}
+        for (const x of list) if (known(x?.property) && Number(x.width)) widths[pid(x.property)!] = Math.round(Number(x.width))
+        if (Object.keys(widths).length) view.widths = widths
+      }
+      if (type === 'board' || type === 'gallery') {
+        view.cardProps = list.filter((x) => x?.visible !== false && known(x?.property) && x.property !== 'title').map((x) => pid(x.property)!)
+      }
+      const group = vf.board_columns_by?.property ?? q.group_by
+      if (type === 'board' && known(group)) view.groupBy = pid(group)
+      const cal = vf.calendar_by ?? q.calendar_by
+      if (type === 'calendar' && known(cal)) view.dateProp = pid(cal)
+      const sort = Array.isArray(q.sort) ? q.sort.find((s: any) => known(s?.property)) : null
+      if (sort) view.sort = { prop: pid(sort.property)!, dir: sort.direction === 'descending' ? 'desc' : 'asc' }
+      for (const f of Array.isArray(vf.property_filters) ? vf.property_filters : []) {
+        const inner = f?.filter
+        const prop = known(inner?.property) ? byKey.get(inner.property) : undefined
+        const op: string = inner?.filter?.operator ?? ''
+        const value = inner?.filter?.value?.value
+        if (!prop) continue
+        const add = (x: Omit<DbFilter, 'id'>): void => { view.filters!.push({ id: bid(), ...x }) }
+        if (op === 'checkbox_is') add({ prop: prop.id, op: value === true || value === 'true' ? 'checked' : 'unchecked' })
+        else if ((op === 'enum_is' || op === 'status_is' || op === 'enum_contains') && typeof value === 'string' && prop.options) add({ prop: prop.id, op: op === 'enum_contains' ? 'contains' : 'is', value: optionId(prop, value) })
+        else if ((op === 'enum_is_not' || op === 'status_is_not') && typeof value === 'string' && prop.options) add({ prop: prop.id, op: 'not', value: optionId(prop, value) })
+        else if (op === 'string_contains' && typeof value === 'string') add({ prop: prop.id, op: 'contains', value })
+        else if (op === 'string_is' && typeof value === 'string') add({ prop: prop.id, op: 'is', value })
+        else if (op === 'is_empty') add({ prop: prop.id, op: 'empty' })
+        else if (op === 'is_not_empty') add({ prop: prop.id, op: 'notEmpty' })
+        else if (op === 'number_greater_than' && value !== undefined) add({ prop: prop.id, op: 'gt', value: Number(value) })
+        else if (op === 'number_less_than' && value !== undefined) add({ prop: prop.id, op: 'lt', value: Number(value) })
+      }
+      views.push(view)
+    }
+    if (!views.length) views.push({ id: 'v_' + bid(), name: 'Table', type: 'table', filters: [], hidden: [] })
+    page.db = { props, views }
+
+    // A gallery can show a file property's picture on each card.
+    let coverKey: string | null = null
+    for (const vid of Array.isArray(viewIds) ? viewIds : []) {
+      const v: Row | undefined = this.db.prepare('select format from collection_view where id = ?').get(vid)
+      const gc = json(v?.format, {}).gallery_cover
+      if (gc?.type === 'property' && typeof gc.property === 'string' && schema[gc.property]?.type === 'file') { coverKey = gc.property; break }
+    }
+
+    // ---- rows ----
+    const rows: Row[] = this.db.prepare('select * from block where parent_id = ? and parent_table = ? and alive = 1 and (is_template is null or is_template = 0)').all(collectionId, 'collection')
+    const rank = new Map(manual.map((id, i) => [id, i]))
+    rows.sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9) || (a.created_time ?? 0) - (b.created_time ?? 0))
+    for (const row of rows) {
+      if (this.seen.has(row.id)) continue
+      this.seen.add(row.id)
+      const p = json(row.properties, {})
+      const rf = json(row.format, {})
+      const values: Record<string, any> = {}
+      for (const k of keys) {
+        const prop = byKey.get(k)!
+        const s = schema[k]
+        const v = p[k]
+        let val: any
+        switch (s.type) {
+          case 'number': { const n = Number(this.rich(v, true).replace(/,/g, '')); if (v && Number.isFinite(n)) val = n; break }
+          case 'checkbox': if (v?.[0]?.[0] === 'Yes') val = true; break
+          case 'select': case 'status': val = optionId(prop, this.rich(v, true)); break
+          case 'multi_select': { const ids = this.rich(v, true).split(',').map((x) => optionId(prop, x)).filter(Boolean); if (ids.length) val = ids; break }
+          case 'date': { const d = Array.isArray(v) ? v.flatMap((seg: any[]) => (Array.isArray(seg?.[1]) ? seg[1] : [])).find((m: any[]) => m?.[0] === 'd')?.[1] : null; if (d?.start_date) val = d.start_date; break }
+          case 'created_time': val = day(row.created_time); break
+          case 'last_edited_time': val = day(row.last_edited_time); break
+          case 'url': val = this.rich(v, true).trim() || undefined; break
+          case 'file': {
+            const links = Array.isArray(v) ? v.map((seg: any[]) => { const a = (seg?.[1] ?? []).find((m: any[]) => m?.[0] === 'a')?.[1]; return publicUrl(a) ? a : seg?.[0] }).filter(Boolean) : []
+            val = links.join(', ') || undefined
+            break
+          }
+          case 'relation': val = Array.isArray(v) ? v.flatMap((seg: any[]) => (seg?.[1] ?? []).filter((m: any[]) => m?.[0] === 'p').map((m: any[]) => this.pageTitle(m[1]))).join(', ') || undefined : undefined; break
+          default: val = this.rich(v, true).trim() || undefined
+        }
+        if (val !== undefined && val !== '') values[prop.id] = val
+      }
+      if (coverKey) {
+        const v = p[coverKey]
+        const u = Array.isArray(v) ? v.map((seg: any[]) => (seg?.[1] ?? []).find((m: any[]) => m?.[0] === 'a')?.[1] ?? seg?.[0]).find(publicUrl) : undefined
+        if (u && !rf.page_cover) rf.page_cover = u
+      }
+      const item: ImportRow = {
+        notionId: row.id,
+        title: this.rich(p.title, true).trim(),
+        icon: isEmoji(rf.page_icon) ? rf.page_icon : '',
+        props: values,
+        blocks: this.blocksOf(this.children(row), page),
+        ...this.pageLook(rf)
+      }
+      page.rows!.push(item)
+      this.stats.rows++
     }
     if (!rows.length) this.warnings.push(`“${name}”: no rows are stored on this computer yet. Open it once in the Notion app, then import again to bring its rows.`)
     if (!page.blocks.length) page.blocks = [{ id: bid(), type: 'p', text: '' }]
@@ -343,7 +665,7 @@ export function importNotionExport(filePath: string): ImportResult {
   } else if (/\.zip$/i.test(filePath)) addZip(fs.readFileSync(filePath))
   else files.set(path.basename(filePath), fs.readFileSync(filePath))
 
-  const stats = { pages: 0, blocks: 0, todos: 0, tasks: 0, tables: 0, skipped: 0, missing: 0 }
+  const stats = { pages: 0, blocks: 0, todos: 0, tasks: 0, tables: 0, databases: 0, rows: 0, skipped: 0, missing: 0 }
   const docs = [...files.keys()].filter((k) => /\.(md|csv)$/i.test(k) && !/_all\.csv$/i.test(k) || /_all\.csv$/i.test(k) && !files.has(k.replace(/_all\.csv$/i, '.csv')))
   const byPath = new Map<string, ImportPage>()
   const roots: ImportPage[] = []

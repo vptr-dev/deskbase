@@ -4,7 +4,7 @@ import type { AppData, Block, Page, Task, Widget, WidgetType } from '../types'
 import { formatValue, valueNow, valueSeries } from '../lib/values'
 import { habitDayTarget, habitDoneOn, habitDueToday } from '../lib/habits'
 import { DAYS_SHORT, addDays, dayKey, diffDays, friendlyDay, parseDay, today, weekStartOf } from '../lib/util'
-import { countRows, rowsOf } from '../lib/db'
+import { countRows, datedRows, rowsOf, setRowDone, type DatedRow } from '../lib/db'
 import { BarChart, Checkbox, Progress, Ring, Sparkline, useDoc } from './ui'
 import { Glyph, Icon } from './Icon'
 import { QuickAdd, TaskRow, useTaskDrawer } from './TaskItems'
@@ -18,6 +18,10 @@ import { nextDate } from './Countdowns'
 import { DatabaseView } from '../pages/DatabasePage'
 import { DashboardGrid } from '../pages/DashboardPage'
 import { pickImageData } from '../lib/image'
+import { api } from '../lib/api'
+import { Marks, findBlock } from './Blocks'
+import { plainText } from '../lib/links'
+import { CalculatorWidget, NetworkWidget, RecentWidget } from './PanelKit3'
 
 /** Partial widget used by both dashboards and desktop widgets. */
 export type AnyWidget = Pick<Widget, 'id' | 'type' | 'config' | 'title'>
@@ -49,6 +53,7 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'sections', name: 'Progress by section', icon: 'listChecks', desc: 'How far along each toggle or heading is, like subjects to revise', w: 3, h: 4, group: 'Track', config: { next: 3 } },
   { type: 'table', name: 'Table', icon: 'table', desc: 'A table from a page, with a total and the next due dates', w: 4, h: 3, group: 'Track', config: { table: 0 } },
   { type: 'system', name: 'System', icon: 'cpu', desc: 'CPU, memory and disk as rings, bars, numbers or a graph', w: 2, h: 3, group: 'Track', config: {} },
+  { type: 'network', name: 'Network', icon: 'wifi', desc: 'Download and upload speed with a live graph', w: 3, h: 2, group: 'Track', config: { graph: true } },
   { type: 'battery', name: 'Battery', icon: 'battery', desc: 'Charge left and time remaining', w: 2, h: 2, group: 'Track', config: { look: 'ring' } },
   { type: 'dashboard', name: 'Dashboard', icon: 'layout-dashboard', desc: 'A whole dashboard page in one panel', w: 8, h: 6, group: 'More', config: {} },
   { type: 'page', name: 'Shortcut', icon: 'link', desc: 'Opens one of your pages', w: 2, h: 1, group: 'More', config: {} },
@@ -58,6 +63,8 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'quote', name: 'Words', icon: 'quote', desc: 'A line to keep in mind, from your own list or built in', w: 4, h: 2, group: 'More', config: { every: 'day', look: 'plain' } },
   { type: 'weather', name: 'Weather', icon: 'cloudSun', desc: 'Now and the next days where you are', w: 5, h: 3, group: 'More', config: { days: 4 } },
   { type: 'daylight', name: 'Daylight', icon: 'sunrise', desc: "The sun's path today, with sunrise and sunset", w: 3, h: 2, group: 'More', config: {} },
+  { type: 'calculator', name: 'Calculator', icon: 'calculator', desc: 'Sums as you type, with keys and your last answers', w: 3, h: 4, group: 'More', config: { keys: true } },
+  { type: 'recent', name: 'Recent pages', icon: 'history', desc: 'Favorites and the pages you opened last', w: 3, h: 3, group: 'Work', config: { count: 8, favorites: true } },
   { type: 'text', name: 'Heading', icon: 'type', desc: 'A title, rule or reminder in big type', w: 4, h: 2, group: 'More', config: { text: '', size: 28, weight: 650 } },
   { type: 'image', name: 'Picture', icon: 'image', desc: 'A reference image or photo', w: 3, h: 3, group: 'More', config: { src: null, fit: 'cover' } }
 ]
@@ -210,12 +217,22 @@ function TasksWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
       : all.filter((x) => (!x.done && x.due && x.due <= t) || (x.done && x.doneAt && dayKey(new Date(x.doneAt)) === t))
     return pick.sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? '9').localeCompare(b.due ?? '9') || b.priority - a.priority)
   }, [tasks, pages, cfg.filter, cfg.pageId, t])
+  // Rows of databases with a date and a checkbox or status count as tasks too.
+  const rows = useMemo(() => {
+    if (cfg.pageId) return []
+    const f = cfg.filter ?? 'today'
+    return datedRows(pages).filter((r) => r.doable && (f === 'overdue' ? !r.done && r.due < t
+      : f === 'upcoming' ? !r.done && r.due > t && r.due <= addDays(t, 7)
+      : f === 'all' ? !r.done
+      : r.due === t || (!r.done && r.due < t))).sort((a, b) => Number(a.done) - Number(b.done) || a.due.localeCompare(b.due))
+  }, [pages, cfg.filter, cfg.pageId, t])
   const listPage = cfg.pageId && pages[cfg.pageId] ? cfg.pageId : Object.values(pages).find((p) => !p.deletedAt && p.type === 'tasks')?.id
   return (
     <div className="w-tasks">
       {cfg.quickAdd !== false && listPage && <QuickAdd pageId={listPage} defaults={cfg.filter === 'today' || !cfg.filter ? { due: t } : {}} placeholder="Add a task" />}
       <div className="w-scroll">
-        {list.length === 0 ? <div className="muted small pad">Nothing here.</div> : list.map((x) => <TaskRow key={x.id} task={x} onOpen={openTask} />)}
+        {list.length === 0 && rows.length === 0 ? <div className="muted small pad">Nothing here.</div> : list.map((x) => <TaskRow key={x.id} task={x} onOpen={openTask} />)}
+        {rows.map((r) => <RowTask key={r.id} r={r} />)}
       </div>
       {drawer}
     </div>
@@ -389,6 +406,9 @@ export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfi
     case 'search': return <SearchWidget cfg={c} />
     case 'quote': return <QuoteWidget cfg={c} setConfig={setConfig} />
     case 'battery': return <BatteryWidget cfg={c} />
+    case 'network': return <NetworkWidget cfg={c} />
+    case 'calculator': return <CalculatorWidget cfg={c} setConfig={setConfig} />
+    case 'recent': return <RecentWidget cfg={c} />
     case 'timer': return <TimerWidget cfg={c} setConfig={setConfig} />
     case 'sections': return <SectionsPanel cfg={c} />
     case 'table': return <TablePanel cfg={c} />
@@ -414,7 +434,7 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
   switch (w.type) {
     case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': case 'image': case 'text': case 'dashboard': case 'week':
     case 'calendar': case 'weather': case 'daylight': case 'system': case 'timer':
-    case 'worldclock': case 'stopwatch': case 'timeleft': case 'moon': case 'search': case 'quote': case 'battery': case 'launcher': return ''
+    case 'worldclock': case 'stopwatch': case 'timeleft': case 'moon': case 'search': case 'quote': case 'battery': case 'launcher': case 'network': case 'calculator': return ''
     case 'sections': return w.config.section || d.pages[w.config.pageId]?.title || 'Progress'
     case 'table': return d.pages[w.config.pageId]?.title || 'Table'
     case 'chart': return w.config.source === 'value' ? d.values[w.config.valueId]?.name ?? 'Chart' : w.config.source === 'focus' ? 'Focus minutes' : w.config.source === 'habits' ? 'Habits done' : w.config.source === 'metric' ? d.metrics[w.config.metricId]?.name ?? 'Tracker' : 'Tasks done'
@@ -429,16 +449,58 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
 
 // ---------- page widgets ----------
 const setBlock = (pageId: string, blockId: string, fn: (b: Block) => void): void =>
-  updatePage(pageId, (p) => { const b = p.blocks.find((x) => x.id === blockId); if (b) fn(b) }, 'wblock:' + blockId)
+  updatePage(pageId, (p) => { const b = findBlock(p.blocks, blockId); if (b) fn(b) }, 'wblock:' + blockId)
 
-/** Blocks under a heading (up to the next heading of the same or higher level) or inside a toggle. */
-export function sectionBlocks(blocks: Block[], section?: string | null): Block[] {
-  if (!section) return blocks
-  const lvl = (b: Block): number => (b.type === 'h1' ? 1 : b.type === 'h2' ? 2 : b.type === 'h3' ? 3 : 0)
+/** Heading level of a block, toggle headings included (0 when it is not a heading). */
+export const headingLevel = (b: Block): number => {
+  const m = /^(?:toggle-)?h([123])$/.exec(b.type)
+  return m ? Number(m[1]) : 0
+}
+
+const TAB_HEAD = 'tabhead:'
+
+/**
+ * Every block in reading order with columns and tabs opened up, so panels see what the page shows.
+ * A tab's name reads as a heading in front of its blocks.
+ */
+export function flatBlocks(blocks: Block[]): Block[] {
+  if (!blocks.some((b) => b.cols)) return blocks
   const out: Block[] = []
+  for (const b of blocks) {
+    if (b.type === 'columns') for (const c of b.cols ?? []) out.push(...flatBlocks(c))
+    else if (b.type === 'tabs') {
+      ;(b.cols ?? []).forEach((c, i) => {
+        out.push({ id: `${TAB_HEAD}${b.id}:${i}`, type: 'h2', text: b.labels?.[i] || `Tab ${i + 1}`, indent: b.indent })
+        out.push(...flatBlocks(c))
+      })
+    } else out.push(b)
+  }
+  return out
+}
+
+/** Names a panel can show a section of: headings, toggles and tabs. */
+export function sectionNames(blocks: Block[]): string[] {
+  return [...new Set(flatBlocks(blocks).filter((b) => (headingLevel(b) || b.type === 'toggle') && b.text.trim()).map((b) => plainText(b.text).trim()))]
+}
+
+/** Blocks under a heading (up to the next heading of the same or higher level), inside a toggle, or in a tab. */
+export function sectionBlocks(all: Block[], section?: string | null): Block[] {
+  if (!section) return flatBlocks(all)
+  const out: Block[] = []
+  // A tab with that name: exactly its blocks.
+  const tabs = (list: Block[]): void => {
+    for (const b of list) {
+      if (b.type === 'tabs') (b.cols ?? []).forEach((c, i) => { if (plainText(b.labels?.[i] || `Tab ${i + 1}`).trim() === section) out.push(...flatBlocks(c)); else tabs(c) })
+      else if (b.type === 'columns') (b.cols ?? []).forEach(tabs)
+    }
+  }
+  tabs(all)
+  const blocks = flatBlocks(all)
+  const lvl = headingLevel
   // Every heading or toggle with that name counts (Notion pages often repeat a heading).
   blocks.forEach((h, i) => {
-    if (!((lvl(h) || h.type === 'toggle') && h.text.trim() === section)) return
+    if (h.id.startsWith(TAB_HEAD)) return
+    if (!((lvl(h) || h.type === 'toggle') && plainText(h.text).trim() === section)) return
     const ind = h.indent ?? 0
     for (let j = i + 1; j < blocks.length; j++) {
       const b = blocks[j]
@@ -459,7 +521,7 @@ const dayAt = (text: string): number => {
 /** Only today's part: a heading or a paragraph that starts with today's weekday, and what follows it. */
 export function todayBlocks(blocks: Block[], date = new Date()): Block[] {
   const want = date.getDay()
-  const lvl = (b: Block): number => (b.type === 'h1' ? 1 : b.type === 'h2' ? 2 : b.type === 'h3' ? 3 : 0)
+  const lvl = headingLevel
   const i = blocks.findIndex((b) => b.type !== 'todo' && dayAt(b.text) === want)
   if (i < 0) return []
   const start = blocks[i]
@@ -488,31 +550,41 @@ function SectionsPanel({ cfg }: { cfg: Record<string, any> }): JSX.Element {
 function TablePanel({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const page = useData((d) => (cfg.pageId ? d.pages[cfg.pageId] : undefined))
   if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
-  return <TableWidget cfg={cfg} block={page.blocks.filter((b) => b.type === 'table')[Number(cfg.table) || 0]} />
+  return <TableWidget cfg={cfg} block={flatBlocks(page.blocks).filter((b) => b.type === 'table')[Number(cfg.table) || 0]} />
 }
 
 
 function MiniBlock({ b, pageId, n }: { b: Block; pageId: string; n: number }): JSX.Element | null {
   const ind = { paddingLeft: (b.indent ?? 0) * 16 }
   switch (b.type) {
-    case 'h1': return <div className="mb-h1" style={ind}>{b.text}</div>
-    case 'h2': return <div className="mb-h2" style={ind}>{b.text}</div>
-    case 'h3': return <div className="mb-h3" style={ind}>{b.text}</div>
+    case 'h1': return <div className="mb-h1" style={ind}><Marks text={b.text} /></div>
+    case 'h2': return <div className="mb-h2" style={ind}><Marks text={b.text} /></div>
+    case 'h3': return <div className="mb-h3" style={ind}><Marks text={b.text} /></div>
+    case 'toggle-h1': case 'toggle-h2': case 'toggle-h3': return (
+      <button className={`mb-toggle mb-${b.type.slice(-2)}`} style={ind} onClick={() => setBlock(pageId, b.id, (x) => { x.open = !x.open })}>
+        <Icon name="chevron" size={12} className={b.open ? 'open' : ''} /><Marks text={b.text} />
+      </button>
+    )
     case 'todo': return (
       <label className={`mb-todo ${b.checked ? 'done' : ''}`} style={ind}>
         <Checkbox checked={!!b.checked} size={16} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
-        <span>{b.text}</span>
+        <span><Marks text={b.text} /></span>
       </label>
     )
-    case 'bullet': return <div className="mb-li" style={ind}><span className="mb-dot" />{b.text}</div>
-    case 'number': return <div className="mb-li" style={ind}><span className="mb-num">{n}.</span>{b.text}</div>
-    case 'quote': return <div className="mb-quote" style={ind}>{b.text}</div>
-    case 'callout': return <div className="mb-callout" style={ind}><Icon name="lightbulb" size={14} />{b.text}</div>
+    case 'bullet': return <div className="mb-li" style={ind}><span className="mb-dot" /><span><Marks text={b.text} /></span></div>
+    case 'number': return <div className="mb-li" style={ind}><span className="mb-num">{n}.</span><span><Marks text={b.text} /></span></div>
+    case 'quote': return <div className="mb-quote" style={ind}><Marks text={b.text} /></div>
+    case 'callout': return <div className="mb-callout" style={ind}><Glyph value={b.icon || 'lightbulb'} size={14} /><span><Marks text={b.text} /></span></div>
+    case 'equation': return <div className="mb-code" style={ind}>{b.text}</div>
+    case 'image': return b.url ? <img className="mb-img" style={ind} src={b.url} alt={b.text || ''} /> : null
+    case 'bookmark': case 'embed': return b.url ? <button className="mb-p mb-link" style={ind} onClick={() => api.launch(b.url!)}>{b.meta?.title || plainText(b.text) || b.url.replace(/^https?:\/\/(www\.)?/, '')}</button> : null
+    case 'link': case 'database': return b.ref ? <button className="mb-p mb-link" style={ind} onClick={() => openPage(b.ref!)}>{b.text || 'Open page'}</button> : null
+    case 'toc': return null
     case 'code': return <pre className="mb-code" style={ind}>{b.text}</pre>
     case 'divider': return <hr className="mb-hr" />
     case 'toggle': return (
       <button className="mb-toggle" style={ind} onClick={() => setBlock(pageId, b.id, (x) => { x.open = !x.open })}>
-        <Icon name="chevron" size={12} className={b.open ? 'open' : ''} />{b.text}
+        <Icon name="chevron" size={12} className={b.open ? 'open' : ''} /><Marks text={b.text} />
       </button>
     )
     case 'table': return (
@@ -520,7 +592,7 @@ function MiniBlock({ b, pageId, n }: { b: Block; pageId: string; n: number }): J
         <table><tbody>{(b.rows ?? []).slice(0, 30).map((r, i) => <tr key={i} className={i === 0 ? 'head' : ''}>{r.map((c, j) => <td key={j}>{c}</td>)}</tr>)}</tbody></table>
       </div>
     )
-    default: return b.text ? <div className="mb-p" style={ind}>{b.text}</div> : <div className="mb-gap" />
+    default: return b.text ? <div className="mb-p" style={ind}><Marks text={b.text} /></div> : <div className="mb-gap" />
   }
 }
 
@@ -532,7 +604,7 @@ function visibleBlocks(blocks: Block[]): Block[] {
     const ind = b.indent ?? 0
     if (hideBelow !== null) { if (ind > hideBelow) continue; hideBelow = null }
     out.push(b)
-    if (b.type === 'toggle' && !b.open) hideBelow = ind
+    if ((b.type === 'toggle' || b.type.startsWith('toggle-h')) && !b.open) hideBelow = ind
   }
   return out
 }
@@ -578,7 +650,7 @@ function ChecklistWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
         {list.slice(0, 300).map(({ b, pageId }) => (
           <label key={b.id} className={`mb-todo ${b.checked ? 'done' : ''}`}>
             <Checkbox checked={!!b.checked} size={16} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
-            <span>{b.text}</span>
+            <span><Marks text={b.text} /></span>
           </label>
         ))}
         {list.length === 0 && <div className="w-missing"><Icon name="circle-check" size={22} /><span>All done</span></div>}
@@ -613,6 +685,17 @@ function TextWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   )
 }
 
+/** A database row in a task list: tick it off, or open it. */
+function RowTask({ r }: { r: DatedRow }): JSX.Element {
+  return (
+    <div className={`row-task ${r.done ? 'done' : ''}`}>
+      <Checkbox checked={r.done} size={17} onChange={(v) => setRowDone(r, v)} />
+      <button className="row-task-title ellipsis" onClick={() => openPage(r.id)}>{r.title}</button>
+      <span className="row-task-db ellipsis">{r.db}</span>
+    </div>
+  )
+}
+
 function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const tasks = useData((d) => d.tasks)
   const pages = useData((d) => d.pages)
@@ -621,6 +704,8 @@ function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const days = Math.max(1, Math.min(14, Number(cfg.days) || 5))
   const live = (x: Task): boolean => !x.archived && !x.done && !!pages[x.pageId] && !pages[x.pageId].deletedAt
   const overdue = Object.values(tasks).filter((x) => live(x) && x.due && x.due < t)
+  const dated = useMemo(() => datedRows(pages).filter((r) => !r.done), [pages])
+  const lateRows = dated.filter((r) => r.doable && r.due < t)
   const keys = Array.from({ length: days }, (_, i) => addDays(t, i))
   const fmtTime = (s?: string | null): string => {
     if (!s) return ''
@@ -628,6 +713,12 @@ function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
     const [h, m] = s.split(':').map(Number)
     return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
   }
+  const rowItem = (r: DatedRow): JSX.Element => (
+    <button key={r.id} className="ag-row" onClick={() => openPage(r.id)}>
+      <span className="ag-time" />
+      <span className="ellipsis">{r.title}</span>
+    </button>
+  )
   const row = (x: Task): JSX.Element => (
     <button key={x.id} className="ag-row" onClick={() => openPage(x.pageId)}>
       <span className="ag-time">{fmtTime(x.time)}</span>
@@ -636,13 +727,14 @@ function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   )
   return (
     <div className="w-scroll w-agenda">
-      {overdue.length > 0 && <div className="ag-day"><div className="ag-head danger">Overdue · {overdue.length}</div>{overdue.slice(0, 5).map(row)}</div>}
+      {overdue.length + lateRows.length > 0 && <div className="ag-day"><div className="ag-head danger">Overdue · {overdue.length + lateRows.length}</div>{overdue.slice(0, 5).map(row)}{lateRows.slice(0, Math.max(0, 5 - overdue.length)).map(rowItem)}</div>}
       {keys.map((k) => {
         const list = Object.values(tasks).filter((x) => live(x) && x.due === k).sort((a, b) => (a.time ?? '99').localeCompare(b.time ?? '99'))
+        const rs = dated.filter((r) => r.due === k)
         return (
           <div key={k} className="ag-day">
             <div className={`ag-head ${k === t ? 'today' : ''}`}>{k === t ? 'Today' : friendlyDay(k)}</div>
-            {list.length ? list.map(row) : <div className="ag-empty">Nothing planned</div>}
+            {list.length || rs.length ? <>{list.map(row)}{rs.map(rowItem)}</> : <div className="ag-empty">Nothing planned</div>}
           </div>
         )
       })}

@@ -502,8 +502,9 @@ export function startDesktop(): () => void {
     if (!o) return
     open.delete(id)
     try { o.root.unmount() } catch { /* ignore */ }
-    // Closed from outside (for example Alt+F4): treat it as hidden.
-    if (findDesk(id) && !findDesk(id)!.hidden) patchDesk(id, (x) => { x.hidden = true })
+    // Closed from outside: panels belong to the desktop, so a restart of Explorer closes them too.
+    // They come back on their own a moment later.
+    setTimeout(() => { reconcile() }, 2500)
   })
   const offCmd = api.desk.onCommand((id, cmd) => runCommand(id, cmd))
   const onUnload = (): void => { for (const id of [...open.keys()]) closeWidget(id) }

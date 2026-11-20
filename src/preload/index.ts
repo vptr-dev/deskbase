@@ -36,6 +36,7 @@ const api = {
     }
   },
   sysStats: (drive?: string) => ipcRenderer.invoke('sys:stats', drive),
+  netStats: () => ipcRenderer.invoke('sys:net'),
   places: (q: string) => ipcRenderer.invoke('net:places', q),
   weather: (lat: number, lon: number, f: boolean) => ipcRenderer.invoke('net:weather', lat, lon, f),
   desk: {

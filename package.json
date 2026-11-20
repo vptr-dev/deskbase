@@ -2,7 +2,7 @@
   "name": "deskbase",
   "productName": "Deskbase",
   "version": "0.11.1",
-  "description": "Your desktop, organized: pages, tasks and notes as glass panels on your screen.",
+  "description": "Deskbase",
   "main": "./out/main/index.js",
   "author": "vptr-dev",
   "license": "MIT",

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Desktop panels are now part of the desktop, like Rainmeter skins: no taskbar buttons, not in Alt+Tab, left alone by window tools such as Snowhush, and still there after Show desktop. If Explorer restarts they come back on their own. Panels that had been hidden by closing them from the taskbar are shown again.
+- The app is called Deskbase everywhere in Windows.
+- Panels that lost their page after a Notion page was imported again find it again, and importing a page that is already here updates it in place instead of adding a copy (extra copies from earlier imports go to the trash).
+- Tabs block, like Notion's: each tab holds its own blocks. Add, rename (double click), reorder and delete tabs; unwrap them into headings.
+- Inline databases: a database right inside a page, with its views, filters and New button.
+- Callouts have their own icon. Columns keep their widths. Columns and tabs can sit inside each other.
+- *Italic*, ~~strike-through~~ and [named links](https://example.com) show formatted, as well as **bold** and `code`.
+- Covers can be a picture from a link or from your computer.
+- Notion import keeps far more: tabs, columns with their widths, toggle headings, callout icons, text and background colors, bold, italic, strike-through, code and links, page mentions and dates as links, equations, tables of contents, bookmarks, embeds and videos, web images, links to pages, covers and full width. Notion databases come in as real databases with their properties, options and colors, views (table, board, gallery, list, calendar) with their filters, sorting, grouping, hidden properties and column widths, and every row with its own content.
+- Database rows with a date show up in the Tasks and Agenda panels; tick them off from there when the database has a checkbox or a Done status.
+- Panels see inside columns and tabs: a Page, Checklist, Progress by section or Table panel can use a tab's name or a heading inside columns.
+- New panels: Network (download and upload speed with a live graph), Calculator and Recent pages.
+- Select options are easier to read on glass.
+
 ## 0.11.1 — 2026-11-20
 
 - Page icons are optional: a page without one shows only its title, with Add icon and Add cover appearing while you point at the top of the page.

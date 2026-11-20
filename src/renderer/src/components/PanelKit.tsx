@@ -6,6 +6,8 @@ import { DAYS_SHORT, MONTHS_LONG, addDays, parseDay, today, weekStartOf } from '
 import { playChime } from '../lib/sound'
 import { Checkbox } from './ui'
 import { Icon } from './Icon'
+import { Marks, findBlock } from './Blocks'
+import { plainText } from '../lib/links'
 
 type Cfg = Record<string, any>
 type SetConfig = (key: string, value: any) => void
@@ -399,9 +401,9 @@ export function TimerWidget({ cfg, setConfig }: { cfg: Cfg; setConfig: SetConfig
 
 // ---------- sections: progress per toggle or heading ----------
 const setBlock = (pageId: string, blockId: string, fn: (b: Block) => void): void =>
-  updatePage(pageId, (p) => { const b = p.blocks.find((x) => x.id === blockId); if (b) fn(b) }, 'pkblock:' + blockId)
+  updatePage(pageId, (p) => { const b = findBlock(p.blocks, blockId); if (b) fn(b) }, 'pkblock:' + blockId)
 
-const level = (b: Block): number => (b.type === 'h1' ? 1 : b.type === 'h2' ? 2 : b.type === 'h3' ? 3 : 0)
+const level = (b: Block): number => { const m = /^(?:toggle-)?h([123])$/.exec(b.type); return m ? Number(m[1]) : 0 }
 
 /** Splits blocks into groups: toggles at the outermost level, or else headings of the top level used. */
 export function groupsOf(blocks: Block[]): { title: string; todos: Block[] }[] {
@@ -416,7 +418,7 @@ export function groupsOf(blocks: Block[]): { title: string; todos: Block[] }[] {
   const out: { title: string; todos: Block[] }[] = []
   let cur: { title: string; todos: Block[] } | null = null
   for (const b of blocks) {
-    if (isStart(b)) { cur = { title: b.text.trim(), todos: [] }; out.push(cur); continue }
+    if (isStart(b)) { cur = { title: plainText(b.text).trim(), todos: [] }; out.push(cur); continue }
     if (useToggles && cur && (b.indent ?? 0) <= ind) { cur = null; continue }
     if (cur && b.type === 'todo' && b.text.trim()) cur.todos.push(b)
   }
@@ -449,7 +451,7 @@ export function SectionsWidget({ cfg, blocks, pageId }: { cfg: Cfg; blocks: Bloc
                 {g.todos.filter((b) => !b.checked).slice(0, nextN).map((b) => (
                   <label key={b.id} className="mb-todo">
                     <Checkbox checked={false} size={15} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
-                    <span>{b.text}</span>
+                    <span><Marks text={b.text} /></span>
                   </label>
                 ))}
                 {g.todos.every((b) => b.checked) && <span className="muted small">All done</span>}

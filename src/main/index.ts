@@ -7,7 +7,7 @@ import { checkForUpdates, getStatus, initUpdater, installUpdate } from './update
 import { linkInfo } from './linkinfo'
 import { registerAi } from './ai'
 import { importNotionExport, importNotionPages, listNotionPages, notionDbPath } from './notion'
-import { findPlace, sysStats, weather } from './sysinfo'
+import { findPlace, netStats, sysStats, weather } from './sysinfo'
 import { attachDesktopHost, closeAllWidgets, deskBounds, deskClose, deskDrag, deskDragEnd, deskEdit, deskFocus, deskMenu, deskPrepare, deskShow, deskUpdate, listDisplays, type DeskSpec } from './desktop'
 
 type Material = 'mica' | 'acrylic' | 'none'
@@ -316,6 +316,7 @@ function registerIpc(): void {
     return app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin
   })
   ipcMain.handle('sys:stats', (_e, drive?: string) => sysStats(drive))
+  ipcMain.handle('sys:net', () => netStats())
   ipcMain.handle('net:places', (_e, q: string) => findPlace(String(q ?? '')))
   ipcMain.handle('net:weather', (_e, lat: number, lon: number, f: boolean) => weather(Number(lat), Number(lon), !!f))
   ipcMain.handle('app:setShell', async (_e, p: { closeToTray?: boolean; quickAddHotkey?: boolean }) => {

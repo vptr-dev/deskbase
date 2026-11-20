@@ -50,6 +50,7 @@ export interface Bridge {
     onMax(cb: (max: boolean) => void): () => void
   }
   sysStats(drive?: string): Promise<SysStats>
+  netStats(): Promise<NetStats>
   places(q: string): Promise<Place[]>
   weather(lat: number, lon: number, fahrenheit: boolean): Promise<any>
   desk: {
@@ -201,6 +202,7 @@ const browserBridge: Bridge = {
   linkInfo: async (u) => { try { const h = new URL(u).hostname; return { site: h.replace(/^www\./, ''), icon: `https://${h}/favicon.ico` } } catch { return {} } },
   win: { control: async () => {}, isMax: async () => false, onMax: () => () => {} },
   // Preview stand-ins: fixed numbers, no network.
+  netStats: async () => { const t = Date.now() / 1000; return { supported: true, down: 2.4e6 + Math.sin(t) * 1.6e6, up: 1.8e5 + Math.cos(t / 2) * 1.2e5, rx: 8.2e9, tx: 1.1e9, ip: '192.168.1.24', online: true } },
   sysStats: async () => ({ cpu: 29, ram: 61, ramUsed: 9.8e9, ramTotal: 16e9, disk: 63, diskFree: 180e9, diskTotal: 480e9, uptime: 36000 }),
   places: async (q: string) => (q.trim() ? [{ name: q.trim(), region: '', country: 'Preview', lat: 52.33, lon: -0.18 }] : []),
   weather: async () => {
@@ -231,7 +233,7 @@ const browserBridge: Bridge = {
   notion: {
     available: async () => false,
     list: async () => [],
-    importPages: async () => ({ pages: [], stats: { pages: 0, blocks: 0, todos: 0, tasks: 0, tables: 0, skipped: 0, missing: 0 }, warnings: ['Notion import works in the desktop app.'] }),
+    importPages: async () => ({ pages: [], stats: { pages: 0, blocks: 0, todos: 0, tasks: 0, tables: 0, databases: 0, rows: 0, skipped: 0, missing: 0 }, warnings: ['Notion import works in the desktop app.'] }),
     importExport: async () => null
   },
   updater: {
@@ -248,6 +250,7 @@ export const isDesktop = Boolean((window as any).api)
 export interface Rect { x: number; y: number; width: number; height: number }
 export interface DisplayInfo { id: number; label: string; primary: boolean; width: number; height: number; scale: number; bounds: Rect; workArea: Rect }
 export interface DeskSpec { id: string; x: number; y: number; w: number; h: number; displayId?: number | null; material: 'glass' | 'blur' | 'acrylic' | 'tint' | 'clear'; layer: 'desktop' | 'normal' | 'top'; radius: number; clickThrough: boolean; title: string; group?: string | null }
+export interface NetStats { supported: boolean; down: number; up: number; rx: number; tx: number; ip: string; online: boolean }
 export interface SysStats { cpu: number; ram: number; ramUsed: number; ramTotal: number; disk: number; diskFree: number; diskTotal: number; uptime: number }
 export interface Place { name: string; region: string; country: string; lat: number; lon: number }
 export interface DeskMenuItem { id: string; label: string; checked?: boolean; type?: 'separator'; role?: 'cut' | 'copy' | 'paste'; submenu?: { id: string; label: string; checked?: boolean }[] }

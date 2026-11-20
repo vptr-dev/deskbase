@@ -28,6 +28,7 @@ export function blocksToText(blocks: Block[]): string {
       case 'equation': lines.push('$$' + b.text + '$$'); break
       case 'table': for (const r of b.rows ?? []) lines.push('| ' + r.join(' | ') + ' |'); break
       case 'columns': for (const c of b.cols ?? []) lines.push(blocksToText(c)); break
+      case 'tabs': (b.cols ?? []).forEach((c, i) => lines.push('### ' + (b.labels?.[i] || `Tab ${i + 1}`), blocksToText(c))); break
       case 'bookmark': case 'embed': case 'image': lines.push(b.url ? (b.text ? `${b.text} ${b.url}` : b.url) : ''); break
       default: lines.push(pad + b.text)
     }

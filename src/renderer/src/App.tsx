@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { act, boot, duplicatePage, flushSave, getData, isView, onConfetti, openPage, openView, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
 import { api } from './lib/api'
-import { COVERS, typeInfo } from './lib/defaults'
+import { COVERS, coverStyle, typeInfo } from './lib/defaults'
+import { pickImage } from './lib/image'
 import { exportPageMarkdown } from './lib/exporters'
 import { MovePageDialog } from './components/MovePage'
 import { habitWeek } from './lib/habits'
@@ -34,7 +35,7 @@ import { applyCustomCss, applyLook } from './lib/look'
 import { addDeskSet, addDesktopWidget, addSpace, runCommand, startDesktop, switchSpace } from './lib/desktop'
 import { WindowControls } from './components/WindowControls'
 import { renameLinks } from './lib/links'
-import { Backlinks } from './components/Blocks'
+import { Backlinks, imageFromFile } from './components/Blocks'
 import { TabStrip, StartView } from './components/Tabs'
 import { closeTab, cycleTab, goBack, goForward, newTab, openFromClick, reopenTab, restoreTabs, useTabs } from './lib/tabs'
 
@@ -100,15 +101,34 @@ function CoverPicker({ value, onPick }: { value?: string | null; onPick: (c: str
   return (
     <div className="cover-grid">
       {COVERS.map((c) => <button key={c} title={c} className={`cover-swatch ${value === c ? 'active' : ''}`} style={{ background: `var(--cover-${c})` }} onClick={() => onPick(c)} />)}
+      <CoverLink onPick={onPick} />
+    </div>
+  )
+}
+
+/** A cover from a web address or a picture on this computer. */
+function CoverLink({ onPick }: { onPick: (c: string) => void }): JSX.Element {
+  const [v, setV] = useState('')
+  const use = (): void => { const t = v.trim(); if (/^https?:\/\/\S+$/i.test(t)) onPick(t) }
+  const upload = async (): Promise<void> => {
+    const f = await pickImage()
+    if (f) onPick(await imageFromFile(f))
+  }
+  return (
+    <div className="cover-link">
+      <input className="input input-sm" placeholder="Paste a picture's link" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') use() }} />
+      <Button small onClick={use}>Use</Button>
+      <Button small icon="imageUp" onClick={() => { void upload() }}>Upload</Button>
     </div>
   )
 }
 
 function PageCover({ page }: { page: Page }): JSX.Element | null {
   const [el, setEl] = useState<HTMLElement | null>(null)
-  if (!page.cover || !COVERS.includes(page.cover)) return null
+  const style = coverStyle(page.cover)
+  if (!style) return null
   return (
-    <div className="page-cover" style={{ background: `var(--cover-${page.cover})` }}>
+    <div className="page-cover" style={style}>
       {!page.locked && (
         <div className="page-cover-actions">
           <Button small onClick={(e) => setEl(e.currentTarget as HTMLElement)}>Change cover</Button>

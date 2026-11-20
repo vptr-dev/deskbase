@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 11
+export const CURRENT_SCHEMA = 12
 
 type Raw = Record<string, any>
 
@@ -196,6 +196,16 @@ migrations[9] = (d) => {
 // 10 → 11: text tone and soft letter edges in the look; blocks may have a background color.
 // Everything new is optional and filled in on load, so the data itself stays as it is.
 migrations[10] = (d) => d
+
+// 11 → 12: tabs blocks (each tab holds its own blocks), callout icons, page covers and full width,
+// and new panel kinds, all optional and filled in on load. Panels used to be ordinary windows, and
+// closing one from the taskbar hid it; when every panel ended up hidden that way, they come back.
+migrations[11] = (d) => {
+  const desktop = d.desktop && typeof d.desktop === 'object' ? d.desktop : null
+  const widgets: Raw[] = Array.isArray(desktop?.widgets) ? desktop!.widgets : []
+  if (!widgets.length || !widgets.every((w) => w && w.hidden)) return d
+  return { ...d, desktop: { ...desktop, widgets: widgets.map((w) => ({ ...w, hidden: false })) } }
+}
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

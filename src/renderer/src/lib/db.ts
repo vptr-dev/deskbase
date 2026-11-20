@@ -241,3 +241,40 @@ export function countRows(dbId: string, filter?: DbFilter | null): number {
 }
 
 export const todayKey = today
+
+// ---------- dated rows in the agenda and task panels ----------
+export interface DatedRow { id: string; dbId: string; db: string; title: string; due: string; done: boolean; doable: boolean }
+
+/** Rows of databases with a date property, so a Notion calendar shows up with your tasks. */
+export function datedRows(pages: Record<string, Page>): DatedRow[] {
+  const out: DatedRow[] = []
+  const dbs = Object.values(pages).filter((p) => p.type === 'database' && !p.deletedAt && p.db?.props.some((x) => x.type === 'date'))
+  if (!dbs.length) return out
+  const byDb = new Map(dbs.map((p) => [p.id, p]))
+  for (const row of Object.values(pages)) {
+    const db = row.rowOf ? byDb.get(row.rowOf) : undefined
+    if (!db || row.deletedAt) continue
+    const s = db.db!
+    const date = s.props.find((x) => x.type === 'date')!
+    const due = row.props?.[date.id]
+    if (typeof due !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(due)) continue
+    const check = s.props.find((x) => x.type === 'checkbox')
+    const status = s.props.find((x) => x.type === 'status')
+    const doneOpt = status?.options?.find((o) => /done|complete|finished/i.test(o.name))
+    const done = check ? Boolean(row.props?.[check.id]) : status && doneOpt ? row.props?.[status.id] === doneOpt.id : false
+    out.push({ id: row.id, dbId: db.id, db: db.title || 'Database', title: row.title || 'Untitled', due: due.slice(0, 10), done, doable: Boolean(check || (status && doneOpt)) })
+  }
+  return out
+}
+
+/** Ticks a dated row off through its checkbox, or its status. */
+export function setRowDone(r: DatedRow, done: boolean): void {
+  const s = getData().pages[r.dbId]?.db
+  if (!s) return
+  const check = s.props.find((x) => x.type === 'checkbox')
+  if (check) { setRowProp(r.id, check.id, done || undefined); return }
+  const status = s.props.find((x) => x.type === 'status')
+  const doneOpt = status?.options?.find((o) => /done|complete|finished/i.test(o.name))
+  const first = status?.options?.find((o) => o.id !== doneOpt?.id)
+  if (status && doneOpt) setRowProp(r.id, status.id, done ? doneOpt.id : first?.id)
+}

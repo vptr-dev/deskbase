@@ -5,7 +5,7 @@ import {
   TITLE, PROP_TYPES, VIEW_TYPES, addOption, addProp, addRow, deleteProp, deleteRows, filterOps, formatNumber, hasOptions,
   newView, optionOf, propText, propTypeInfo, rowsOf, setRowProp, updateDb, updateView, viewRows
 } from '../lib/db'
-import { COLORS } from '../lib/defaults'
+import { COLORS, coverStyle } from '../lib/defaults'
 import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid, weekStartOf } from '../lib/util'
 import { Button, ColorDots, Empty, Menu, type MenuItem, Popover, Progress } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
@@ -243,7 +243,7 @@ function Card({ row, db, view, dbId, draggable }: { row: Page; db: DbSchema; vie
   const shown = db.props.filter((p) => (view.cardProps ?? db.props.map((x) => x.id)).includes(p.id) && p.id !== view.groupBy)
   return (
     <div className="db-card glass" draggable={draggable} onDragStart={(e) => e.dataTransfer.setData('text/row', row.id)} onClick={() => openPage(row.id)}>
-      {row.cover && <div className="db-card-cover" style={{ background: `var(--cover-${row.cover})` }} />}
+      {coverStyle(row.cover) && <div className="db-card-cover" style={coverStyle(row.cover)!} />}
       <div className="db-card-title">{row.icon && <><Glyph value={row.icon} size={14} /> </>}{row.title || <span className="muted">Untitled</span>}</div>
       {shown.map((p) => <PropView key={p.id} prop={p} v={row.props?.[p.id]} />)}
       <span hidden>{dbId}</span>

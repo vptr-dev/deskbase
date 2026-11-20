@@ -39,6 +39,8 @@ export type BlockType =
   | 'columns'
   | 'link'
   | 'synced'
+  | 'tabs'
+  | 'database'
 
 export interface Block {
   id: string
@@ -54,9 +56,15 @@ export interface Block {
   url?: string
   /** what a bookmark found at its address */
   meta?: { title?: string; desc?: string; site?: string; icon?: string }
-  /** columns: each column holds its own blocks */
+  /** columns and tabs: each column (or tab) holds its own blocks */
   cols?: Block[][]
-  /** link: the page id; synced: "pageId/blockId" of the original block */
+  /** tabs: the name of each tab */
+  labels?: string[]
+  /** columns: each column's share of the width (equal when missing) */
+  widths?: number[]
+  /** callout: its icon */
+  icon?: string
+  /** link and database: the page id; synced: "pageId/blockId" of the original block */
   ref?: string
   /** background color behind the block (a color name or #hex) */
   bg?: string
@@ -139,6 +147,7 @@ export type WidgetType =
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
   | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
   | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'launcher' | 'search' | 'quote' | 'battery'
+  | 'network' | 'calculator' | 'recent'
 export interface Widget {
   id: string
   type: WidgetType

@@ -4,12 +4,15 @@ import { act, getData, toast, updatePage, useApp, useData } from '../store'
 import { blocksToText, clearSelection, useSelection } from '../lib/selection'
 import type { Block, BlockType, Page } from '../types'
 import { uid } from '../lib/util'
+import { newPage } from '../lib/defaults'
+import { openFromClick } from '../lib/tabs'
 import { blockRefs as refs, focusBlock } from '../lib/links'
-import { AutoText, Checkbox, Menu, Popover, type MenuItem } from '../components/ui'
-import { Icon } from '../components/Icon'
+import { AutoText, Button, Checkbox, IconPickerButton, Menu, Popover, type MenuItem } from '../components/ui'
+import { Glyph, Icon } from '../components/Icon'
+import { DatabaseView } from './DatabasePage'
 import {
-  BookmarkBlock, ButtonBlock, EmbedBlock, EquationBlock, ImageBlock, InlineText, LinkBlock, SyncedBlock, TocBlock,
-  blockLink, imageFromFile, mentionOptions, parseBlockLink, type MentionState
+  BookmarkBlock, ButtonBlock, EmbedBlock, EquationBlock, ImageBlock, InlineText, LinkBlock, PagePicker, SyncedBlock, TocBlock,
+  blockLink, findBlock, imageFromFile, mentionOptions, parseBlockLink, type MentionState
 } from '../components/Blocks'
 
 interface SlashItem { type: BlockType; label: string; icon: string; hint: string; cols?: number }
@@ -33,6 +36,8 @@ const SLASH: SlashItem[] = [
   { type: 'table', label: 'Table', icon: 'table', hint: '' },
   { type: 'columns', label: '2 columns', icon: 'columns2', hint: '', cols: 2 },
   { type: 'columns', label: '3 columns', icon: 'columns', hint: '', cols: 3 },
+  { type: 'tabs', label: 'Tabs', icon: 'tabs', hint: '' },
+  { type: 'database', label: 'Database', icon: 'database', hint: '' },
   { type: 'toc', label: 'Table of contents', icon: 'toc', hint: '' },
   { type: 'link', label: 'Link to page', icon: 'pageLink', hint: '' },
   { type: 'bookmark', label: 'Bookmark', icon: 'bookmark', hint: '' },
@@ -52,7 +57,7 @@ const SHORTCUTS: [RegExp, BlockType][] = [
 const TEXT_TYPES = new Set<BlockType>(['p', 'h1', 'h2', 'h3', 'todo', 'bullet', 'number', 'quote', 'callout', 'code', 'toggle', 'toggle-h1', 'toggle-h2', 'toggle-h3'])
 const TOGGLES = new Set<BlockType>(['toggle', 'toggle-h1', 'toggle-h2', 'toggle-h3'])
 /** Blocks with no text line of their own: a new empty line follows them when they are added. */
-const OBJECT_TYPES = new Set<BlockType>(['divider', 'table', 'columns', 'toc', 'link', 'bookmark', 'image', 'embed'])
+const OBJECT_TYPES = new Set<BlockType>(['divider', 'table', 'columns', 'tabs', 'database', 'toc', 'link', 'bookmark', 'image', 'embed'])
 
 const DIVIDERS = [['line', 'Line'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['thick', 'Thick'], ['fade', 'Fade'], ['space', 'Space only']] as const
 
@@ -89,10 +94,10 @@ function cloneBlock(b: Block): Block {
   return c
 }
 
-/** Where a block list lives: the page itself, or one column of a columns block. */
+/** Where a block list lives: the page itself, or one column (or tab) of a block, at any depth. */
 export interface ColumnRef { block: string; index: number }
 const listOf = (p: Page | undefined, col?: ColumnRef): Block[] | undefined =>
-  !p ? undefined : col ? p.blocks.find((x) => x.id === col.block)?.cols?.[col.index] : p.blocks
+  !p ? undefined : col ? findBlock(p.blocks, col.block)?.cols?.[col.index] : p.blocks
 
 export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: boolean; col?: ColumnRef }): JSX.Element {
   const blocks = useData((d) => listOf(d.pages[pageId], col) ?? EMPTY)
@@ -134,9 +139,10 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
       if (OBJECT_TYPES.has(type) && type !== 'table') b.text = ''
       if (type === 'table' && !b.rows?.length) { b.rows = [[was, ''], ['', '']]; b.text = '' }
       if (type === 'columns') b.cols = Array.from({ length: cols ?? 2 }, (_, i) => [{ id: i === 0 ? firstCol : uid(), type: 'p' as BlockType, text: i === 0 ? was : '' }])
+      if (type === 'tabs') { b.cols = [[{ id: firstCol, type: 'p' as BlockType, text: was }], [{ id: uid(), type: 'p' as BlockType, text: '' }]]; b.labels = ['', ''] }
       if (type === 'button' && !b.action) b.action = { kind: 'todos', target: '' }
     })
-    if (type === 'columns') { lineAfter(id); focusBlock(firstCol, 'end') }
+    if (type === 'columns' || type === 'tabs') { lineAfter(id); focusBlock(firstCol, 'end') }
     else if (OBJECT_TYPES.has(type)) lineAfter(id)
     else if (TEXT_TYPES.has(type)) focusBlock(id)
   }
@@ -345,9 +351,25 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
     if (b.type === 'columns') {
       const n = b.cols?.length ?? 0
       items.push({ divider: true, label: '' },
-        { label: 'Add a column', icon: 'plus', disabled: n >= 5, onClick: () => setBlock(id, (x) => { x.cols = [...(x.cols ?? []), [{ id: uid(), type: 'p', text: '' }]] }) },
-        { label: 'Remove last column', icon: 'minus', disabled: n <= 2, onClick: () => setBlock(id, (x) => { if (!x.cols || x.cols.length <= 2) return; const last = x.cols.pop()!; x.cols[x.cols.length - 1].push(...last.filter((y) => y.text || y.type !== 'p')) }) },
+        { label: 'Add a column', icon: 'plus', disabled: n >= 6, onClick: () => setBlock(id, (x) => { x.cols = [...(x.cols ?? []), [{ id: uid(), type: 'p', text: '' }]]; x.widths = undefined }) },
+        { label: 'Remove last column', icon: 'minus', disabled: n <= 2, onClick: () => setBlock(id, (x) => { if (!x.cols || x.cols.length <= 2) return; const last = x.cols.pop()!; x.cols[x.cols.length - 1].push(...last.filter((y) => y.text || y.type !== 'p')); x.widths = undefined }) },
+        { label: 'Even widths', icon: 'columns', disabled: !b.widths, onClick: () => setBlock(id, (x) => { x.widths = undefined }) },
         { label: 'Unwrap columns', icon: 'rows', onClick: () => edit((bs) => { const i = bs.findIndex((x) => x.id === id); const inner = (bs[i].cols ?? []).flat().filter((y) => y.text || y.type !== 'p'); bs.splice(i, 1, ...(inner.length ? inner : [{ id: uid(), type: 'p' as BlockType, text: '' }])) }) })
+    }
+    if (b.type === 'tabs') {
+      items.push({ divider: true, label: '' },
+        { label: 'Add a tab', icon: 'plus', onClick: () => setBlock(id, (x) => { x.cols = [...(x.cols ?? []), [{ id: uid(), type: 'p', text: '' }]]; x.labels = [...(x.labels ?? []), ''] }) },
+        { label: 'Unwrap tabs', icon: 'rows', onClick: () => edit((bs) => {
+          const i = bs.findIndex((x) => x.id === id)
+          const t = bs[i]
+          const inner: Block[] = []
+          ;(t.cols ?? []).forEach((c, ci) => {
+            const body = c.filter((y) => y.text || y.type !== 'p')
+            if (!body.length) return
+            inner.push({ id: uid(), type: 'h3', text: t.labels?.[ci] || `Tab ${ci + 1}` }, ...body)
+          })
+          bs.splice(i, 1, ...(inner.length ? inner : [{ id: uid(), type: 'p' as BlockType, text: '' }]))
+        }) })
     }
     if ((b.type === 'image' || b.type === 'bookmark' || b.type === 'embed') && b.url) {
       items.push({ divider: true, label: '' }, { label: 'Change address', icon: 'link', onClick: () => setBlock(id, (x) => { x.url = undefined; x.meta = undefined }) })
@@ -395,9 +417,11 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           case 'button': content = <ButtonBlock block={b} locked={locked} set={set} addTodos={(lines) => { let after = b.id; for (const t of lines) after = insertAfter(after, { type: 'todo', text: t, indent: b.indent }) }} />; break
           case 'link': content = <LinkBlock block={b} pageId={pageId} locked={locked} set={set} />; break
           case 'synced': content = <SyncedBlock block={b} locked={locked} />; break
+          case 'tabs': content = <TabsBlock block={b} pageId={pageId} locked={locked} set={set} />; break
+          case 'database': content = <InlineDatabase block={b} pageId={pageId} locked={locked} set={set} />; break
           case 'columns':
             content = (
-              <div className="cols" style={{ gridTemplateColumns: `repeat(${b.cols?.length ?? 2}, minmax(0, 1fr))` }}>
+              <div className="cols" style={{ gridTemplateColumns: b.widths?.length === b.cols?.length ? b.widths!.map((w) => `minmax(0, ${w}fr)`).join(' ') : `repeat(${b.cols?.length ?? 2}, minmax(0, 1fr))` }}>
                 {(b.cols ?? []).map((_, ci) => <div key={ci} className="col"><BlockEditor pageId={pageId} locked={locked} col={{ block: b.id, index: ci }} /></div>)}
               </div>
             )
@@ -411,7 +435,11 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
                 {isToggle && (
                   <button className={`toggle-arrow ${b.open ? 'open' : ''} ${headLevel ? 'toggle-arrow-' + headLevel : ''}`} onClick={() => setBlock(b.id, (x) => { x.open = !x.open })}><Icon name="chevron" size={13} stroke={2.4} /></button>
                 )}
-                {b.type === 'callout' && <span className="callout-icon"><Icon name="lightbulb" size={16} /></span>}
+                {b.type === 'callout' && (
+                  <span className="callout-icon">
+                    {locked ? <Glyph value={b.icon || 'lightbulb'} size={16} /> : <IconPickerButton size="sm" value={b.icon || 'lightbulb'} onChange={(v) => setBlock(b.id, (x) => { x.icon = v || undefined })} />}
+                  </span>
+                )}
                 <div className="block-text">
                   {b.type === 'code'
                     ? <AutoText className="bt bt-code" {...common} />
@@ -506,6 +534,97 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
               <ColorRows text={b.color} bg={b.bg} onText={(c) => paint((x) => { x.color = c || undefined })} onBg={(c) => paint((x) => { x.bg = c || undefined })} />
             </>
           })()}
+        </Popover>
+      )}
+    </div>
+  )
+}
+
+/** A database shown right in the page, like Notion's inline databases. */
+function InlineDatabase({ block, pageId, locked, set }: { block: Block; pageId: string; locked?: boolean; set: (fn: (b: Block) => void, key?: string) => void }): JSX.Element {
+  const target = useData((d) => (block.ref ? d.pages[block.ref] : undefined))
+  const dbs = useData((d) => Object.values(d.pages).filter((p) => p.type === 'database' && !p.deletedAt && p.id !== pageId).length)
+  const [picking, setPicking] = useState(false)
+  if (!block.ref || !target || target.deletedAt || target.type !== 'database') {
+    if (locked) return <div />
+    const make = (): void => {
+      const db = newPage('database', 'Untitled database', pageId)
+      act((d) => { d.pages[db.id] = db; d.pages[pageId]?.children.push(db.id) })
+      set((b) => { b.ref = db.id })
+    }
+    return (
+      <div className="block-empty">
+        <Icon name="database" size={16} />
+        <span>{block.ref ? 'This database was deleted' : 'Database'}</span>
+        <Button small onClick={make}>New database</Button>
+        {dbs > 0 && <Button small kind="ghost" onClick={() => setPicking((v) => !v)}>Show an existing one</Button>}
+        {picking && <PagePicker exclude={pageId} only="database" onPick={(id) => set((b) => { b.ref = id })} />}
+      </div>
+    )
+  }
+  return (
+    <div className="inline-db">
+      <button className="inline-db-title" onClick={(e) => openFromClick(target.id, e)}>
+        <Glyph value={target.icon || 'database'} size={17} color={target.iconColor || undefined} />
+        <span>{target.title || 'Untitled'}</span>
+      </button>
+      <DatabaseView dbId={target.id} embedded />
+    </div>
+  )
+}
+
+/** Notion-style tabs: each tab holds its own blocks. Double-click a tab to rename it, right-click for more. */
+function TabsBlock({ block, pageId, locked, set }: { block: Block; pageId: string; locked?: boolean; set: (fn: (b: Block) => void, key?: string) => void }): JSX.Element {
+  const [active, setActive] = useState(0)
+  const [renaming, setRenaming] = useState<number | null>(null)
+  const [menu, setMenu] = useState<{ i: number; x: number; y: number } | null>(null)
+  const n = Math.max(1, block.cols?.length ?? 1)
+  const at = Math.min(active, n - 1)
+  const labels = block.labels ?? []
+  const name = (i: number): string => labels[i] || `Tab ${i + 1}`
+  const move = (i: number, to: number): void => {
+    if (to < 0 || to >= n) return
+    set((x) => {
+      const cols = x.cols ?? []
+      const ls = x.labels ?? cols.map(() => '')
+      ;[cols[i], cols[to]] = [cols[to], cols[i]]
+      ;[ls[i], ls[to]] = [ls[to], ls[i]]
+      x.labels = ls
+    })
+    setActive(to)
+  }
+  return (
+    <div className="tabs-block">
+      <div className="tabs-bar" role="tablist">
+        {Array.from({ length: n }, (_, i) => (renaming === i && !locked ? (
+          <input key={i} className="tabs-input" autoFocus value={labels[i] ?? ''} placeholder={`Tab ${i + 1}`}
+            onChange={(e) => set((x) => { const ls = x.labels ?? []; while (ls.length < n) ls.push(''); ls[i] = e.target.value; x.labels = ls }, 'tabname:' + block.id)}
+            onBlur={() => setRenaming(null)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setRenaming(null) }} />
+        ) : (
+          <button key={i} role="tab" aria-selected={i === at} className={`tabs-tab ${i === at ? 'active' : ''}`}
+            onClick={() => setActive(i)} onDoubleClick={() => !locked && setRenaming(i)}
+            onContextMenu={(e) => { if (locked) return; e.preventDefault(); setMenu({ i, x: e.clientX, y: e.clientY }) }}>
+            {name(i)}
+          </button>
+        )))}
+        {!locked && (
+          <button className="tabs-add" title="Add a tab" onClick={() => { set((x) => { x.cols = [...(x.cols ?? []), [{ id: uid(), type: 'p', text: '' }]]; x.labels = [...(x.labels ?? []), ''] }); setActive(n); setRenaming(n) }}>
+            <Icon name="plus" size={13} stroke={2} />
+          </button>
+        )}
+      </div>
+      <div className="tabs-body">
+        <BlockEditor key={at} pageId={pageId} locked={locked} col={{ block: block.id, index: at }} />
+      </div>
+      {menu && (
+        <Popover anchor={menu} onClose={() => setMenu(null)} width={200}>
+          <Menu onClose={() => setMenu(null)} items={[
+            { label: 'Rename', icon: 'edit', onClick: () => setRenaming(menu.i) },
+            { label: 'Move left', icon: 'left', disabled: menu.i === 0, onClick: () => move(menu.i, menu.i - 1) },
+            { label: 'Move right', icon: 'right', disabled: menu.i >= n - 1, onClick: () => move(menu.i, menu.i + 1) },
+            { divider: true, label: '' },
+            { label: 'Delete tab', icon: 'trash', danger: true, disabled: n <= 1, onClick: () => { set((x) => { x.cols?.splice(menu.i, 1); x.labels?.splice(menu.i, 1) }); setActive(Math.max(0, menu.i - 1)) } }
+          ]} />
         </Popover>
       )}
     </div>

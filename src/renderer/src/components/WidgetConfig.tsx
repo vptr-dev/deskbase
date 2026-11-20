@@ -5,7 +5,7 @@ import type { Place } from '../types'
 const setSettingsPlace = (p: Place): void => setSettings((s) => { s.place = p })
 const setFahrenheit = (f: boolean): void => setSettings((s) => { s.fahrenheit = f })
 import type { DeskMaterial, Page, WidgetStyle } from '../types'
-import { STATS, type AnyWidget, widgetTitle } from './Widgets'
+import { STATS, type AnyWidget, flatBlocks, sectionNames, widgetTitle } from './Widgets'
 import { createValue } from './Values'
 import { Button, Segmented, Toggle } from './ui'
 import { Icon } from './Icon'
@@ -58,8 +58,8 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   const flagProps = db?.props.filter((p) => ['status', 'select', 'multi', 'checkbox'].includes(p.type)) ?? []
   const flagProp = flagProps.find((p) => p.id === c.prop)
   const page = c.pageId ? d.pages[c.pageId] : undefined
-  const headings = page ? page.blocks.filter((b) => ['h1', 'h2', 'h3', 'toggle'].includes(b.type) && b.text.trim()).map((b) => b.text.trim()) : []
-  const tables = page ? page.blocks.filter((b) => b.type === 'table' && b.rows?.length) : []
+  const headings = page ? sectionNames(page.blocks) : []
+  const tables = page ? flatBlocks(page.blocks).filter((b) => b.type === 'table' && b.rows?.length) : []
   const table = tables[Number(c.table) || 0]
   const placeField = (
     <Field label="Place" sub={c.place ? '' : d.settings.place ? `Same as other panels: ${d.settings.place.name}` : ''}>
@@ -285,6 +285,19 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         <Field label="Look"><Segmented small value={c.look ?? 'ring'} onChange={(v) => set('look', v)} options={[{ value: 'ring', label: 'Ring' }, { value: 'bar', label: 'Bar' }]} /></Field>
         {c.look !== 'bar' && <Field label="Time left"><Toggle checked={c.details !== false} onChange={(v) => set('details', v)} /></Field>}
       </>}
+      {w.type === 'network' && <>
+        <Field label="Graph"><Toggle checked={c.graph !== false} onChange={(v) => set('graph', v)} /></Field>
+        <Field label="Speeds in"><Segmented small value={c.unit ?? 'bytes'} onChange={(v) => set('unit', v)} options={[{ value: 'bytes', label: 'MB/s' }, { value: 'bits', label: 'Mb/s' }]} /></Field>
+        <Field label="Address and totals"><Toggle checked={!!c.details} onChange={(v) => set('details', v)} /></Field>
+      </>}
+      {w.type === 'calculator' && <>
+        <Field label="Keys"><Toggle checked={c.keys !== false} onChange={(v) => set('keys', v)} /></Field>
+        {Array.isArray(c.history) && c.history.length > 0 && <Field label="Last answers"><Button small kind="ghost" onClick={() => set('history', [])}>Clear</Button></Field>}
+      </>}
+      {w.type === 'recent' && <>
+        <Field label="Favorites first"><Toggle checked={c.favorites !== false} onChange={(v) => set('favorites', v)} /></Field>
+        <Field label="How many"><Segmented small value={String(c.count ?? 8)} onChange={(v) => set('count', Number(v))} options={['5', '8', '12'].map((n) => ({ value: n, label: n }))} /></Field>
+      </>}
       {w.type === 'search' && <Field label="Search with"><Segmented small value={c.engine ?? 'google'} onChange={(v) => set('engine', v)} options={Object.entries(ENGINES).map(([k, e]) => ({ value: k, label: e.name }))} /></Field>}
       {w.type === 'quote' && <>
         <Field label="Look"><Segmented small value={c.look ?? 'plain'} onChange={(v) => set('look', v)} options={[{ value: 'plain', label: 'Plain' }, { value: 'mark', label: 'Quote mark' }, { value: 'serif', label: 'Serif' }, { value: 'big', label: 'Big' }]} /></Field>
@@ -311,7 +324,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         </div>
       </>}
       {(w.type === 'sections' || w.type === 'table') && (
-        <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs.filter((p) => p.type === 'doc' && (w.type === 'sections' || p.blocks.some((b) => b.type === 'table')))} onChange={(v) => patch((x) => { x.config.pageId = v; x.config.section = null; x.config.table = 0; x.config.sumCol = -1; x.config.dayCol = -1 })} /></Field>
+        <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs.filter((p) => p.type === 'doc' && !p.rowOf && (w.type === 'sections' || flatBlocks(p.blocks).some((b) => b.type === 'table')))} onChange={(v) => patch((x) => { x.config.pageId = v; x.config.section = null; x.config.table = 0; x.config.sumCol = -1; x.config.dayCol = -1 })} /></Field>
       )}
       {w.type === 'sections' && <>
         {sectionPicker}

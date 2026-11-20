@@ -44,6 +44,11 @@ type Native = {
   region: (h: bigint, w: number, hgt: number, r: number) => void
   /** Brings a window to the foreground even when Windows' focus lock would refuse it. */
   foreground: (h: bigint) => boolean
+  /**
+   * Makes a panel a desktop skin like Rainmeter's: a tool window (no taskbar button, not in Alt+Tab,
+   * ignored by apps that act on windows) owned by the desktop, so Show desktop keeps it visible.
+   */
+  skin: (h: bigint) => void
 }
 let native: Native | null | undefined
 function nat(): Native | null {
@@ -68,6 +73,9 @@ function nat(): Native | null {
     const gwtp = user32.func('uint32_t __stdcall GetWindowThreadProcessId(intptr_t hWnd, void *pid)')
     const ati = user32.func('bool __stdcall AttachThreadInput(uint32_t from, uint32_t to, bool attach)')
     const gct = koffi.load('kernel32.dll').func('uint32_t __stdcall GetCurrentThreadId()')
+    const gwl = user32.func('intptr_t __stdcall GetWindowLongPtrW(intptr_t hWnd, int index)')
+    const swl = user32.func('intptr_t __stdcall SetWindowLongPtrW(intptr_t hWnd, int index, intptr_t value)')
+    const fwin = user32.func('intptr_t __stdcall FindWindowW(str16 cls, str16 title)')
     native = {
       setWindowPos: (h, after, x, y, cx, cy, flags) => swp(h, after, x, y, cx, cy, flags),
       accent: (h, state, color) => {
@@ -91,6 +99,19 @@ function nat(): Native | null {
         const ok = sfw(h)
         ati(me, other, false)
         return ok
+      },
+      skin: (h) => {
+        const GWL_EXSTYLE = -20
+        const GWLP_HWNDPARENT = -8
+        const WS_EX_TOOLWINDOW = 0x80
+        const WS_EX_APPWINDOW = 0x40000
+        const ex = Number(gwl(h, GWL_EXSTYLE))
+        const want = (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW
+        if (want !== ex) swl(h, GWL_EXSTYLE, want)
+        const desk = fwin('Progman', null)
+        if (desk && Number(gwl(h, GWLP_HWNDPARENT)) !== Number(desk)) swl(h, GWLP_HWNDPARENT, desk)
+        // 0x20 = SWP_FRAMECHANGED: the new style takes effect now.
+        swp(h, HWND_BOTTOM, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0020)
       }
     }
   } catch (e) {
@@ -104,6 +125,23 @@ const hwnd = (w: BrowserWindow): bigint => {
 }
 
 const SWP_NOSIZE_NOMOVE_NOACTIVATE = 0x0001 | 0x0002 | 0x0010
+
+/** Keeps a panel a desktop skin (see Native.skin). Run after anything that may change its window style. */
+function asSkin(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  win.setSkipTaskbar(true)
+  try { nat()?.skin(hwnd(win)) } catch { /* ignore */ }
+}
+
+/**
+ * Electron's setFocusable also turns "skip taskbar" off when a window becomes focusable, which gave
+ * panels a taskbar button after any click; panels always go back to being skins.
+ */
+function setFocus(win: BrowserWindow, on: boolean): void {
+  if (win.isDestroyed()) return
+  win.setFocusable(on)
+  asSkin(win)
+}
 
 function sendToBack(e: Entry): void {
   // While its menu is open a panel stays where it is, so the menu shows above other windows.
@@ -142,7 +180,7 @@ function applyLayer(e: Entry): void {
   if (e.win.isDestroyed()) return
   e.win.setAlwaysOnTop(editing, 'screen-saver')
   if (!editing) {
-    if (!e.win.isFocused()) e.win.setFocusable(false)
+    if (!e.win.isFocused()) setFocus(e.win, false)
     sendToBack(e)
   }
 }
@@ -289,12 +327,13 @@ function register(win: BrowserWindow, spec: DeskSpec): void {
   const e: Entry = { win, spec }
   wins.set(spec.id, e)
   win.setMenu(null)
+  asSkin(win)
   // Panels never take focus on a click, so clicking one never lifts it over other windows.
   // Text fields and the right-click menu ask for focus (deskFocus) and give it back on blur.
   win.on('focus', () => setTimeout(() => sendToBack(e), 0))
   win.on('blur', () => {
     if (win.isDestroyed()) return
-    if (!editing && !menuOpen) win.setFocusable(false)
+    if (!editing && !menuOpen) setFocus(win, false)
     sendToBack(e)
   })
   win.on('minimize', () => { if (!win.isDestroyed()) win.restore() })
@@ -352,6 +391,7 @@ export function deskShow(id: string): void {
   applyLayer(e)
   applyMouse(e)
   if (!e.win.isVisible()) e.win.showInactive()
+  asSkin(e.win)
   sendToBack(e)
 }
 
@@ -434,7 +474,7 @@ export function deskBounds(id: string): Electron.Rectangle | null {
 export function deskFocus(id: string): void {
   const e = wins.get(id)
   if (!e || e.win.isDestroyed()) return
-  e.win.setFocusable(true)
+  setFocus(e.win, true)
   e.win.focus()
   if (!e.win.isFocused()) {
     try { nat()?.foreground(hwnd(e.win)) } catch { /* ignore */ }
@@ -462,7 +502,7 @@ export function deskMenu(id: string, items: { id: string; label: string; checked
       window: e.win,
       callback: () => {
         menuOpen = false
-        if (!e.win.isDestroyed() && !e.win.isFocused() && !editing) e.win.setFocusable(false)
+        if (!e.win.isDestroyed() && !e.win.isFocused() && !editing) setFocus(e.win, false)
         sendToBack(e)
         setTimeout(() => resolve(picked), 0)
       }

@@ -1,4 +1,5 @@
 import { net } from 'electron'
+import { execFile } from 'child_process'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -40,6 +41,55 @@ export async function sysStats(drive?: string): Promise<SysStats> {
     disk = diskTotal ? Math.round((1 - diskFree / diskTotal) * 100) : 0
   } catch { /* no disk info */ }
   return { cpu, ram: Math.round((1 - free / total) * 100), ramUsed: total - free, ramTotal: total, disk, diskFree, diskTotal, uptime: os.uptime() }
+}
+
+// ---------- network speed ----------
+export interface NetStats { supported: boolean; down: number; up: number; rx: number; tx: number; ip: string; online: boolean }
+
+let lastNet: { rx: number; tx: number; at: number } | null = null
+
+/** Bytes received and sent since start-up, across all network adapters. */
+function netBytes(): Promise<{ rx: number; tx: number } | null> {
+  if (process.platform === 'linux') {
+    return fs.promises.readFile('/proc/net/dev', 'utf8').then((t) => {
+      let rx = 0
+      let tx = 0
+      for (const line of t.split('\n').slice(2)) {
+        const [name, rest] = line.split(':')
+        if (!rest || name.trim() === 'lo') continue
+        const f = rest.trim().split(/\s+/).map(Number)
+        rx += f[0] || 0
+        tx += f[8] || 0
+      }
+      return { rx, tx }
+    }).catch(() => null)
+  }
+  if (process.platform !== 'win32') return Promise.resolve(null)
+  // "netstat -e": the first row with two numbers is bytes received and sent (in any language).
+  return new Promise((resolve) => {
+    execFile('netstat', ['-e'], { windowsHide: true, timeout: 4000 }, (err, out) => {
+      if (err) { resolve(null); return }
+      const row = String(out).split(/\r?\n/).map((l) => /^\s*\D[^\d]*?\s+(\d+)\s+(\d+)\s*$/.exec(l)).find(Boolean)
+      resolve(row ? { rx: Number(row[1]), tx: Number(row[2]) } : null)
+    })
+  })
+}
+
+export async function netStats(): Promise<NetStats> {
+  const b = await netBytes()
+  const ifs = Object.values(os.networkInterfaces()).flat().filter((x): x is os.NetworkInterfaceInfo => Boolean(x && !x.internal))
+  const ip = ifs.find((x) => x.family === 'IPv4')?.address ?? ''
+  if (!b) return { supported: false, down: 0, up: 0, rx: 0, tx: 0, ip, online: ifs.length > 0 }
+  const at = Date.now()
+  let down = 0
+  let up = 0
+  if (lastNet && at > lastNet.at) {
+    const s = (at - lastNet.at) / 1000
+    down = Math.max(0, (b.rx - lastNet.rx) / s)
+    up = Math.max(0, (b.tx - lastNet.tx) / s)
+  }
+  lastNet = { ...b, at }
+  return { supported: true, down, up, rx: b.rx, tx: b.tx, ip, online: ifs.length > 0 }
 }
 
 // ---------- weather (Open-Meteo, no account or key) ----------
