@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.11.0 — 2026-11-20
+
 - Tabs: open pages in tabs with Ctrl T, close with Ctrl W, switch with Ctrl Tab, bring back a closed tab with Ctrl Shift T. Ctrl click or middle click opens a page in a new tab from the sidebar, breadcrumbs, search, links and subpages. Tabs can be dragged to reorder and come back when the app starts. Each tab keeps its own back and forward.
 - An empty tab shows recent pages, favorites and top pages to jump to.
 - New blocks: 2 and 3 columns, toggle headings, table of contents, link to page, bookmark (with the page's title, description and icon), image (upload, paste or link, with caption and width), embed (YouTube, Vimeo, Spotify, Figma, Loom, CodePen, Google Docs and Maps or any page), equation, button (open a link or page, or add to-dos) and synced blocks (copy one, paste it on another page, and edits show in both).
