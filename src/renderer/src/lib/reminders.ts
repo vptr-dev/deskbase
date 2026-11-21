@@ -23,13 +23,14 @@ function remindersIn(page: Page): Omit<Reminder, 'pageId'>[] {
       if (b.cols) b.cols.forEach(walk)
       if (!b.text || !b.text.includes('@')) continue
       if (b.type === 'todo' && b.checked) continue
-      MENTION.lastIndex = 0
-      for (let m = MENTION.exec(b.text); m; m = MENTION.exec(b.text)) {
+      // matchAll works on its own copy of the pattern, so nothing below can restart the scan.
+      const text = plainText(b.text.replace(MENTION, '')).replace(/\s+/g, ' ').trim()
+      for (const m of b.text.matchAll(MENTION)) {
         const timed = m[2] !== undefined
         if (!timed && b.type !== 'todo') continue
         const [y, mo, d] = m[1].split('-').map(Number)
         const at = new Date(y, mo - 1, d, timed ? Number(m[2]) : 9, timed ? Number(m[3]) : 0).getTime()
-        out.push({ key: `${b.id}@${m[0]}`, at, text: plainText(b.text.replace(MENTION, '')).replace(/\s+/g, ' ').trim() })
+        out.push({ key: `${b.id}@${m[0]}`, at, text })
       }
     }
   }

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: with notifications on, a page with a reminder date could make the app stop responding.
+
 ## 0.17.0 — 2026-11-20
 
 - Formatting bar over selected text in pages: bold, italic, strike-through, code, link, six text colors and highlight. Ctrl B, Ctrl I, Ctrl Shift X, Ctrl E, Ctrl K and Ctrl Shift H work too.
