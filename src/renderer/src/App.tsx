@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { act, boot, duplicatePage, flushSave, getData, isView, onConfetti, openPage, openView, openSettings, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
+import { act, boot, createPage, duplicatePage, flushSave, toast, getData, isView, onConfetti, openPage, openView, openSettings, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
 import { api } from './lib/api'
 import { COVERS, coverStyle, typeInfo } from './lib/defaults'
-import { pickImage } from './lib/image'
+import { pickImageData } from './lib/image'
 import { exportPageMarkdown } from './lib/exporters'
 import { MovePageDialog } from './components/MovePage'
 import { habitWeek } from './lib/habits'
 import { playLevelUp } from './lib/sound'
+import { uid } from './lib/util'
 import { Sidebar } from './components/Sidebar'
 import { Glyph, Icon } from './components/Icon'
-import { IconPicker, IconPickerButton, MenuButton, Popover, Button } from './components/ui'
+import { IconPicker, IconPickerButton, MenuButton, Modal, Popover, Button } from './components/ui'
 import { CommandPalette, NewPageDialog, QuickAddDialog, ShortcutsDialog, TrashDialog } from './components/Overlays'
 import { AppMenu } from './components/AppMenu'
 import { ToolBody } from './pages/ToolBody'
@@ -35,7 +36,7 @@ import { addDeskSet, addDesktopWidget, addSpace, runCommand, startDesktop, switc
 import { watchHistory } from './lib/history'
 import { WindowControls } from './components/WindowControls'
 import { renameLinks } from './lib/links'
-import { Backlinks, imageFromFile } from './components/Blocks'
+import { PagePicker, Backlinks } from './components/Blocks'
 import { TabStrip, StartView } from './components/Tabs'
 import { closeTab, cycleTab, goBack, goForward, newTab, openFromClick, reopenTab, restoreTabs, useTabs } from './lib/tabs'
 
@@ -90,7 +91,7 @@ function SubpageList({ page }: { page: Page }): JSX.Element | null {
 function CoverPicker({ value, onPick }: { value?: string | null; onPick: (c: string) => void }): JSX.Element {
   return (
     <div className="cover-grid">
-      {COVERS.map((c) => <button key={c} title={c} className={`cover-swatch ${value === c ? 'active' : ''}`} style={{ background: `var(--cover-${c})` }} onClick={() => onPick(c)} />)}
+      {COVERS.map((c) => <button key={c} title={c} aria-label={c + ' cover'} aria-pressed={c === value} className={`cover-swatch ${value === c ? 'active' : ''}`} style={{ background: `var(--cover-${c})` }} onClick={() => onPick(c)} />)}
       <CoverLink onPick={onPick} />
     </div>
   )
@@ -101,8 +102,8 @@ function CoverLink({ onPick }: { onPick: (c: string) => void }): JSX.Element {
   const [v, setV] = useState('')
   const use = (): void => { const t = v.trim(); if (/^https?:\/\/\S+$/i.test(t)) onPick(t) }
   const upload = async (): Promise<void> => {
-    const f = await pickImage()
-    if (f) onPick(await imageFromFile(f))
+    const image = await pickImageData()
+    if (image) onPick(image)
   }
   return (
     <div className="cover-link">
@@ -118,7 +119,7 @@ function PageCover({ page }: { page: Page }): JSX.Element | null {
   const style = coverStyle(page.cover)
   if (!style) return null
   return (
-    <div className="page-cover" style={style}>
+    <div className="page-cover" data-picker-open={!!el} style={style}>
       {!page.locked && (
         <div className="page-cover-actions">
           <Button small onClick={(e) => setEl(e.currentTarget as HTMLElement)}>Change cover</Button>
@@ -374,6 +375,17 @@ function MainApp(): JSX.Element {
   const ready = useApp((s) => s.ready)
   const current = useApp((s) => s.current)
   const overlay = useApp((s) => s.overlay)
+  const [embedId, setEmbedId] = useState<string | null>(null)
+  const embedIn = (id: string): void => {
+    if (!embedId) return
+    if (getData().pages[id]?.locked) { toast('Unlock this page to add a tool'); return }
+    updatePage(id, p => {
+      const at = p.blocks.at(-1)
+      p.blocks.splice(at?.type === 'p' && !at.text ? p.blocks.length - 1 : p.blocks.length, 0, { id: uid(), type: 'tool', text: '', ref: embedId })
+      if (p.blocks.at(-1)?.type !== 'p') p.blocks.push({ id: uid(), type: 'p', text: '' })
+    })
+    setEmbedId(null); openPage(id)
+  }
   const collapsed = useData((d) => d.settings.sidebarCollapsed)
   const page = useData((d) => (current ? d.pages[current] : undefined))
   const canUndo = useApp((s) => s.canUndo)
@@ -419,6 +431,7 @@ function MainApp(): JSX.Element {
                 { label: page.rowOf ? 'Template for new rows' : 'Use as a template', checked: !!page.template, onClick: () => updatePage(page.id, (p) => { p.template = !p.template || undefined }) },
                 ...(page.type !== 'doc' ? [{ label: 'Show notes area', checked: !!page.view?.notes, onClick: () => updatePage(page.id, (p) => { p.view = { ...(p.view ?? {}), notes: !p.view?.notes } }) }] : []),
                 { divider: true, label: '' },
+                ...(page.type !== 'doc' ? [{ label: 'Add to a normal page…', icon: 'pageLink', onClick: () => setEmbedId(page.id) }] : []),
                 { label: 'Add subpage', icon: 'plus', onClick: () => setOverlay('newPage', { parentId: page.id }) },
                 { label: 'Duplicate', icon: 'copy', onClick: () => duplicatePage(page.id) },
                 { label: 'Move to…', icon: 'folder', onClick: () => setOverlay('movePage', { pageId: page.id }) },
@@ -441,6 +454,9 @@ function MainApp(): JSX.Element {
         </div>
       </main>
       <AssistantPanel />
+      {embedId && <Modal title="Add to a normal page" width={390} onClose={() => setEmbedId(null)}>
+        <div className="erase-confirm"><Button small onClick={() => embedIn(createPage('doc'))}>New normal page</Button><PagePicker only="doc" onPick={embedIn} /></div>
+      </Modal>}
       <WindowControls />
       {overlay === 'search' && <CommandPalette />}
       {overlay === 'notionImport' && <NotionImportDialog />}

@@ -161,6 +161,7 @@ export interface DbSchema { props: DbProp[]; views: DbView[] }
 
 // ---------- dashboards ----------
 export type WidgetType =
+  | import('../../shared/services').ServiceId
   | 'value' | 'chart' | 'progress' | 'tasks' | 'habits' | 'database' | 'calendar' | 'clock'
   | 'note' | 'countdown' | 'focus' | 'quickadd' | 'stat' | 'page' | 'goals'
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
@@ -240,6 +241,7 @@ export interface DeskWidget {
 }
 /** A workspace: its own set of panels on the screen. Pages are shared by all workspaces. */
 export interface DeskSpace {
+  iconColor?: string
   id: string
   name: string
   icon: string
@@ -288,7 +290,7 @@ export interface Look {
   letterSpacing: number
   motion: Motion
   pageTransition: 'fade' | 'slide' | 'rise' | 'none'
-  sidebar: 'floating' | 'attached'
+  sidebar: 'floating'
   iconStroke: number
   /** picture behind the glass (data URL) */
   backdropImage: string | null
@@ -574,7 +576,7 @@ export interface AppData {
 }
 
 // ---------- connections ----------
-export type ConnectionKind = 'notion' | 'calendar' | 'rss' | 'github' | 'mail' | 'todoist'
+export type ConnectionKind = import('../../shared/feeds').ConnKind
 export interface Connection {
   id: string
   kind: ConnectionKind

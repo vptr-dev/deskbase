@@ -150,7 +150,7 @@ export function GoalsPage({ pageId }: { pageId: string }): JSX.Element {
         <div className="spacer" />
         <Button kind="primary" small icon="plus" onClick={() => setEditing(blank())}>New goal</Button>
       </div>
-      {list.length === 0 ? <Empty icon="target" title={tab === 'done' ? 'No completed goals yet' : 'No active goals'} /> : (
+      {list.length === 0 ? null : (
         <div className="card-grid">{list.map((g) => <GoalCard key={g.id} g={g} onEdit={() => setEditing(g)} />)}</div>
       )}
       {editing && <GoalEditor goal={editing} onClose={() => setEditing(null)} />}

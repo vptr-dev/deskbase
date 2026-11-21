@@ -150,13 +150,6 @@ function PresetPicker({ chat }: { chat: AssistantChat }): JSX.Element {
 }
 
 // ---------- one chat ----------
-const QUICK = [
-  { label: 'Plan my day', prompt: 'Look at my tasks, habits and goals and plan my day. Suggest an order and time blocks. Add tasks only if something important is missing.' },
-  { label: 'Summarize this page', prompt: 'Summarize the open page in a few bullet points.' },
-  { label: 'Turn this page into tasks', prompt: 'Turn the actionable items on the open page into tasks with sensible due dates.' },
-  { label: 'Weekly review', prompt: 'Give me a short weekly review: what I finished, what is overdue, and three priorities for next week.' },
-  { label: 'What is coming up?', prompt: 'What do I have coming up in the next two weeks? Look at the calendar.' }
-]
 
 const ACCESS_NAME = { none: 'Sees nothing', read: 'Can read', ask: 'Asks before changes', auto: 'Makes changes' } as const
 
@@ -195,11 +188,6 @@ export function ChatView({ chatId, wide }: { chatId: string; wide?: boolean }): 
             <div className="strong">Connect a model</div>
             <p className="muted small">Use a local model with Ollama or LM Studio, or add a key for Anthropic, OpenAI, Gemini or OpenRouter.</p>
             <Button small kind="primary" onClick={() => openSettings('assistant')}>Open settings</Button>
-          </div>
-        )}
-        {ready && visible.length === 0 && !busy && (
-          <div className="assistant-quick">
-            {QUICK.map((q) => <button key={q.label} className="chip-btn" onClick={() => go(q.prompt)}>{q.label}</button>)}
           </div>
         )}
         {visible.map((m) => {

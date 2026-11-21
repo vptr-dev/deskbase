@@ -11,7 +11,10 @@ import { Button, ColorDots, ConfirmButton, Toggle } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
 import { EventRow, FeedRow } from '../components/PanelKit5'
 
-const KINDS: ConnectionKind[] = ['calendar', 'mail', 'todoist', 'rss', 'github', 'notion']
+import { serviceInfo, serviceIds, isService } from '../../../shared/services'
+import { addDesktopWidget } from '../lib/desktop'
+
+const KINDS: ConnectionKind[] = ['calendar', 'mail', 'todoist', 'rss', 'github', 'notion', ...serviceIds]
 
 const KEY_LINKS: Partial<Record<ConnectionKind, { url: string; label: string }>> = {
   notion: { url: 'https://www.notion.so/profile/integrations', label: 'Create an integration' },
@@ -35,8 +38,10 @@ function statusOf(c: Connection, r: ReturnType<typeof useFeed>['result'], busy: 
     if (r && !r.ok) return { text: r.error ?? 'Could not reach Notion', bad: true }
     return { text: notionPages ? `${notionPages} page${notionPages === 1 ? '' : 's'} in sync` : r?.ok ? r.title ?? 'Connected' : 'Not set up' }
   }
+  if (!r && isService(c.kind)) return { text: '' }
   if (!r) return { text: c.url || c.repos.length || c.account?.user ? '' : 'Not set up' }
   if (!r.ok) return { text: r.error ?? 'Could not load it', bad: true }
+  if (isService(c.kind)) return { text: (r.items?.length ?? 0) + ' items' }
   const n = c.kind === 'calendar' ? `${r.events?.length ?? 0} events` : c.kind === 'github' ? `${r.items?.length ?? 0} open` : c.kind === 'mail' ? `${r.unread ?? 0} unread` : c.kind === 'todoist' ? `${r.items?.length ?? 0} tasks` : `${r.items?.length ?? 0} posts`
   return { text: `${n} · checked ${timeAgo(r.at)}` }
 }
@@ -45,8 +50,8 @@ function SecretField({ c, label }: { c: Connection; label: string }): JSX.Elemen
   const has = useFeeds((s) => s.secrets.includes(c.id))
   const [val, setVal] = useState('')
   const pw = c.kind === 'mail' ? mailPreset(c.account?.preset).passwordUrl : undefined
-  const link = pw ? { url: pw, label: 'Create an app password' } : KEY_LINKS[c.kind]
-  const save = async (v: string | null): Promise<void> => { await setSecret(c.id, v); setVal(''); void loadFeed(c, true) }
+  const link = pw ? { url: pw, label: 'Create an app password' } : isService(c.kind) && serviceInfo(c.kind).setup ? { url: serviceInfo(c.kind).setup!, label: 'Credential setup' } : KEY_LINKS[c.kind]
+  const save = async (v: string | null): Promise<void> => { try { await setSecret(c.id, v); setVal(''); void loadFeed(c, true) } catch { toast('Could not save the credential on this device.', { kind: 'error' }) } }
   return (
     <Field label={label} sub={has ? 'Saved and encrypted on this computer' : c.kind === 'github' ? 'Needed for private repositories and for what is assigned to you' : 'Stored encrypted on this computer, never in exports'}>
       <input type="password" className="input input-sm w-220" placeholder={has ? '••••••••••••' : 'Paste it here'} value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && val.trim()) void save(val.trim()) }} />
@@ -162,6 +167,7 @@ function ConnCard({ c, open, onToggle }: { c: Connection; open: boolean; onToggl
   const notionCount = useData((d) => (c.kind === 'notion' ? notionPagesOf(d, c.id).length : 0))
   const [url, setUrl] = useState(c.url)
   const [repos, setRepos] = useState(c.repos.join(', '))
+  const service = isService(c.kind) ? serviceInfo(c.kind) : undefined
   const info = CONN_INFO[c.kind]
   const st = statusOf(c, result, busy, notionCount)
   const title = c.name || (c.kind !== 'notion' && result?.ok ? result.title : '') || info.name
@@ -169,7 +175,7 @@ function ConnCard({ c, open, onToggle }: { c: Connection; open: boolean; onToggl
     const v = url.trim()
     if (v === c.url) return
     patchConnection(c.id, (x) => { x.url = v })
-    if (v) setTimeout(() => { const now = getData().connections.find((x) => x.id === c.id); if (now) void loadFeed(now, true) }, 0)
+    setTimeout(() => { const now = getData().connections.find((x) => x.id === c.id); if (now) void loadFeed(now, true) }, 0)
   }
   const saveRepos = (): void => {
     const list = [...new Set(repos.split(/[\s,]+/).map(repoOf).filter((x): x is string => !!x))]
@@ -199,6 +205,9 @@ function ConnCard({ c, open, onToggle }: { c: Connection; open: boolean; onToggl
               <input className="input input-sm w-320" autoFocus={!c.url} value={url} placeholder={c.kind === 'calendar' ? 'https://… .ics' : 'https://…'} onChange={(e) => setUrl(e.target.value)} onBlur={saveUrl} onKeyDown={(e) => { if (e.key === 'Enter') saveUrl() }} />
             </Field>
           )}
+          {service?.field && <Field label={service.field}><input className="input input-sm w-320" value={url} placeholder={service.example}
+            onChange={e => setUrl(e.target.value)} onBlur={saveUrl} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} /></Field>}
+          {service?.secret && (isDesktop ? <SecretField c={c} label={service.secret} /> : <p className="small muted">Open the Windows app to connect this account.</p>)}
           {c.kind === 'github' && <>
             <Field label="Repositories" sub="owner/name, separated by commas. Leave empty for everything assigned to you.">
               <input className="input input-sm w-320" autoFocus={!c.repos.length} value={repos} placeholder="facebook/react, owner/name" onChange={(e) => setRepos(e.target.value)} onBlur={saveRepos} onKeyDown={(e) => { if (e.key === 'Enter') saveRepos() }} />
@@ -211,7 +220,11 @@ function ConnCard({ c, open, onToggle }: { c: Connection; open: boolean; onToggl
           {c.kind !== 'notion' && <Field label="Color"><ColorDots value={c.color} colors={CONN_COLORS} onChange={(v) => patchConnection(c.id, (x) => { x.color = v })} /></Field>}
           <Field label="On" sub={c.off ? 'Paused: not checked and not shown' : undefined}><Toggle checked={!c.off} onChange={(v) => patchConnection(c.id, (x) => { if (v) delete x.off; else x.off = true })} /></Field>
           {c.kind === 'notion' ? <NotionPages c={c} /> : !c.off && <Preview c={c} />}
-          <div className="row end mt-sm"><ConfirmButton label="Remove connection" confirmLabel="Remove" onConfirm={() => removeConnection(c.id)} /></div>
+          <div className="row end mt-sm">{isService(c.kind) && <Button small icon="plus" onClick={async () => {
+            if (!isService(c.kind)) return
+            try { await addDesktopWidget(c.kind, { config: { conn: c.id, count: 8, summary: true } }); toast('Desktop panel added') }
+            catch { toast('Could not add this panel', { kind: 'error' }) }
+          }}>Add desktop panel</Button>}<ConfirmButton label="Remove connection" confirmLabel="Remove" onConfirm={() => removeConnection(c.id)} /></div>
         </div>
       )}
     </div>
@@ -220,6 +233,7 @@ function ConnCard({ c, open, onToggle }: { c: Connection; open: boolean; onToggl
 
 export function ConnectionsPage(): JSX.Element {
   const conns = useData((d) => d.connections)
+  const [query, setQuery] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   return (
     <div className="page full page-connections">
@@ -232,8 +246,9 @@ export function ConnectionsPage(): JSX.Element {
         </div>
       )}
       <div className="section-label mt">Add a connection</div>
+      <input className="input conn-search" aria-label="Find a connection" placeholder="Find a connection" value={query} onChange={e => setQuery(e.target.value)} />
       <div className="conn-add">
-        {KINDS.map((k) => (
+        {KINDS.filter(k => (CONN_INFO[k].name + ' ' + CONN_INFO[k].desc).toLowerCase().includes(query.trim().toLowerCase())).map((k) => (
           <button key={k} className="conn-tile" onClick={() => setOpen(addConnection(k))}>
             <Icon name={CONN_INFO[k].icon} size={18} />
             <span className="strong">{CONN_INFO[k].name}</span>

@@ -37,6 +37,7 @@ const SLASH: SlashItem[] = [
   { type: 'table', label: 'Table', icon: 'table', hint: '' },
   { type: 'columns', label: '2 columns', icon: 'columns2', hint: '', cols: 2 },
   { type: 'columns', label: '3 columns', icon: 'columns', hint: '', cols: 3 },
+  ...[4, 5, 6, 8, 12].map(cols => ({ type: 'columns' as const, label: cols + ' columns', icon: 'columns', hint: '', cols })),
   { type: 'tabs', label: 'Tabs', icon: 'tabs', hint: '' },
   { type: 'database', label: 'Database', icon: 'database', hint: '' },
   ...PAGE_TYPES.filter(p => p.type !== 'doc' && p.type !== 'database').map(p => ({
@@ -105,6 +106,25 @@ export interface ColumnRef { block: string; index: number }
 const listOf = (p: Page | undefined, col?: ColumnRef): Block[] | undefined =>
   !p ? undefined : col ? findBlock(p.blocks, col.block)?.cols?.[col.index] : p.blocks
 
+let movingBlocks: { pageId: string; ids: string[]; source?: ColumnRef } | null = null
+
+function moveBlocks(pageId: string, targetId: string, targetCol: ColumnRef | undefined, before: boolean): void {
+  const drag = movingBlocks
+  movingBlocks = null
+  if (!drag || drag.pageId !== pageId || drag.ids.includes(targetId)) return
+  updatePage(pageId, page => {
+    const from = listOf(page, drag.source)
+    const to = listOf(page, targetCol)
+    if (!from || !to || !to.some(b => b.id === targetId)) return
+    const chosen = from.filter(b => drag.ids.includes(b.id))
+    if (!chosen.length || (targetCol && findBlock(chosen, targetCol.block))) return
+    for (const b of chosen) from.splice(from.indexOf(b), 1)
+    to.splice(to.findIndex(b => b.id === targetId) + (before ? 0 : 1), 0, ...chosen)
+    if (!from.length) from.push({ id: uid(), type: 'p', text: '' })
+  })
+  clearSelection()
+}
+
 const INLINE_COLORS = ['red', 'orange', 'green', 'blue', 'purple', 'gray']
 
 const BlockRow = memo(function BlockRow({ render }: { b: Block; deps: string; render: () => JSX.Element }): JSX.Element { return render() }, (a, z) => a.b === z.b && a.deps === z.deps)
@@ -116,7 +136,8 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
   const [mention, setMention] = useState<MentionState | null>(null)
   const [handleMenu, setHandleMenu] = useState<{ id: string; el: HTMLElement } | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
-  const dragRef = useRef<string | null>(null)
+  const selectionAnchor = useRef<string | null>(null)
+  const [insertMenu, setInsertMenu] = useState<HTMLElement | null>(null)
   const selIds = useSelection((s) => (s.page === pageId && !col ? s.ids : NONE))
   /** A menu on a selected block acts on every selected block. */
   const targetsOf = (id: string): string[] => (selIds.length > 1 && selIds.includes(id) ? selIds : [id])
@@ -464,7 +485,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
     if (b.type === 'columns') {
       const n = b.cols?.length ?? 0
       items.push({ divider: true, label: '' },
-        { label: 'Add a column', icon: 'plus', disabled: n >= 6, onClick: () => setBlock(id, (x) => { x.cols = [...(x.cols ?? []), [{ id: uid(), type: 'p', text: '' }]]; x.widths = undefined }) },
+        { label: 'Add a column', icon: 'plus', disabled: n >= 12, onClick: () => setBlock(id, (x) => { x.cols = [...(x.cols ?? []), [{ id: uid(), type: 'p', text: '' }]]; x.widths = undefined }) },
         { label: 'Remove last column', icon: 'minus', disabled: n <= 2, onClick: () => setBlock(id, (x) => { if (!x.cols || x.cols.length <= 2) return; const last = x.cols.pop()!; x.cols[x.cols.length - 1].push(...last.filter((y) => y.text || y.type !== 'p')); x.widths = undefined }) },
         { label: 'Even widths', icon: 'columns', disabled: !b.widths, onClick: () => setBlock(id, (x) => { x.widths = undefined }) },
         { label: 'Unwrap columns', icon: 'rows', onClick: () => edit((bs) => { const i = bs.findIndex((x) => x.id === id); const inner = (bs[i].cols ?? []).flat().filter((y) => y.text || y.type !== 'p'); bs.splice(i, 1, ...(inner.length ? inner : [{ id: uid(), type: 'p' as BlockType, text: '' }])) }) })
@@ -505,13 +526,25 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
   let num = 0
   return (
     <div className={`blocks ${locked ? 'locked' : ''} ${col ? 'nested' : ''}`}>
+      {!col && !locked && <div className="insert-block-row">
+        <button className="page-add" aria-haspopup="menu" onClick={e => setInsertMenu(e.currentTarget)}><Icon name="plus" size={14} />Insert block</button>
+        {insertMenu && <Popover anchor={insertMenu} onClose={() => setInsertMenu(null)} width={242}>
+          <Menu onClose={() => setInsertMenu(null)} items={SLASH.filter(item => ['tool', 'tabs', 'columns', 'database'].includes(item.type)).map(item => ({
+            label: item.label, icon: item.icon, onClick: () => {
+              const tail = current().at(-1)
+              const id = tail?.type === 'p' && !tail.text ? tail.id : insertAfter(tail?.id ?? '')
+              applySlash(id, item)
+            }
+          }))} />
+        </Popover>}
+      </div>}
       {blocks.map((b, idx) => {
         if (hidden.has(b.id)) return null
         num = b.type === 'number' ? num + 1 : 0
         const n = num
         // A row draws again only when its block or its place changes, so typing in one line of a
         // long page doesn't redraw every other line. Handlers read the editor's latest state.
-        const deps = `${pageId}|${idx}|${n}|${locked ? 1 : 0}|${spell ? 1 : 0}|${dragOver === b.id ? 1 : 0}|${selIds.includes(b.id) ? 1 : 0}|${blocks.length === 1 ? 1 : 0}`
+        const deps = `${pageId}|${idx}|${n}|${locked ? 1 : 0}|${spell ? 1 : 0}|${dragOver?.slice(1) === b.id ? dragOver[0] : ''}|${selIds.includes(b.id) ? 1 : 0}|${blocks.length === 1 ? 1 : 0}`
         return <BlockRow key={b.id} b={b} deps={deps} render={() => {
         const set = (fn: (x: Block) => void, key?: string): void => setBlock(b.id, fn, key)
         const isToggle = TOGGLES.has(b.type)
@@ -523,7 +556,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => live.current.onKey(e, b, idx),
           onChange: (v: string) => live.current.onChange(b, v, refs.get(b.id) ?? null),
           onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => live.current.onPaste(e, b),
-          placeholder: idx === 0 && blocks.length === 1 && !col ? 'Start writing, or press / for blocks' : b.type.startsWith('h') || headLevel ? 'Heading' : b.type === 'p' ? '' : isToggle ? 'Toggle' : 'List item'
+          placeholder: idx === 0 && blocks.length === 1 && !col ? '' : b.type.startsWith('h') || headLevel ? 'Heading' : b.type === 'p' ? '' : isToggle ? 'Toggle' : 'List item'
         }
         let content: JSX.Element
         switch (b.type) {
@@ -542,7 +575,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           case 'database': content = <InlineDatabase block={b} pageId={pageId} locked={locked} set={set} />; break
           case 'columns':
             content = (
-              <div className="cols" style={{ gridTemplateColumns: b.widths?.length === b.cols?.length ? b.widths!.map((w) => `minmax(0, ${w}fr)`).join(' ') : `repeat(${b.cols?.length ?? 2}, minmax(0, 1fr))` }}>
+              <div className="cols" style={{ gridTemplateColumns: b.widths && b.widths.length === b.cols?.length ? b.widths.map((w) => `minmax(130px, ${w}fr)`).join(' ') : `repeat(${b.cols?.length ?? 2}, minmax(130px, 1fr))` }}>
                 {(b.cols ?? []).map((_, ci) => <div key={ci} className="col"><BlockEditor pageId={pageId} locked={locked} col={{ block: b.id, index: ci }} /></div>)}
               </div>
             )
@@ -576,35 +609,44 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           <div
             key={b.id}
             data-block={b.id}
-            className={`block block-${b.type} ${headLevel ? 'block-' + headLevel : ''} ${dragOver === b.id ? 'drag-over' : ''} ${selIds.includes(b.id) ? 'selected' : ''} ${b.bg ? 'has-bg' : ''}`}
+            className={`block block-${b.type} ${headLevel ? 'block-' + headLevel : ''} ${dragOver?.slice(1) === b.id ? (dragOver[0] === '<' ? 'drop-above' : 'drop-below') : ''} ${selIds.includes(b.id) ? 'selected' : ''} ${b.bg ? 'has-bg' : ''}`}
             style={{ paddingLeft: 28 + (b.indent ?? 0) * 24, color: textColor(b.color), ['--ind' as string]: (b.indent ?? 0) * 24 + 'px', ['--bgc' as string]: bgColor(b.bg) }}
-            onDragOver={(e) => { if (dragRef.current) { e.preventDefault(); e.stopPropagation(); setDragOver(b.id) } }}
-            onDragLeave={() => setDragOver(null)}
-            onDrop={(e) => {
-              const from = dragRef.current
-              if (!from) return
-              e.preventDefault()
-              e.stopPropagation()
+            onDragOver={e => {
+              if (locked || movingBlocks?.pageId !== pageId) return
+              e.preventDefault(); e.stopPropagation()
+              const box = e.currentTarget.getBoundingClientRect()
+              setDragOver((e.clientY < box.top + box.height / 2 ? '<' : '>') + b.id)
+            }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(null) }}
+            onDrop={e => {
+              if (locked || movingBlocks?.pageId !== pageId) return
+              e.preventDefault(); e.stopPropagation()
+              const box = e.currentTarget.getBoundingClientRect()
+              moveBlocks(pageId, b.id, col, e.clientY < box.top + box.height / 2)
               setDragOver(null)
-              dragRef.current = null
-              // Dragging a selected block moves the whole selection.
-              const sel = live.current.selIds
-              const moving = sel.includes(from) ? sel : [from]
-              if (moving.includes(b.id)) return
-              edit((bs) => {
-                const ms = bs.filter((x) => moving.includes(x.id))
-                for (const m of ms) bs.splice(bs.indexOf(m), 1)
-                const ti = bs.findIndex((x) => x.id === b.id)
-                bs.splice(ti + 1, 0, ...ms)
-              })
             }}
           >
             {!locked && (
               <div className="block-gutter">
                 <button className="gutter-btn" title="Add a block below (Alt: above)" onClick={(e) => addNear(b.id, e.altKey)}><Icon name="plus" size={15} stroke={2} /></button>
-                <div className="gutter-btn block-handle" draggable onDragStart={(e) => { e.stopPropagation(); dragRef.current = b.id }} onClick={(e) => setHandleMenu({ id: b.id, el: e.currentTarget })} title="Drag to move, click for options">
+                <button className="gutter-btn block-handle" draggable onDragStart={e => {
+                  e.stopPropagation()
+                  movingBlocks = { pageId, source: col, ids: live.current.selIds.includes(b.id) ? live.current.selIds : [b.id] }
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('application/x-deskbase-block', b.id)
+                }} onDragEnd={() => { movingBlocks = null; setDragOver(null) }} onClick={e => {
+                  if (!col && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+                    const ids = current().map(x => x.id)
+                    const anchor = ids.indexOf(selectionAnchor.current ?? b.id)
+                    const at = ids.indexOf(b.id)
+                    const old = live.current.selIds
+                    const next = e.shiftKey ? ids.slice(Math.max(0, Math.min(at, anchor)), Math.max(at, anchor) + 1) : old.includes(b.id) ? old.filter(x => x !== b.id) : [...old, b.id]
+                    useSelection.setState({ page: pageId, ids: next })
+                    if (!e.shiftKey) selectionAnchor.current = b.id
+                  } else { selectionAnchor.current = b.id; setHandleMenu({ id: b.id, el: e.currentTarget }) }
+                }} title="Block options · drag to move · Shift or Ctrl to select">
                   <Icon name="grip" size={15} stroke={2.4} />
-                </div>
+                </button>
               </div>
             )}
             <div className="block-main">{content}</div>
@@ -738,6 +780,7 @@ function TabsBlock({ block, pageId, locked, set }: { block: Block; pageId: strin
   const [menu, setMenu] = useState<{ i: number; x: number; y: number } | null>(null)
   const n = Math.max(1, block.cols?.length ?? 1)
   const at = Math.min(active, n - 1)
+  const draggedTab = useRef<number | null>(null)
   const labels = block.labels ?? []
   const name = (i: number): string => labels[i] || `Tab ${i + 1}`
   const move = (i: number, to: number): void => {
@@ -760,7 +803,15 @@ function TabsBlock({ block, pageId, locked, set }: { block: Block; pageId: strin
             onBlur={() => setRenaming(null)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setRenaming(null) }} />
         ) : (
           <button key={i} role="tab" aria-selected={i === at} className={`tabs-tab ${i === at ? 'active' : ''}`}
-            onClick={() => setActive(i)} onDoubleClick={() => !locked && setRenaming(i)}
+            draggable={!locked} onDragStart={e => {
+              e.stopPropagation(); draggedTab.current = i; e.dataTransfer.setData('application/x-deskbase-tab', block.id); e.dataTransfer.effectAllowed = 'move'
+            }} onDragEnd={() => { draggedTab.current = null }} onDragOver={e => {
+              if (draggedTab.current !== null) { e.preventDefault(); e.stopPropagation() }
+            }} onDrop={e => {
+              if (locked || draggedTab.current === null) return
+              e.preventDefault(); e.stopPropagation(); move(draggedTab.current, i); draggedTab.current = null
+            }}
+            onDragEnter={() => { if (movingBlocks?.pageId === pageId) setActive(i) }} onClick={() => setActive(i)} onDoubleClick={() => !locked && setRenaming(i)}
             onContextMenu={(e) => { if (locked) return; e.preventDefault(); setMenu({ i, x: e.clientX, y: e.clientY }) }}>
             {name(i)}
           </button>
@@ -860,6 +911,7 @@ function useBlockSelection(pageId: string, root: React.RefObject<HTMLDivElement>
       raf = requestAnimationFrame(tick)
     }
     const down = (e: MouseEvent): void => {
+      if (e.defaultPrevented) return
       if (e.button !== 0) return
       const t = e.target as HTMLElement
       if (!scroller.contains(t) || t.closest('.popover, .modal')) return
@@ -900,7 +952,18 @@ function useBlockSelection(pageId: string, root: React.RefObject<HTMLDivElement>
       const ids = new Set(sel.ids)
       const picked = blocks.filter((b) => ids.has(b.id))
       const remove = (): void => { edit((bs) => { for (let i = bs.length - 1; i >= 0; i--) if (ids.has(bs[i].id)) bs.splice(i, 1); if (!bs.length) bs.push({ id: uid(), type: 'p', text: '' }) }); clearSelection() }
-      if (e.key === 'Escape') { e.preventDefault(); clearSelection() }
+      if (e.altKey && !locked && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault()
+        edit(bs => {
+          const up = e.key === 'ArrowUp'
+          const order = up ? [...bs] : [...bs].reverse()
+          for (const block of order) {
+            if (!ids.has(block.id)) continue
+            const at = bs.indexOf(block), next = at + (up ? -1 : 1)
+            if (bs[next] && !ids.has(bs[next].id)) [bs[next], bs[at]] = [bs[at], bs[next]]
+          }
+        })
+      } else if (e.key === 'Escape') { e.preventDefault(); clearSelection() }
       else if ((e.key === 'Backspace' || e.key === 'Delete') && !locked) { e.preventDefault(); remove() }
       else if (mod && (k === 'c' || k === 'x')) {
         e.preventDefault()
@@ -961,7 +1024,7 @@ export function DocPage({ pageId }: { pageId: string }): JSX.Element {
   return (
     <div className="doc" ref={root}>
       <BlockEditor pageId={pageId} locked={locked} />
-      <div className="doc-foot">{words} {words === 1 ? 'word' : 'words'}</div>
+      {words > 0 && <div className="doc-foot">{words} {words === 1 ? 'word' : 'words'}</div>}
       {box && createPortal(<div className="select-box" style={{ left: box.x, top: box.y, width: box.w, height: box.h }} />, document.body)}
     </div>
   )

@@ -29,7 +29,6 @@ function Agenda({ byDay, evBy, onOpen, days, onDays }: { days: number; onDays: (
           <div className="task-list glass">{overdue.map((x) => <TaskRow key={x.id} task={x} showPage onOpen={onOpen} />)}</div>
         </section>
       )}
-      {keys.length === 0 && overdue.length === 0 && <Empty icon="calendar" title={`Nothing scheduled in the next ${days} days`} />}
       {keys.map((k) => (
         <section key={k} className="agenda-day">
           <div className={`agenda-head ${k === t ? 'accent' : ''}`}><span className="strong">{friendlyDay(k)}</span><span className="muted small">{longDate(k)}</span></div>

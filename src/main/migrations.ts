@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 19
+export const CURRENT_SCHEMA = 20
 
 type Raw = Record<string, any>
 
@@ -238,6 +238,9 @@ migrations[17] = (d) => d
 
 // 18 -> 19: inline tool blocks reference a page using the existing ref field.
 migrations[18] = (d) => d
+
+// 19 -> 20: workspace colors and additional connection and panel kinds are optional.
+migrations[19] = d => d
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

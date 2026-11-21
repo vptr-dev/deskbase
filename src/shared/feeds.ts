@@ -1,7 +1,9 @@
 // Connections that bring things in from outside: calendar feeds (ICS), news feeds (RSS and Atom)
 // and GitHub. The parsers are plain functions so the main process and the browser preview share them.
 
-export type ConnKind = 'notion' | 'calendar' | 'rss' | 'github' | 'mail' | 'todoist'
+import type { ServiceId } from './services'
+
+export type ConnKind = ServiceId | 'notion' | 'calendar' | 'rss' | 'github' | 'mail' | 'todoist'
 
 /** A mail account (IMAP). The password stays in the main process. */
 export interface MailAccount { preset: string; host: string; port: number; user: string }
@@ -27,6 +29,7 @@ export interface FeedEvent {
 }
 
 export interface FeedItem {
+  resumeCommand?: string
   id: string
   title: string
   url: string

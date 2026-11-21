@@ -1,5 +1,6 @@
+import { isService, type ServiceId } from '../../../shared/services'
 // Panels from connections: calendar events, a news feed and GitHub issues and pull requests.
-import { openView, useData } from '../store'
+import { openView, toast, useData } from '../store'
 import type { ConnectionKind } from '../types'
 import type { FeedItem } from '../../../shared/feeds'
 import { api } from '../lib/api'
@@ -67,6 +68,9 @@ export function EventsWidget({ cfg }: { cfg: Cfg }): JSX.Element {
 
 // ---------- news feed ----------
 export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summary?: boolean; kind: ConnectionKind; connId?: string }): JSX.Element {
+  if (isService(kind) && item.resumeCommand) return <button className="feed-row" title={'Copy ' + item.resumeCommand} onClick={() => {
+    void navigator.clipboard.writeText(item.resumeCommand!).then(() => toast('Resume command copied')).catch(() => toast('Clipboard unavailable', { kind: 'error' }))
+  }}><span className="ellipsis grow">{item.title}</span><Icon name="copy" size={13} /></button>
   if (kind === 'mail') {
     return (
       <button className={`feed-row mail ${item.unread ? 'unread' : ''}`} onClick={() => open(item.url)} title={item.title}>
@@ -114,11 +118,12 @@ export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summa
   )
 }
 
-function ListPanel({ cfg, kind }: { cfg: Cfg; kind: 'rss' | 'github' | 'mail' | 'todoist' }): JSX.Element {
+export function ListPanel({ cfg, kind }: { cfg: Cfg; kind: ServiceId | 'rss' | 'github' | 'mail' | 'todoist' }): JSX.Element {
   const first = useData((d) => d.connections.find((c) => c.kind === kind && !c.off)?.id)
   const id = cfg.conn && cfg.conn !== 'first' ? cfg.conn : first
   const { conn, result, busy } = useFeed(id)
-  if (!conn) return <NoConnection kind={kind} />
+  if (!conn || conn.kind !== kind) return <NoConnection kind={kind} />
+  if (conn.off) return <div className="muted small pad">Paused</div>
   if (!result) return <div className="muted small pad">{busy ? 'Loading…' : ''}</div>
   if (!result.ok && !result.items?.length) return <div className="danger small pad">{result.error}</div>
   let items = result.items ?? []
@@ -127,6 +132,7 @@ function ListPanel({ cfg, kind }: { cfg: Cfg; kind: 'rss' | 'github' | 'mail' | 
   if (kind === 'mail' && cfg.unreadOnly) items = items.filter((i) => i.unread)
   if (kind === 'todoist' && (cfg.show ?? 'today') === 'today') { const t = today(); items = items.filter((i) => i.due && i.due <= t) }
   if (kind === 'todoist' && cfg.show === 'week') { const w = addDays(today(), 7); items = items.filter((i) => i.due && i.due <= w) }
+  if (cfg.textFilter) { const query = String(cfg.textFilter).toLowerCase(); items = items.filter(i => [i.title, i.summary, i.author].some(s => s?.toLowerCase().includes(query))) }
   items = items.slice(0, Number(cfg.count) || (kind === 'rss' ? 6 : 8))
   const head = kind === 'mail' && cfg.count !== 0 ? (
     <button className="mail-head" onClick={() => open(mailPreset(conn.account?.preset).web || items[0]?.url)}>
@@ -134,8 +140,8 @@ function ListPanel({ cfg, kind }: { cfg: Cfg; kind: 'rss' | 'github' | 'mail' | 
       {!result.ok && <Icon name="alert" size={13} className="danger" />}
     </button>
   ) : null
-  if (!items.length) return <div className={`feed-panel ${kind}`}>{head}<div className="muted small pad">{kind === 'github' ? 'Nothing open.' : kind === 'mail' ? 'Nothing new.' : kind === 'todoist' ? 'Nothing due.' : 'No posts yet.'}</div></div>
-  return <div className={`feed-panel ${kind}`}>{head}{items.map((i) => <FeedRow key={i.id} item={i} kind={kind} connId={conn.id} summary={kind === 'rss' && cfg.summary !== false} />)}</div>
+  if (!items.length) return <div className="feed-panel">{head}</div>
+  return <div className={`feed-panel ${kind}`}>{head}{items.map((i) => <FeedRow key={i.id} item={i} kind={kind} connId={conn.id} summary={(kind === 'rss' || isService(kind)) && cfg.summary !== false} />)}</div>
 }
 
 export const FeedWidget = ({ cfg }: { cfg: Cfg }): JSX.Element => <ListPanel cfg={cfg} kind="rss" />

@@ -1,3 +1,4 @@
+import { isService } from '../../../shared/services'
 import type { TrelloBoard, TrelloAccess, TrelloEdit } from '../../../shared/trello'
 import { type ConnSpec, type FeedResult, feedUrl, githubItems, parseFeed, parseIcs } from '../../../shared/feeds'
 import { download } from './util'
@@ -89,7 +90,7 @@ export interface Bridge {
   }
   conn: {
     secrets(): Promise<string[]>
-    setSecret(id: string, value: string | null): Promise<string[]>
+    setSecret(id: string, value: string | null, kind?: string): Promise<string[]>
     fetch(spec: ConnSpec, force?: boolean): Promise<FeedResult>
     notionList(id: string): Promise<NotionPageInfo[]>
     notionImport(id: string, ids: string[]): Promise<ImportResult>
@@ -125,7 +126,7 @@ const webConn: Bridge['conn'] = {
   setSecret: async (id, value) => { const s = webSecrets(); if (value) s[id] = value; else delete s[id]; localStorage.setItem(CONN_KEY, JSON.stringify(s)); return Object.keys(s) },
   fetch: async (spec) => {
     try {
-      if (spec.kind === 'notion' || spec.kind === 'mail' || spec.kind === 'todoist') throw new Error('This connection works in the desktop app.')
+      if (isService(spec.kind) || spec.kind === 'notion' || spec.kind === 'mail' || spec.kind === 'todoist') throw new Error('This connection works in the desktop app.')
       if (spec.kind === 'github') {
         const tok = webSecrets()[spec.id]
         const h: Record<string, string> = { Accept: 'application/vnd.github+json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }

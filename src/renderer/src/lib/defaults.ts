@@ -1,11 +1,12 @@
 import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, Connection, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
+import { serviceIds } from '../../../shared/services'
 import { boardKey } from '../../../shared/trello'
 import { normalizeRepeat } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 19
+export const SCHEMA = 20
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -266,7 +267,7 @@ export const DEFAULT_PRESETS: AssistantPreset[] = [
 ]
 export const DEFAULT_AI_SETTINGS: AssistantSettings = { instructions: '', access: 'ask', temperature: null, length: 'normal', effort: 'medium', presets: [] }
 
-const CONN_KINDS = ['notion', 'calendar', 'rss', 'github', 'mail', 'todoist']
+const CONN_KINDS = [...serviceIds, 'notion', 'calendar', 'rss', 'github', 'mail', 'todoist']
 function normalizeConnections(raw: any): Connection[] {
   if (!Array.isArray(raw)) return []
   return raw.filter((c) => c && typeof c === 'object' && typeof c.id === 'string' && CONN_KINDS.includes(c.kind)).map((c) => ({
@@ -461,7 +462,7 @@ export function normalizeLook(raw: any): Look {
     letterSpacing: num(l.letterSpacing, -4, 8, 0),
     motion: ['off', 'subtle', 'normal', 'lively'].includes(l.motion) ? l.motion : D.motion,
     pageTransition: ['fade', 'slide', 'rise', 'none'].includes(l.pageTransition) ? l.pageTransition : D.pageTransition,
-    sidebar: l.sidebar === 'attached' ? 'attached' : 'floating',
+    sidebar: 'floating',
     iconStroke: num(l.iconStroke, 1, 2.75, D.iconStroke),
     backdropImage: typeof l.backdropImage === 'string' && l.backdropImage.startsWith('data:image/') ? l.backdropImage : null,
     backdropBlur: num(l.backdropBlur, 0, 60, 0),
@@ -520,9 +521,9 @@ export function normalizeStyle(raw: any, partial = false): Partial<WidgetStyle> 
 
 function normalizeDesktop(raw: any): Desktop {
   const r = obj(raw)
-  const spaces = (Array.isArray(r.spaces) ? r.spaces : [])
+  const spaces: Desktop['spaces'] = (Array.isArray(r.spaces) ? r.spaces : [])
     .filter((s: any) => s && typeof s.id === 'string' && s.id)
-    .map((s: any) => ({ id: s.id, name: typeof s.name === 'string' && s.name.trim() ? s.name : 'Workspace', icon: typeof s.icon === 'string' && s.icon ? emojiToIcon(s.icon, 'monitor') : 'monitor' }))
+    .map((s: any) => ({ id: s.id, name: typeof s.name === 'string' && s.name.trim() ? s.name : 'Workspace', icon: s.icon === '' ? '' : emojiToIcon(s.icon, 'monitor'), iconColor: typeof s.iconColor === 'string' ? s.iconColor : undefined }))
   if (!spaces.length) spaces.push({ ...MAIN_SPACE })
   const active = spaces.some((s: any) => s.id === r.active) ? r.active : spaces[0].id
   const known = new Set(spaces.map((s: any) => s.id))

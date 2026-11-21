@@ -1,3 +1,4 @@
+import { SERVICES, isService, serviceIds } from '../../../shared/services'
 import { useEffect, useMemo, useState } from 'react'
 import { openPage, setOverlay, updatePage, useData } from '../store'
 import type { AppData, Block, Page, Task, Widget, WidgetType } from '../types'
@@ -23,14 +24,14 @@ import { Marks, findBlock } from './Blocks'
 import { plainText } from '../lib/links'
 import { CalculatorWidget, NetworkWidget, RecentWidget } from './PanelKit3'
 import { ActivityWidget, DbChartWidget, DeadlinesWidget } from './PanelKit4'
-import { EventsWidget, FeedWidget, GitHubWidget, MailWidget, MediaWidget, TodoistWidget } from './PanelKit5'
+import { ListPanel, EventsWidget, FeedWidget, GitHubWidget, MailWidget, MediaWidget, TodoistWidget } from './PanelKit5'
 import { eventsByDay, useCalendarEvents } from '../lib/connections'
 
 /** Partial widget used by both dashboards and desktop widgets. */
 export type AnyWidget = Pick<Widget, 'id' | 'type' | 'config' | 'title'>
 export type SetConfig = (key: string, value: any) => void
 
-export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: string; w: number; h: number; config?: Record<string, any>; group: 'Work' | 'Plan' | 'Track' | 'More' }[] = [
+export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: string; w: number; h: number; config?: Record<string, any>; group: 'Work' | 'Plan' | 'Track' | 'More' | 'Connections' }[] = [
   { type: 'tasks', name: 'Tasks', icon: 'square-check-big', desc: 'What is due today, overdue or next, with quick add', w: 4, h: 4, group: 'Work', config: { filter: 'today', quickAdd: true } },
   { type: 'checklist', name: 'Checklist', icon: 'list-todo', desc: 'Check off the to-dos of any page or section, Notion included', w: 3, h: 4, group: 'Work', config: { hideChecked: true, subpages: false } },
   { type: 'pageview', name: 'Page', icon: 'file-text', desc: 'Keep a page open on screen and work in it', w: 4, h: 5, group: 'Work', config: { hideChecked: false } },
@@ -78,7 +79,10 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'calculator', name: 'Calculator', icon: 'calculator', desc: 'Sums as you type, with keys and your last answers', w: 3, h: 4, group: 'More', config: { keys: true } },
   { type: 'recent', name: 'Recent pages', icon: 'history', desc: 'Favorites and the pages you opened last', w: 3, h: 3, group: 'Work', config: { count: 8, favorites: true } },
   { type: 'text', name: 'Heading', icon: 'type', desc: 'A title, rule or reminder in big type', w: 4, h: 2, group: 'More', config: { text: '', size: 28, weight: 650 } },
-  { type: 'image', name: 'Picture', icon: 'image', desc: 'A reference image or photo', w: 3, h: 3, group: 'More', config: { src: null, fit: 'cover' } }
+  { type: 'image', name: 'Picture', icon: 'image', desc: 'A reference image or photo', w: 3, h: 3, group: 'More', config: { src: null, fit: 'cover' } },
+  ...serviceIds.map(type => ({ type, name: SERVICES[type].name, icon: SERVICES[type].icon, desc: SERVICES[type].desc,
+    w: 4, h: 4, group: 'Connections' as const, config: { count: 8, summary: true } }))
+
 ]
 export const widgetDef = (t: WidgetType): (typeof WIDGETS)[number] => WIDGETS.find((w) => w.type === t) ?? WIDGETS[0]
 
@@ -243,7 +247,7 @@ function TasksWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
     <div className="w-tasks">
       {cfg.quickAdd !== false && listPage && <QuickAdd pageId={listPage} defaults={cfg.filter === 'today' || !cfg.filter ? { due: t } : {}} placeholder="Add a task" />}
       <div className="w-scroll">
-        {list.length === 0 && rows.length === 0 ? <div className="muted small pad">Nothing here.</div> : list.map((x) => <TaskRow key={x.id} task={x} onOpen={openTask} />)}
+        {list.map((x) => <TaskRow key={x.id} task={x} onOpen={openTask} />)}
         {rows.map((r) => <RowTask key={r.id} r={r} />)}
       </div>
       {drawer}
@@ -428,6 +432,7 @@ function Missing({ text, action, actionLabel }: { text: string; action?: () => v
 
 export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfig }): JSX.Element {
   const c = w.config
+  if (isService(w.type)) return <ListPanel cfg={c} kind={w.type} />
   switch (w.type) {
     case 'value': return <ValueWidget cfg={c} />
     case 'chart': return <ChartWidget cfg={c} />
@@ -680,7 +685,6 @@ function PageViewWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
     <div className="w-pageview">
       <div className="w-scroll">
         {blocks.map((b) => { n = b.type === 'number' ? n + 1 : 0; return <MiniBlock key={b.id} b={b} pageId={page.id} n={n} /> })}
-        {blocks.length === 0 && <div className="muted small pad">{cfg.today ? 'Nothing for today.' : 'Nothing here.'}</div>}
       </div>
     </div>
   )

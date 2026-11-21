@@ -304,7 +304,6 @@ export function AppearancePage(): JSX.Element {
 
           <Section id="shape" title="Shape" icon="shapes">
             <Row label="Corner roundness"><Slider value={l.radius} min={0} max={32} unit="px" onChange={(v) => setLook({ radius: v }, 'radius')} /></Row>
-            <Row label="Sidebar"><Segmented small value={l.sidebar} onChange={(v) => setLook({ sidebar: v })} options={[{ value: 'floating', label: 'Floating' }, { value: 'attached', label: 'Attached' }]} /></Row>
             <Row label="Density"><Segmented small value={s.density} onChange={(v) => set((x) => { x.density = v })} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} /></Row>
             <Row label="Icon weight"><Slider value={l.iconStroke} min={1} max={2.75} step={0.25} onChange={(v) => setLook({ iconStroke: v }, 'stroke')} /></Row>
           </Section>

@@ -95,7 +95,7 @@ const api = {
   },
   conn: {
     secrets: () => ipcRenderer.invoke('conn:secrets'),
-    setSecret: (id: string, value: string | null) => ipcRenderer.invoke('conn:setSecret', id, value),
+    setSecret: (id: string, value: string | null, kind?: string) => ipcRenderer.invoke('conn:setSecret', id, value, kind),
     fetch: (spec: unknown, force?: boolean) => ipcRenderer.invoke('conn:fetch', spec, force),
     notionList: (id: string) => ipcRenderer.invoke('conn:notionList', id),
     notionImport: (id: string, ids: string[]) => ipcRenderer.invoke('conn:notionImport', id, ids),

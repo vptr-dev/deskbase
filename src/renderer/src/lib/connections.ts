@@ -9,7 +9,10 @@ import { type MediaState, api, isDesktop } from './api'
 import { refreshFromNotion } from './importer'
 import { uid } from './util'
 
+import { SERVICES } from '../../../shared/services'
+
 export const CONN_INFO: Record<ConnectionKind, { name: string; icon: string; desc: string }> = {
+  ...SERVICES,
   calendar: { name: 'Calendar', icon: 'calendarSync', desc: 'Google, Outlook or Apple calendar through its ICS link' },
   rss: { name: 'News feed', icon: 'rss', desc: 'Any RSS or Atom feed: blogs, news, YouTube channels' },
   github: { name: 'GitHub', icon: 'pr', desc: 'Open issues and pull requests' },
@@ -29,15 +32,19 @@ export const useFeeds = create<{ results: Record<string, FeedResult>; busy: Reco
 
 export const specOf = (c: Connection): ConnSpec => ({ id: c.id, kind: c.kind, url: c.url, repos: c.repos, ...(c.account ? { account: { ...c.account } } : {}) })
 
+const latestRequest = new Map<string, symbol>()
 export async function loadFeed(c: Connection, force = false): Promise<FeedResult> {
-  useFeeds.setState((s) => ({ busy: { ...s.busy, [c.id]: true } }))
-  try {
-    const r = await api.conn.fetch(specOf(c), force)
-    useFeeds.setState((s) => ({ results: { ...s.results, [c.id]: r } }))
-    return r
-  } finally {
-    useFeeds.setState((s) => ({ busy: { ...s.busy, [c.id]: false } }))
+  const request = Symbol()
+  latestRequest.set(c.id, request)
+  useFeeds.setState(s => ({ busy: { ...s.busy, [c.id]: true } }))
+  let result: FeedResult
+  try { result = await api.conn.fetch(specOf(c), force) }
+  catch { result = { ok: false, at: Date.now(), error: 'Could not reach this connection.' } }
+  if (latestRequest.get(c.id) === request) {
+    latestRequest.delete(c.id)
+    useFeeds.setState(s => ({ results: { ...s.results, [c.id]: result }, busy: { ...s.busy, [c.id]: false } }))
   }
+  return result
 }
 
 export async function loadSecrets(): Promise<string[]> {
@@ -47,7 +54,7 @@ export async function loadSecrets(): Promise<string[]> {
 }
 
 export async function setSecret(id: string, value: string | null): Promise<void> {
-  useFeeds.setState({ secrets: await api.conn.setSecret(id, value) })
+  useFeeds.setState({ secrets: await api.conn.setSecret(id, value, getData().connections.find(c => c.id === id)?.kind) })
 }
 
 /** One connection and what it fetched; fetches when nothing recent is there. */
@@ -111,12 +118,14 @@ export function patchConnection(id: string, fn: (c: Connection) => void, key?: s
 }
 
 export function removeConnection(id: string): void {
+  latestRequest.delete(id)
+  const kind = getData().connections.find(c => c.id === id)?.kind
   act((d) => {
     d.connections = d.connections.filter((c) => c.id !== id)
     // Pages from a Notion connection stay, as plain pages.
     for (const p of Object.values(d.pages)) if (p.source?.via === id) delete p.source.via
   })
-  void api.conn.setSecret(id, null).then((s) => useFeeds.setState({ secrets: s })).catch(() => {})
+  void api.conn.setSecret(id, null, kind).then((s) => useFeeds.setState({ secrets: s })).catch(() => {})
   useFeeds.setState((s) => { const r = { ...s.results }; delete r[id]; return { results: r } })
 }
 

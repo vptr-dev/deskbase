@@ -40,7 +40,7 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }):
       <div className="modal-body form">
         <div className="row gap-sm">
           <IconPickerButton value={h.icon} placeholder="circle-check" color={h.color} onChange={(icon) => set({ icon: icon || 'circle-check' })} />
-          <input id="habit-name" className="input grow" autoFocus placeholder="e.g. Drink water, Read 20 pages" value={h.name} onChange={(e) => set({ name: e.target.value })} />
+          <input id="habit-name" className="input grow" autoFocus placeholder="Habit name" value={h.name} onChange={(e) => set({ name: e.target.value })} />
         </div>
         <label>Type</label>
         <Segmented value={h.kind} onChange={(kind) => set({ kind, schedule: kind === 'bad' ? undefined : h.schedule })} options={[{ value: 'good', label: 'Build a habit' }, { value: 'bad', label: 'Quit a habit' }]} />
@@ -137,7 +137,7 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
         <Button kind="primary" small icon="plus" onClick={() => setEditing(newHabit(pageId, habits.length))}>New habit</Button>
       </div>
 
-      {habits.length === 0 ? <Empty icon="repeat" title={showArchived ? 'No archived habits' : 'No habits yet'} /> : mode === 'month' ? <MonthChains habits={habits} /> : (
+      {habits.length === 0 ? null : mode === 'month' ? <MonthChains habits={habits} /> : (
         <div className="habit-table glass">
           <div className="habit-head">
             <div />

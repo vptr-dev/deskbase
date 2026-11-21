@@ -4,6 +4,8 @@
 import { app, ipcMain, net, safeStorage } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { serviceFeed } from './service-feeds'
+import { isService } from '../shared/services'
 import { ImapFlow } from 'imapflow'
 import { type ConnSpec, type FeedItem, type FeedResult, feedUrl, githubItems, mailPreset, parseFeed, parseIcs, todoistItems } from '../shared/feeds'
 import type { ImportResult, NotionPageInfo } from '../shared/import-types'
@@ -11,6 +13,13 @@ import { notionApiImport, notionApiPush, notionApiSearch, type NotionPush } from
 
 import { readTrelloBoard, editTrelloBoard } from './trello'
 import type { TrelloAccess, TrelloEdit } from '../shared/trello'
+
+const serviceKeysFile = (): string => path.join(app.getPath('userData'), 'service-keys.json')
+const serviceKey = (kind: string, id: string): string => {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id) || !isService(kind)) throw new Error('Invalid connection')
+  return kind + ':' + id
+}
+const savedConnectionIds = (): string[] => [...Object.keys(readSecrets()), ...Object.keys(readSecrets(serviceKeysFile())).map(k => k.split(':')[1])]
 
 const file = (): string => path.join(app.getPath('userData'), 'connections.json')
 
@@ -144,6 +153,7 @@ async function fetchSpec(spec: ConnSpec): Promise<FeedResult> {
       const r = parseFeed(body)
       return { ok: true, at: Date.now(), title: r.title, items: r.items.slice(0, 80) }
     }
+    if (isService(spec.kind)) return await serviceFeed(spec.kind, spec.url, secret(serviceKey(spec.kind, spec.id), serviceKeysFile()) || '', (url, init) => net.fetch(url, init))
     if (spec.kind === 'github') return await github(spec)
     if (spec.kind === 'mail') return await mail(spec)
     if (spec.kind === 'todoist') return await todoist(spec)
@@ -211,14 +221,18 @@ export function registerConnections(): void {
     delete values[trelloSecretId(page)]
     writeSecrets(values, trelloFile())
   })
-  ipcMain.handle('conn:secrets', () => Object.keys(readSecrets()))
-  ipcMain.handle('conn:setSecret', (_e, id: string, value: string | null) => {
-    const s = readSecrets()
-    if (value && value.trim()) s[id] = seal(value.trim())
-    else delete s[id]
-    writeSecrets(s)
+  ipcMain.handle('conn:secrets', savedConnectionIds)
+  ipcMain.handle('conn:setSecret', (_e, id: string, value: string | null, kind?: string) => {
+    const scoped = kind && isService(kind)
+    const location = scoped ? serviceKeysFile() : file()
+    const key = scoped ? serviceKey(kind, id) : id
+    const s = readSecrets(location)
+    if (value?.trim() && !safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is unavailable on this device.')
+    if (value && value.trim()) s[key] = seal(value.trim())
+    else delete s[key]
+    writeSecrets(s, location)
     for (const k of [...cache.keys()]) if (k.startsWith(JSON.stringify([id]).slice(0, -1))) cache.delete(k)
-    return Object.keys(s)
+    return savedConnectionIds()
   })
   ipcMain.handle('conn:fetch', (_e, spec: ConnSpec, force?: boolean) => fetchConn(spec, !!force))
   ipcMain.handle('conn:notionList', async (_e, id: string): Promise<NotionPageInfo[]> => notionApiSearch(token(id)))

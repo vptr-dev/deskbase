@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added an erase confirmation dialog with cancel and backup checks. Restored the floating sidebar and added workspace icon colors and removal.
+- Fixed cover hover controls. Removed task-entry examples, suggestion chips and empty list decorations.
+- Added a visible block picker, draggable in-page tabs, up to 12 columns, cross-section block movement, multi-selection and linked tool insertion from existing pages.
+- Added 34 configurable connection panels spanning work accounts, coding sessions, developer services and research catalogs.
+
 ## 0.18.0 - 2026-11-21
 
 - Added inline planner calendars and workspace tools to document blocks, plus linked views of existing tools.

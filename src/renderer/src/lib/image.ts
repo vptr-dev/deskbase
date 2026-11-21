@@ -28,6 +28,7 @@ export function pickImage(): Promise<File | null> {
     input.type = 'file'
     input.accept = 'image/png,image/jpeg,image/webp,image/gif,image/bmp'
     input.onchange = () => resolve(input.files?.[0] ?? null)
+    input.oncancel = () => resolve(null)
     input.click()
   })
 }

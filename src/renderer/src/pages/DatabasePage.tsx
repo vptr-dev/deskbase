@@ -754,7 +754,6 @@ export function DatabaseView({ dbId, viewId, embedded }: { dbId: string; viewId?
           <Button small kind="primary" icon="down" title="Templates" onClick={(e) => setTplEl(e.currentTarget as HTMLElement)} />
         </span>
       </div>
-      {rows.length === 0 && !['calendar', 'table', 'timeline'].includes(view.type) ? <Empty icon="database" title="No rows yet" /> : null}
       {view.type === 'table' && <TableView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'board' && <BoardView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'gallery' && <GalleryView dbId={dbId} db={db} view={view} rows={shown} />}

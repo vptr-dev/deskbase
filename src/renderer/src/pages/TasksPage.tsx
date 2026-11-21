@@ -3,7 +3,7 @@ import { act, getData, moveOverdueToToday, setTaskDone, toast, updatePage, useDa
 import type { Task, TaskStatus } from '../types'
 import { addDays, friendlyDay, today } from '../lib/util'
 import { QuickAdd, TaskRow, PRIORITY, useTaskDrawer } from '../components/TaskItems'
-import { Button, Empty, MenuButton, Progress, Segmented } from '../components/ui'
+import { Button, MenuButton, Progress, Segmented } from '../components/ui'
 import { Icon } from '../components/Icon'
 
 type Filter = 'all' | 'today' | 'upcoming' | 'overdue' | 'nodate' | 'done'
@@ -168,18 +168,16 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
         </div>
       )}
 
-      <QuickAdd pageId={pageId} placeholder="Add a task  ·  try “Call mom tomorrow 6pm !high #family”" />
+      <QuickAdd pageId={pageId} />
 
-      <div className="list-summary">
+      {mine.length > 0 && <div className="list-summary">
         <span>{open} open</span><span>·</span><span>{doneToday} done today</span>
         <Progress value={pct} height={4} className="grow" />
         <span>{Math.round(pct * 100)}%</span>
         {overdueCount > 0 && <button className="link danger-link" onClick={() => moveOverdueToToday(pageId)}>{overdueCount} overdue · move to today</button>}
-      </div>
+      </div>}
 
-      {visible.length === 0 ? (
-        <Empty icon={filter === 'done' ? 'flag' : 'sparkles'} title={filter === 'all' ? 'No tasks yet' : 'Nothing here'} />
-      ) : (
+      {visible.length > 0 && (
         groups.map((g) => (
           <div key={g.key} className="task-group">
             {g.label && <div className="group-label">{g.label}<span className="count">{g.items.length}</span></div>}

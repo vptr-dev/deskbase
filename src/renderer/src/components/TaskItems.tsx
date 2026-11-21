@@ -1,7 +1,7 @@
+import { repeatLabel } from '../lib/recurrence'
 import { createPortal } from 'react-dom'
 import { TaskReminder, TaskSnooze } from './TaskTiming'
 import { TaskRepeatEditor } from './TaskRepeatEditor'
-import { repeatLabel } from '../lib/recurrence'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { useMemo, useState } from 'react'
 import { act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
@@ -40,7 +40,7 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', au
     <div className="quickadd glass">
       <Icon name="plus" size={16} className="muted" />
       <input
-        id={`quickadd-${pageId}`}
+        aria-label="Add a task"
         className="quickadd-input"
         placeholder={placeholder}
         value={v}
@@ -48,15 +48,6 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', au
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { if (!v && onEscape) onEscape(); else setV('') } }}
       />
-      {parsed && (
-        <div className="quickadd-chips">
-          {parsed.due && <span className="chip"><Icon name="calendar" size={12} />{friendlyDay(parsed.due)}</span>}
-          {parsed.time && <span className="chip"><Icon name="clock" size={12} />{parsed.time}</span>}
-          {parsed.repeat && <span className="chip"><Icon name="repeat" size={12} />{repeatLabel(parsed.repeat)}</span>}
-          {parsed.priority ? <span className="chip" style={{ color: PRIORITY[parsed.priority].color }}><Icon name="flag" size={12} />{PRIORITY[parsed.priority].label}</span> : null}
-          {parsed.tags.map((t) => <span key={t} className="chip">#{t}</span>)}
-        </div>
-      )}
     </div>
   )
 }

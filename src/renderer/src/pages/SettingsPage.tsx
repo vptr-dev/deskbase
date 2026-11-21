@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
-import { openView, replaceData, setOverlay, setSettings, toast, useApp, useData, act } from '../store'
+import { openView, flushSave, replaceData, setOverlay, setSettings, toast, useApp, useData, act } from '../store'
 import { DEFAULT_PRESETS } from '../lib/defaults'
 import type { AssistantPreset, AssistantSettings as AssistantSettingsT } from '../types'
 import { api, isDesktop, type AppInfo, type UpdateStatus } from '../lib/api'
 import { exportAll, tasksToCsv } from '../lib/exporters'
 import { today } from '../lib/util'
-import { Button, ConfirmButton, IconPickerButton, Segmented, SideIndex, Toggle, useSectionIndex } from '../components/ui'
+import { Button, Modal, ConfirmButton, IconPickerButton, Segmented, SideIndex, Toggle, useSectionIndex } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { PROVIDERS, type AiConfig } from '../../../shared/ai-core'
 import { PlaceSearch } from '../components/PanelKit'
@@ -61,7 +61,22 @@ export function SettingsPage(): JSX.Element {
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [backups, setBackups] = useState<{ name: string; date: string; size: number }[]>([])
   const [upd, setUpd] = useState<UpdateStatus>({ state: 'idle' })
-  const [resetArmed, setResetArmed] = useState(false)
+  const [confirmErase, setConfirmErase] = useState(false)
+  const [erasing, setErasing] = useState(false)
+  const erase = async (): Promise<void> => {
+    if (erasing) return
+    setErasing(true)
+    try {
+      await flushSave()
+      if (useApp.getState().saving === 'error') throw new Error('Save failed')
+      const backup = await api.createBackup()
+      if (isDesktop && !backup) throw new Error('Could not create the backup')
+      replaceData(null, 'Started fresh')
+      setConfirmErase(false)
+    } catch {
+      toast('Could not back up your workspace. Your data was kept.', { kind: 'error' })
+    } finally { setErasing(false) }
+  }
   useEffect(() => { api.info().then(setInfo); api.updater.status().then(setUpd); api.listBackups().then(setBackups).catch(() => {}); return api.updater.onStatus(setUpd) }, [])
   const set = setSettings
   return (
@@ -112,12 +127,13 @@ export function SettingsPage(): JSX.Element {
               </div>
             </>}
             <Row label="Erase all data" sub="Starts fresh. A backup is made first.">
-              <Button small kind={resetArmed ? 'danger' : 'ghost'} icon="trash" onClick={async () => {
-                if (!resetArmed) { setResetArmed(true); setTimeout(() => setResetArmed(false), 3000); return }
-                await api.createBackup()
-                replaceData(null, 'Started fresh')
-                setOverlay(null)
-              }}>{resetArmed ? 'Erase everything' : 'Erase'}</Button>
+              <Button small kind="ghost" icon="trash" onClick={() => setConfirmErase(true)}>Erase</Button>
+                {confirmErase && <Modal title="Erase all data?" width={410} onClose={() => { if (!erasing) setConfirmErase(false) }}>
+                  <div className="erase-confirm"><p>Are you sure you want to erase all pages, tasks, and workspace settings on this device?</p>
+                    <div className="row end gap-sm"><Button disabled={erasing} onClick={() => setConfirmErase(false)}>Cancel</Button>
+                    <Button kind="danger" disabled={erasing} onClick={() => void erase()}>{erasing ? 'Erasing…' : 'Erase all data'}</Button></div>
+                  </div>
+                </Modal>}
             </Row>
           </section>
           <section className="set-section glass" data-section="about">

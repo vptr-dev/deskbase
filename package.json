@@ -16,6 +16,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "test:connections": "node scripts/test-connections.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "dist": "electron-vite build && electron-builder --win --publish never",
     "release": "node scripts/release.mjs",

@@ -160,7 +160,7 @@ export function TrackerPage({ pageId }: { pageId: string }): JSX.Element {
   return (
     <div className="tracker-page">
       <div className="toolbar"><div className="spacer" /><Button kind="primary" small icon="plus" onClick={() => setEditing(blank())}>New tracker</Button></div>
-      {metrics.length === 0 ? <Empty icon="chart-line" title="Nothing tracked yet" /> : (
+      {metrics.length === 0 ? null : (
         <div className="card-grid">{metrics.map((m) => <MetricCard key={m.id} m={m} onEdit={() => setEditing(m)} />)}</div>
       )}
       {editing && <MetricEditor metric={editing} onClose={() => setEditing(null)} />}

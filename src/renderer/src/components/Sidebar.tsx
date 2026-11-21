@@ -257,12 +257,12 @@ function SpaceSwitcher(): JSX.Element {
   const [el, setEl] = useState<HTMLElement | null>(null)
   const active = spaces.find((s) => s.id === activeId) ?? spaces[0]
   const rename = (name: string): void => act((d) => { const s = d.desktop.spaces.find((x) => x.id === activeId); if (s) s.name = name }, { key: 'space-name:' + activeId })
-  const reicon = (icon: string): void => act((d) => { const s = d.desktop.spaces.find((x) => x.id === activeId); if (s) s.icon = icon || 'monitor' })
+  const reicon = (icon: string): void => act((d) => { const s = d.desktop.spaces.find((x) => x.id === activeId); if (s) s.icon = icon })
   return (
     <>
       <button className="space-chip no-drag" onClick={(e) => setEl(e.currentTarget)} title="Switch workspace">
-        <span className="space-icon"><Glyph value={active?.icon} fallback="monitor" size={14} /></span>
-        <span className="space-name">{active?.name || 'Workspace'}</span>
+        {active?.icon && <span className="space-icon"><Glyph value={active.icon} size={14} color={active.iconColor} /></span>}
+        <span className="space-name" style={{ color: active?.iconColor }}>{active?.name || 'Workspace'}</span>
         <Icon name="down" size={13} className="space-caret" />
       </button>
       {el && (
@@ -270,14 +270,14 @@ function SpaceSwitcher(): JSX.Element {
           <div className="space-menu">
             {spaces.map((s) => (
               <button key={s.id} className={`space-item ${s.id === activeId ? 'active' : ''}`} onClick={() => switchSpace(s.id)}>
-                <span className="space-icon"><Glyph value={s.icon} fallback="monitor" size={14} /></span>
+                {s.icon && <span className="space-icon"><Glyph value={s.icon} color={s.iconColor} size={14} /></span>}
                 <span className="grow ellipsis">{s.name}</span>
                 <span className="muted small">{counts[s.id] ?? 0}</span>
               </button>
             ))}
             <div className="menu-divider" />
             <div className="space-edit">
-              <IconPickerButton size="sm" value={active?.icon ?? 'monitor'} onChange={reicon} placeholder="monitor" />
+              <IconPickerButton size="sm" value={active?.icon ?? 'monitor'} onChange={reicon} color={active?.iconColor} onColor={color => act(d => { const space = d.desktop.spaces.find(x => x.id === activeId); if (space) space.iconColor = color || undefined })} placeholder="plus"  />
               <input className="input input-sm grow" value={active?.name ?? ''} placeholder="Workspace name" onChange={(e) => rename(e.target.value)} />
             </div>
             <button className="menu-item" onClick={() => { addSpace(false); setEl(null) }}><span className="menu-icon"><Icon name="plus" size={14} /></span><span className="menu-label">New workspace</span></button>

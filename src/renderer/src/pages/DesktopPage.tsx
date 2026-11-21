@@ -246,9 +246,9 @@ function PanelRow({ w, open, displays }: { w: DeskWidget; open: boolean; display
 
 // ---------- adding panels ----------
 
-type Cat = 'All' | 'Work' | 'Plan' | 'Track' | 'More' | 'Sets'
+type Cat = 'All' | 'Work' | 'Plan' | 'Track' | 'More' | 'Connections' | 'Sets'
 const CATS: { id: Cat; icon: string }[] = [
-  { id: 'All', icon: 'layout-grid' }, { id: 'Work', icon: 'briefcase' }, { id: 'Plan', icon: 'calendar' }, { id: 'Track', icon: 'chart-column' }, { id: 'More', icon: 'shapes' }, { id: 'Sets', icon: 'layout' }
+  { id: 'All', icon: 'layout-grid' }, { id: 'Work', icon: 'briefcase' }, { id: 'Plan', icon: 'calendar' }, { id: 'Track', icon: 'chart-column' }, { id: 'More', icon: 'shapes' }, { id: 'Connections', icon: 'plug' }, { id: 'Sets', icon: 'layout' }
 ]
 const SIZES = [{ value: 0.75, label: 'Small' }, { value: 1, label: 'Medium' }, { value: 1.35, label: 'Large' }]
 
@@ -364,7 +364,7 @@ export function DesktopPage(): JSX.Element {
       <div className="space-tabs">
         {desk.spaces.map((s) => (
           <button key={s.id} className={`space-tab ${s.id === desk.active ? 'active' : ''}`} onClick={() => switchSpace(s.id)}>
-            <Glyph value={s.icon} fallback="monitor" size={14} />
+            {s.icon && <Glyph value={s.icon} color={s.iconColor} size={14} />}
             <span>{s.name}</span>
             <span className="space-tab-count">{desk.widgets.filter((w) => w.space === s.id && !w.hidden).length}</span>
           </button>
