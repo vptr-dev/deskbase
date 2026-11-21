@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.19.0 - 2026-11-21
+
 - Added an erase confirmation dialog with cancel and backup checks. Restored the floating sidebar and added workspace icon colors and removal.
 - Fixed cover hover controls. Removed task-entry examples, suggestion chips and empty list decorations.
 - Added a visible block picker, draggable in-page tabs, up to 12 columns, cross-section block movement, multi-selection and linked tool insertion from existing pages.

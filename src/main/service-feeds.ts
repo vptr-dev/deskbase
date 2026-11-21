@@ -172,7 +172,7 @@ export async function serviceFeed(kind: ServiceId, value: string, token: string,
         return data.data.map((r: Row) => item(r.id, r.attributes.titles?.[0]?.title, 'https://doi.org/' + r.id, r.attributes.publisher, r.attributes.published))
       }
       case 'zenodo': {
-        const data = await json('https://zenodo.org/api/records?size=40&q=' + q)
+        const data = await json('https://zenodo.org/api/records?size=25&q=' + q)
         return data.hits.hits.map((r: Row) => item(r.id, r.metadata.title, r.links.self_html || 'https://zenodo.org/records/' + r.id, undefined, r.created))
       }
     }

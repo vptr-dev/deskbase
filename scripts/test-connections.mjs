@@ -52,6 +52,7 @@ try {
     const token = id === 'trello' ? 'a'.repeat(32) + ':' + 'b'.repeat(44) : 'fixture-token'
     const read = async (url, init) => {
       assert.equal(new URL(url).protocol, 'https:')
+      if (id === 'zenodo') assert.ok(Number(new URL(url).searchParams.get('size')) <= 25)
       assert.ok(!url.includes(token))
       if (serviceInfo(id).secret) assert.equal(init.redirect, 'error')
       return new Response(typeof response === 'string' ? response : JSON.stringify(response))
