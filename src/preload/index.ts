@@ -87,6 +87,12 @@ const api = {
       return () => ipcRenderer.removeListener('ai:chunk', fn)
     }
   },
+  trello: {
+    read: (page: string, board: string) => ipcRenderer.invoke('trello:read', page, board),
+    connect: (page: string, board: string, access: unknown) => ipcRenderer.invoke('trello:connect', page, board, access),
+    edit: (page: string, board: string, edit: unknown) => ipcRenderer.invoke('trello:edit', page, board, edit),
+    disconnect: (page: string) => ipcRenderer.invoke('trello:disconnect', page)
+  },
   conn: {
     secrets: () => ipcRenderer.invoke('conn:secrets'),
     setSecret: (id: string, value: string | null) => ipcRenderer.invoke('conn:setSecret', id, value),

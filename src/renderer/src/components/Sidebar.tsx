@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { act, duplicatePage, movePage, openPage, openView, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
+import { act, duplicatePage, movePage, openPage, openView, openSettings, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
 import { newTab, openFromClick } from '../lib/tabs'
 import { typeInfo } from '../lib/defaults'
 import { addSpace, removeSpace, switchSpace } from '../lib/desktop'
@@ -7,6 +7,7 @@ import { api, type UpdateStatus } from '../lib/api'
 import { exportPageMarkdown } from '../lib/exporters'
 import { Glyph, Icon } from './Icon'
 import { IconPickerButton, Menu, Popover } from './ui'
+import { AppMenu } from './AppMenu'
 import { pagePath } from './MovePage'
 
 type DropPos = 'before' | 'after' | 'inside'
@@ -176,6 +177,7 @@ export function Sidebar(): JSX.Element {
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`} aria-hidden={collapsed}>
       <div className="sidebar-top drag">
+        {!collapsed && <AppMenu />}
         <SpaceSwitcher />
         <button className="icon-btn no-drag" title="Collapse sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = true })}>
           <Icon name="left" size={15} stroke={2} />
@@ -240,7 +242,7 @@ export function Sidebar(): JSX.Element {
         <UpdatePill />
         <button className={`nav-item ${current === '@appearance' ? 'active' : ''}`} onClick={() => openView('@appearance')}><Icon name="palette" size={15} /> <span>Appearance</span></button>
         <button className="nav-item" onClick={() => setOverlay('trash')}><Icon name="trash" size={15} /> <span>Trash</span></button>
-        <button className="nav-item" onClick={() => setOverlay('settings')}><Icon name="settings" size={15} /> <span>Settings</span><kbd>Ctrl ,</kbd></button>
+        <button className={`nav-item ${current === '@settings' ? 'active' : ''}`} aria-current={current === '@settings' ? 'page' : undefined} onClick={() => openSettings()}><Icon name="settings" size={15} /> <span>Settings</span><kbd>Ctrl ,</kbd></button>
       </div>
       <div className="sidebar-resizer" onMouseDown={startResize} onDoubleClick={() => setSettings((s) => { s.sidebarWidth = 248 })} />
     </aside>

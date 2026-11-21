@@ -53,7 +53,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   const live = Object.values(d.pages).filter((p) => !p.deletedAt && !p.rowOf)
   const values = Object.values(d.values).sort((a, b) => a.order - b.order)
   const dbs = live.filter((p) => p.type === 'database')
-  const lists = live.filter((p) => p.type === 'tasks' || p.type === 'board')
+  const lists = live.filter((p) => p.type === 'tasks' || p.type === 'board' || p.type === 'project')
   const docs = live.filter((p) => p.id !== selfPageId)
   const db = c.dbId ? d.pages[c.dbId]?.db : undefined
   const flagProps = db?.props.filter((p) => ['status', 'select', 'multi', 'checkbox'].includes(p.type)) ?? []

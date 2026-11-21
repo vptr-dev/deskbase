@@ -2,20 +2,21 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { act, getData, toast, updatePage, useApp, useData } from '../store'
 import { blocksToText, clearSelection, useSelection } from '../lib/selection'
-import type { Block, BlockType, Page } from '../types'
+import type { Block, BlockType, Page, PageType } from '../types'
 import { uid } from '../lib/util'
-import { newPage } from '../lib/defaults'
+import { newPage, PAGE_TYPES, typeInfo } from '../lib/defaults'
 import { openFromClick } from '../lib/tabs'
 import { blockRefs as refs, focusBlock } from '../lib/links'
 import { AutoText, Button, Checkbox, IconPickerButton, Menu, Popover, type MenuItem } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
+import { ToolBody } from './ToolBody'
 import { DatabaseView } from './DatabasePage'
 import {
   BookmarkBlock, ButtonBlock, EmbedBlock, EquationBlock, ImageBlock, InlineText, LinkBlock, PagePicker, SyncedBlock, TocBlock,
   blockLink, findBlock, imageFromFile, mentionOptions, parseBlockLink, type MentionState
 } from '../components/Blocks'
 
-interface SlashItem { type: BlockType; label: string; icon: string; hint: string; cols?: number }
+interface SlashItem { type: BlockType; label: string; icon: string; hint: string; cols?: number; tool?: PageType; keywords?: string }
 
 const SLASH: SlashItem[] = [
   { type: 'p', label: 'Text', icon: 'type', hint: '' },
@@ -38,6 +39,11 @@ const SLASH: SlashItem[] = [
   { type: 'columns', label: '3 columns', icon: 'columns', hint: '', cols: 3 },
   { type: 'tabs', label: 'Tabs', icon: 'tabs', hint: '' },
   { type: 'database', label: 'Database', icon: 'database', hint: '' },
+  ...PAGE_TYPES.filter(p => p.type !== 'doc' && p.type !== 'database').map(p => ({
+    type: 'tool' as const, tool: p.type, icon: p.icon, label: p.type === 'calendar' ? 'Planner calendar' : p.name,
+    hint: 'Inline', keywords: p.type + (p.type === 'calendar' ? ' schedule' : '')
+  })),
+  { type: 'tool', label: 'Existing tool', icon: 'pageLink', hint: 'Linked view' },
   { type: 'toc', label: 'Table of contents', icon: 'toc', hint: '' },
   { type: 'link', label: 'Link to page', icon: 'pageLink', hint: '' },
   { type: 'bookmark', label: 'Bookmark', icon: 'bookmark', hint: '' },
@@ -227,13 +233,39 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
   }
 
   const applySlash = (id: string, s: SlashItem): void => {
+    if (s.type === 'tool') {
+      const tool = s.tool ? newPage(s.tool, undefined, pageId) : null
+      let nextId = ''
+      act(d => {
+        const page = d.pages[pageId]
+        const list = listOf(page, col)
+        const at = list?.findIndex(b => b.id === id) ?? -1
+        if (!page || !list || at < 0) return
+        const line = list[at]
+        const before = line.text.replace(/\/[^/]*$/, '')
+        const block: Block = { id: uid(), type: 'tool', text: '', ref: tool?.id }
+        const index = before ? at + 1 : at
+        if (before) line.text = before
+        list.splice(index, before ? 0 : 1, block)
+        if (tool) { d.pages[tool.id] = tool; page.children.push(tool.id) }
+        let next = list[index + 1]
+        if (!next || next.type !== 'p' || next.text) {
+          next = { id: uid(), type: 'p', text: '' }
+          list.splice(index + 1, 0, next)
+        }
+        page.updatedAt = Date.now()
+        nextId = next.id
+      })
+      if (tool && nextId) focusBlock(nextId, 'start')
+      return
+    }
     setBlock(id, (x) => { x.text = x.text.replace(/\/[^/]*$/, '') })
     changeType(id, s.type, s.cols)
   }
 
   const slashMatches = (q: string): SlashItem[] => {
     const ql = q.toLowerCase().trim()
-    return SLASH.filter((s) => s.label.toLowerCase().includes(ql) || s.type.includes(ql))
+    return SLASH.filter((s) => s.label.toLowerCase().includes(ql) || s.type.includes(ql) || s.keywords?.includes(ql))
   }
 
   const pickMention = (insert: string): void => {
@@ -506,6 +538,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           case 'link': content = <LinkBlock block={b} pageId={pageId} locked={locked} set={set} />; break
           case 'synced': content = <SyncedBlock block={b} locked={locked} />; break
           case 'tabs': content = <TabsBlock block={b} pageId={pageId} locked={locked} set={set} />; break
+          case 'tool': content = <InlineTool block={b} pageId={pageId} locked={locked} onPick={ref => set(x => { x.ref = ref })} />; break
           case 'database': content = <InlineDatabase block={b} pageId={pageId} locked={locked} set={set} />; break
           case 'columns':
             content = (
@@ -645,6 +678,26 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
   )
 }
 
+function InlineTool({ block, pageId, locked, onPick }: { block: Block; pageId: string; locked?: boolean; onPick: (id: string) => void }): JSX.Element {
+  const target = useData(d => block.ref ? d.pages[block.ref] : undefined)
+  if (!target || target.deletedAt || target.type === 'doc' || target.id === pageId) {
+    return <section className="inline-tool tool-picker">
+      <strong>{block.ref ? 'Tool unavailable' : 'Choose an existing tool'}</strong>
+      {!locked && <PagePicker exclude={pageId} toolsOnly onPick={onPick} />}
+    </section>
+  }
+  const info = typeInfo(target.type)
+  return <section className="inline-tool" aria-label={target.title || info.name}>
+    <header className="inline-tool-head">
+      <Glyph value={target.icon || info.icon} size={17} color={target.iconColor} />
+      <strong>{target.title || info.name}</strong>
+      <button className="icon-btn" title="Open as a page" aria-label={'Open ' + (target.title || info.name) + ' as a page'}
+        onClick={e => openFromClick(target.id, e)} onAuxClick={e => { if (e.button === 1) openFromClick(target.id, e) }}><Icon name="pageLink" size={15} /></button>
+    </header>
+    <div className="inline-tool-body"><ToolBody key={target.id} page={target} embedded /></div>
+  </section>
+}
+
 /** A database shown right in the page, like Notion's inline databases. */
 function InlineDatabase({ block, pageId, locked, set }: { block: Block; pageId: string; locked?: boolean; set: (fn: (b: Block) => void, key?: string) => void }): JSX.Element {
   const target = useData((d) => (block.ref ? d.pages[block.ref] : undefined))
@@ -769,7 +822,7 @@ function TableBlock({ block, locked, onEdit }: { block: Block; locked?: boolean;
 }
 
 /** Elements a selection box never starts on: text, controls and embedded content. */
-const NO_BOX = 'textarea, input, select, button, a, iframe, img, label, [role="link"], .rich, .page-top, .page-cover, .subpages, .tbl-wrap, .embed, .img-block, .bookmark, .equation-out, .block-gutter, .backlinks, .synced-from, .page-link, .check, .page-picker, .popover, .modal, .row-props'
+const NO_BOX = 'textarea, input, select, button, a, iframe, img, label, [role="link"], .rich, .page-top, .page-cover, .subpages, .tbl-wrap, .embed, .img-block, .bookmark, .equation-out, .block-gutter, .inline-tool, .inline-db, .backlinks, .synced-from, .page-link, .check, .page-picker, .popover, .modal, .row-props'
 
 /** Hold the mouse on an empty part of the page and drag: a box selects the blocks it touches. */
 function useBlockSelection(pageId: string, root: React.RefObject<HTMLDivElement>, locked?: boolean): { x: number; y: number; w: number; h: number } | null {
@@ -836,7 +889,7 @@ function useBlockSelection(pageId: string, root: React.RefObject<HTMLDivElement>
     }
     const click = (e: MouseEvent): void => { if (eatClick) { eatClick = false; e.stopPropagation(); e.preventDefault() } }
     const key = (e: KeyboardEvent): void => {
-      if (useApp.getState().overlay) return
+      if (useApp.getState().overlay || (e.target as HTMLElement)?.closest?.('.inline-tool, .popover, .modal')) return
       const typing = !!(e.target as HTMLElement)?.closest?.('input, textarea, select, [contenteditable]')
       const mod = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()

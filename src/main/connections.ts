@@ -9,16 +9,19 @@ import { type ConnSpec, type FeedItem, type FeedResult, feedUrl, githubItems, ma
 import type { ImportResult, NotionPageInfo } from '../shared/import-types'
 import { notionApiImport, notionApiPush, notionApiSearch, type NotionPush } from './notion-api'
 
+import { readTrelloBoard, editTrelloBoard } from './trello'
+import type { TrelloAccess, TrelloEdit } from '../shared/trello'
+
 const file = (): string => path.join(app.getPath('userData'), 'connections.json')
 
-function readSecrets(): Record<string, string> {
-  try { return JSON.parse(fs.readFileSync(file(), 'utf8')).secrets ?? {} } catch { return {} }
+function readSecrets(location = file()): Record<string, string> {
+  try { return JSON.parse(fs.readFileSync(location, 'utf8')).secrets ?? {} } catch { return {} }
 }
-function writeSecrets(s: Record<string, string>): void {
-  fs.writeFileSync(file(), JSON.stringify({ secrets: s }, null, 2))
+function writeSecrets(s: Record<string, string>, location = file()): void {
+  fs.writeFileSync(location, JSON.stringify({ secrets: s }, null, 2))
 }
-function secret(id: string): string | undefined {
-  const v = readSecrets()[id]
+function secret(id: string, location = file()): string | undefined {
+  const v = readSecrets(location)[id]
   if (!v) return undefined
   try {
     return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(Buffer.from(v, 'base64')) : Buffer.from(v, 'base64').toString('utf8')
@@ -178,7 +181,36 @@ function token(id: string): string {
   return t
 }
 
+const trelloRequest = (url: string, init: RequestInit): Promise<Response> => net.fetch(url, init)
+const trelloFile = (): string => path.join(app.getPath('userData'), 'trello.json')
+
+function trelloSecretId(page: string): string {
+  if (typeof page !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(page)) throw new Error('Invalid project.')
+  return 'trello:' + page
+}
+
+function trelloAccess(page: string, board: string): TrelloAccess {
+  const value = secret(trelloSecretId(page), trelloFile())
+  const saved = value ? JSON.parse(value) : null
+  if (!saved || saved.board !== board) throw new Error('Connect your Trello account for this board on this computer.')
+  return saved
+}
+
 export function registerConnections(): void {
+  ipcMain.handle('trello:read', (_e, page: string, board: string) => readTrelloBoard(board, trelloAccess(page, board), trelloRequest))
+  ipcMain.handle('trello:edit', (_e, page: string, board: string, edit: TrelloEdit) => editTrelloBoard(board, trelloAccess(page, board), edit, trelloRequest))
+  ipcMain.handle('trello:connect', async (_e, page: string, board: string, access: TrelloAccess) => {
+    const id = trelloSecretId(page)
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure storage is unavailable on this computer.')
+    const data = await readTrelloBoard(board, access, trelloRequest)
+    writeSecrets({ ...readSecrets(trelloFile()), [id]: seal(JSON.stringify({ board, key: access.key, token: access.token })) }, trelloFile())
+    return data
+  })
+  ipcMain.handle('trello:disconnect', (_e, page: string) => {
+    const values = readSecrets(trelloFile())
+    delete values[trelloSecretId(page)]
+    writeSecrets(values, trelloFile())
+  })
   ipcMain.handle('conn:secrets', () => Object.keys(readSecrets()))
   ipcMain.handle('conn:setSecret', (_e, id: string, value: string | null) => {
     const s = readSecrets()

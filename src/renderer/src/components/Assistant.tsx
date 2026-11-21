@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { openView, setOverlay, toast, useApp, useData } from '../store'
+import { openView, openSettings, toast, useApp, useData } from '../store'
 import type { AiConfig, AiProvider } from '../../../shared/ai-core'
 import { PROVIDERS, extractActions, extractToolCalls, providerInfo } from '../../../shared/ai-core'
 import type { AssistantChat } from '../types'
@@ -115,7 +115,7 @@ function ModelPicker({ chat, cfg }: { chat: AssistantChat; cfg: AiConfig }): JSX
                 </div>
               )
             })}
-            <button className="model-prov muted" onClick={() => { setEl(null); setOverlay('settings', 'assistant') }}><Icon name="settings" size={13} /> Add a provider or key</button>
+            <button className="model-prov muted" onClick={() => { setEl(null); openSettings('assistant') }}><Icon name="settings" size={13} /> Add a provider or key</button>
           </div>
         </Popover>
       )}
@@ -141,7 +141,7 @@ function PresetPicker({ chat }: { chat: AssistantChat }): JSX.Element {
                 <Glyph value={p.icon} size={13} /><span className="grow ellipsis">{p.name}</span>
               </button>
             ))}
-            <button className="model-prov muted" onClick={() => { setEl(null); setOverlay('settings', 'assistant') }}><Icon name="edit" size={13} /> Edit roles</button>
+            <button className="model-prov muted" onClick={() => { setEl(null); openSettings('assistant') }}><Icon name="edit" size={13} /> Edit roles</button>
           </div>
         </Popover>
       )}
@@ -185,7 +185,7 @@ export function ChatView({ chatId, wide }: { chatId: string; wide?: boolean }): 
         {cfg && <ModelPicker chat={chat} cfg={cfg} />}
         <PresetPicker chat={chat} />
         <div className="spacer" />
-        <button className="chat-access no-drag" title="What the assistant may see and do (Settings → Assistant)" onClick={() => setOverlay('settings', 'assistant')}>
+        <button className="chat-access no-drag" title="What the assistant may see and do (Settings → Assistant)" onClick={() => openSettings('assistant')}>
           <Icon name={access === 'none' ? 'eye-off' : access === 'read' ? 'eye' : access === 'ask' ? 'shield' : 'zap'} size={12} />{ACCESS_NAME[access]}
         </button>
       </div>
@@ -194,7 +194,7 @@ export function ChatView({ chatId, wide }: { chatId: string; wide?: boolean }): 
           <div className="assistant-setup glass">
             <div className="strong">Connect a model</div>
             <p className="muted small">Use a local model with Ollama or LM Studio, or add a key for Anthropic, OpenAI, Gemini or OpenRouter.</p>
-            <Button small kind="primary" onClick={() => setOverlay('settings', 'assistant')}>Open settings</Button>
+            <Button small kind="primary" onClick={() => openSettings('assistant')}>Open settings</Button>
           </div>
         )}
         {ready && visible.length === 0 && !busy && (
@@ -339,7 +339,7 @@ export function AssistantPage(): JSX.Element {
           <div className="row gap-sm">
             <Button small kind="primary" icon="plus" onClick={() => newChat(false)}>New chat</Button>
             <div className="spacer" />
-            <button className="icon-btn" title="Assistant settings" onClick={() => setOverlay('settings', 'assistant')}><Icon name="settings" size={14} /></button>
+            <button className="icon-btn" title="Assistant settings" onClick={() => openSettings('assistant')}><Icon name="settings" size={14} /></button>
           </div>
           <ChatList />
         </div>

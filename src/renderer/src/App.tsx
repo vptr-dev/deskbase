@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { act, boot, duplicatePage, flushSave, getData, isView, onConfetti, openPage, openView, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
+import { act, boot, duplicatePage, flushSave, getData, isView, onConfetti, openPage, openView, openSettings, redo, setOverlay, setSettings, trashPage, undo, updatePage, useApp, useData } from './store'
 import { api } from './lib/api'
 import { COVERS, coverStyle, typeInfo } from './lib/defaults'
 import { pickImage } from './lib/image'
@@ -10,20 +10,15 @@ import { playLevelUp } from './lib/sound'
 import { Sidebar } from './components/Sidebar'
 import { Glyph, Icon } from './components/Icon'
 import { IconPicker, IconPickerButton, MenuButton, Popover, Button } from './components/ui'
-import { CommandPalette, NewPageDialog, QuickAddDialog, SettingsDialog, ShortcutsDialog, TrashDialog } from './components/Overlays'
+import { CommandPalette, NewPageDialog, QuickAddDialog, ShortcutsDialog, TrashDialog } from './components/Overlays'
+import { AppMenu } from './components/AppMenu'
+import { ToolBody } from './pages/ToolBody'
 import { DocPage, BlockEditor } from './pages/DocPage'
-import { BoardPage, TasksPage } from './pages/TasksPage'
-import { HabitsPage } from './pages/HabitsPage'
-import { JournalPage } from './pages/JournalPage'
-import { GoalsPage } from './pages/GoalsPage'
-import { CalendarPage } from './pages/CalendarPage'
-import { FocusMini, FocusPage, focusActions } from './pages/FocusPage'
-import { TrackerPage } from './pages/TrackerPage'
-import { TodayPage } from './pages/TodayPage'
-import { ReviewPage } from './pages/ReviewPage'
-import { DatabasePage, RowProps } from './pages/DatabasePage'
-import { DashboardPage } from './pages/DashboardPage'
+import { FocusMini, focusActions } from './pages/FocusPage'
+import { RowProps } from './pages/DatabasePage'
 import { DesktopPage } from './pages/DesktopPage'
+import { taskReminderAt } from './lib/recurrence'
+import { SettingsPage } from './pages/SettingsPage'
 import { AppearancePage } from './pages/AppearancePage'
 import type { Page } from './types'
 import { AssistantPage, AssistantPanel, toggleAssistant, useAssistant } from './components/Assistant'
@@ -69,27 +64,17 @@ function SaveIndicator(): JSX.Element {
   return <span className={`save-dot ${saving}`} title={saving === 'saved' ? 'All changes saved' : saving === 'saving' ? 'Saving…' : 'Could not save'} />
 }
 
-function PageBody({ page }: { page: Page }): JSX.Element {
-  switch (page.type) {
-    case 'today': return <TodayPage pageId={page.id} />
-    case 'tasks': return <TasksPage pageId={page.id} />
-    case 'board': return <BoardPage pageId={page.id} />
-    case 'calendar': return <CalendarPage pageId={page.id} />
-    case 'habits': return <HabitsPage pageId={page.id} />
-    case 'journal': return <JournalPage pageId={page.id} />
-    case 'goals': return <GoalsPage pageId={page.id} />
-    case 'focus': return <FocusPage />
-    case 'tracker': return <TrackerPage pageId={page.id} />
-    case 'review': return <ReviewPage pageId={page.id} />
-    case 'database': return <DatabasePage pageId={page.id} />
-    case 'dashboard': return <DashboardPage pageId={page.id} />
-    default: return <DocPage pageId={page.id} />
-  }
-}
-
 function SubpageList({ page }: { page: Page }): JSX.Element | null {
   const pages = useData((d) => d.pages)
-  const kids = page.children.map((c) => pages[c]).filter((c) => c && !c.deletedAt)
+  const embedded = new Set<string>()
+  const collect = (blocks: Page['blocks']): void => {
+    for (const b of blocks) {
+      if (b.type === 'tool' && b.ref) embedded.add(b.ref)
+      b.cols?.forEach(collect)
+    }
+  }
+  collect(page.blocks)
+  const kids = page.children.filter(id => !embedded.has(id)).map((c) => pages[c]).filter((c) => c && !c.deletedAt)
   if (!kids.length) return null
   return (
     <div className="subpages">
@@ -175,7 +160,7 @@ function PageView({ id }: { id: string }): JSX.Element | null {
   const info = typeInfo(page.type)
   const showNotes = page.type !== 'doc' && page.view?.notes
   return (
-    <div className={`page ${page.fullWidth || ['calendar', 'board', 'database', 'dashboard'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
+    <div className={`page ${page.fullWidth || ['calendar', 'board', 'project', 'database', 'dashboard'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
       <PageCover page={page} />
       <div className="page-top">
       <PageAdds page={page} />
@@ -203,7 +188,7 @@ function PageView({ id }: { id: string }): JSX.Element | null {
       {page.rowOf && <RowProps rowId={page.id} />}
       <SubpageList page={page} />
       {showNotes && <div className="page-notes glass"><BlockEditor pageId={id} locked={page.locked} /></div>}
-      <PageBody page={page} />
+      {page.type === 'doc' ? <DocPage pageId={page.id} /> : <ToolBody page={page} />}
       {page.type !== 'dashboard' && <Backlinks pageId={id} />}
     </div>
   )
@@ -318,7 +303,7 @@ function useShortcuts(): void {
       const k = e.key.toLowerCase()
       if (mod && k === 'k') { e.preventDefault(); setOverlay(useApp.getState().overlay === 'search' ? null : 'search') }
       else if (mod && k === 'n') { e.preventDefault(); setOverlay('newPage', { parentId: null }) }
-      else if (mod && k === ',') { e.preventDefault(); setOverlay('settings') }
+      else if (mod && k === ',') { e.preventDefault(); openSettings() }
       else if (mod && k === '/') { e.preventDefault(); setOverlay('shortcuts') }
       else if (mod && k === 'j') { e.preventDefault(); toggleAssistant() }
       else if (mod && k === '\\') { e.preventDefault(); setSettings((s) => { s.sidebarCollapsed = !s.sidebarCollapsed }) }
@@ -363,10 +348,17 @@ function useTicker(): void {
       if (!d.settings.notifications) return
       if (n++ % 15 === 0) fireReminders(d)
       const now = Date.now()
-      const due = Object.values(d.tasks).filter((t) => !t.done && t.remindAt && !t.reminded && t.remindAt <= now)
+      const due = Object.values(d.tasks).filter(t => {
+        if (t.done) return false
+        const at = taskReminderAt(t)
+        return at != null && at <= now && (!t.reminded || (t.reminderBeforeMinutes != null && t.remindedFor !== at))
+      })
       if (due.length) {
         for (const t of due) api.notify('Reminder', t.title)
-        act((dr) => { for (const t of due) if (dr.tasks[t.id]) dr.tasks[t.id].reminded = true }, { history: false })
+        act((dr) => { for (const t of due) {
+          const task = dr.tasks[t.id]
+          if (task) { task.reminded = true; task.remindedFor = taskReminderAt(t) ?? undefined }
+        } }, { history: false })
       }
     }, 1000)
     return () => clearInterval(id)
@@ -387,6 +379,7 @@ function MainApp(): JSX.Element {
   const canUndo = useApp((s) => s.canUndo)
   const canRedo = useApp((s) => s.canRedo)
   const assistantOpen = useAssistant((s) => s.open)
+  const assistantVisible = assistantOpen && current !== '@assistant'
   useEffect(() => { boot() }, [])
   useEffect(() => { if (ready) restoreTabs() }, [ready])
   const tabCount = useTabs((s) => s.tabs.length)
@@ -400,15 +393,16 @@ function MainApp(): JSX.Element {
   const view = isView(current) ? current : null
 
   return (
-    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${assistantOpen && current !== '@assistant' ? 'assistant-open' : ''}`}>
+    <div className={`app ${collapsed ? 'sidebar-collapsed' : ''} ${assistantVisible ? 'assistant-open' : ''}`}>
       <Sidebar />
       <main className="main">
-        {tabCount > 1 && <TabStrip captionSpace={!assistantOpen} />}
+        {tabCount > 1 && <TabStrip captionSpace={!assistantVisible} />}
         <header className={`topbar drag ${tabCount > 1 ? 'under-tabs' : ''}`}>
+          {collapsed && <AppMenu />}
           {collapsed && <button className="icon-btn no-drag" title="Show sidebar (Ctrl+\)" onClick={() => setSettings((s) => { s.sidebarCollapsed = false })}><Icon name="sidebar" size={16} /></button>}
           <button className="icon-btn no-drag" title="Back (Ctrl+[)" onClick={goBack}><Icon name="left" size={15} stroke={2} /></button>
           <button className="icon-btn no-drag" title="Forward (Ctrl+])" onClick={goForward}><Icon name="right" size={15} stroke={2} /></button>
-          {view ? <div className="crumbs"><span className="crumb"><Icon name={view === '@desktop' ? 'monitor' : view === '@assistant' ? 'sparkle' : view === '@connections' ? 'plug' : 'palette'} size={14} /> {view === '@desktop' ? 'Desktop' : view === '@assistant' ? 'Assistant' : view === '@connections' ? 'Connections' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
+          {view ? <div className="crumbs"><span className="crumb"><Icon name={view === '@settings' ? 'settings' : view === '@desktop' ? 'monitor' : view === '@assistant' ? 'sparkle' : view === '@connections' ? 'plug' : 'palette'} size={14} /> {view === '@settings' ? 'Settings' : view === '@desktop' ? 'Desktop' : view === '@assistant' ? 'Assistant' : view === '@connections' ? 'Connections' : 'Appearance'}</span></div> : page && <Breadcrumbs page={page} />}
           <div className="spacer" />
           <FocusMini />
           <SaveIndicator />
@@ -438,10 +432,10 @@ function MainApp(): JSX.Element {
               ]} />
             </span>
           )}
-          {!assistantOpen && tabCount < 2 && <div className="caption-space" />}
+          {!assistantVisible && tabCount < 2 && <div className="caption-space" />}
         </header>
-        <div className="scroll">
-          {view === '@desktop' ? <DesktopPage key="desktop" /> : view === '@appearance' ? <AppearancePage key="appearance" /> : view === '@assistant' ? <AssistantPage key="assistant" /> : view === '@connections' ? <ConnectionsPage key="connections" /> : page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
+        <div className="scroll" tabIndex={view === '@settings' ? 0 : undefined} key={view === '@settings' ? 'settings' : 'workspace'}>
+          {view === '@settings' ? <SettingsPage /> : view === '@desktop' ? <DesktopPage key="desktop" /> : view === '@appearance' ? <AppearancePage key="appearance" /> : view === '@assistant' ? <AssistantPage key="assistant" /> : view === '@connections' ? <ConnectionsPage key="connections" /> : page && !page.deletedAt ? <PageView key={page.id} id={page.id} /> : (
             <StartView />
           )}
         </div>
@@ -451,7 +445,6 @@ function MainApp(): JSX.Element {
       {overlay === 'search' && <CommandPalette />}
       {overlay === 'notionImport' && <NotionImportDialog />}
       {overlay === 'newPage' && <NewPageDialog />}
-      {overlay === 'settings' && <SettingsDialog />}
       {overlay === 'trash' && <TrashDialog />}
       {overlay === 'shortcuts' && <ShortcutsDialog />}
       {overlay === 'movePage' && <MovePageDialog />}

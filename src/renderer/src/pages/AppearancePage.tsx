@@ -191,7 +191,7 @@ export function AppearancePage(): JSX.Element {
   useEffect(() => { api.info().then((i) => setMica(i.micaSupported)).catch(() => {}) }, [])
   const items = place === 'app' ? APP_INDEX : DESK_INDEX
   const { body, active, go } = useSectionIndex(items.map((x) => x.id), useLookPlace.getState().section)
-  useEffect(() => { const sec = useLookPlace.getState().section; if (sec) requestAnimationFrame(() => go(sec, false)) }, [place])
+  useEffect(() => { const sec = useLookPlace.getState().section; if (sec) requestAnimationFrame(() => go(sec)) }, [place])
 
   const importTheme = async (): Promise<void> => {
     const input = document.createElement('input')

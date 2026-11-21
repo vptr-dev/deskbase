@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.18.0 - 2026-11-21
+
+- Added inline planner calendars and workspace tools to document blocks, plus linked views of existing tools.
+- Updated the workspace layout and added a keyboard-accessible application menu in the top-left corner.
+
+- Added Project pages with local task lists and a Trello board connection. Create cards, move them between lists, and refresh the board from the project.
+
+- Tasks and habits support custom intervals, selected weekdays, start dates and optional end dates. Quick add understands phrases such as “every 3 weeks on Mon and Thu”.
+- Added reminders relative to the due time, custom snooze intervals, and per-calendar weekday, agenda, density and visibility controls.
+
+- Settings opens as a workspace page with section navigation, tab history, and a single scrollbar for all preferences.
+- Appearance and desktop panel controls adapt to the available workspace. The panel picker can scroll through its setup controls in compact windows.
+
 ## 0.17.1 — 2026-11-21
 
 - Fixed: with notifications on, a page with a reminder date could make the app stop responding.

@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 16
+export const CURRENT_SCHEMA = 19
 
 type Raw = Record<string, any>
 
@@ -228,6 +228,16 @@ migrations[14] = (d) => ({ ...d, connections: Array.isArray(d.connections) ? d.c
 
 // 15 → 16: mail (IMAP) and Todoist connections; a mail connection keeps its account. Nothing to change.
 migrations[15] = (d) => d
+
+// 16 -> 17: optional task and habit schedules, relative reminders and calendar preferences. Existing presets remain valid.
+migrations[16] = (d) => d
+
+// 17 -> 18: project pages can carry a Trello board short link.
+migrations[17] = (d) => d
+
+
+// 18 -> 19: inline tool blocks reference a page using the existing ref field.
+migrations[18] = (d) => d
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

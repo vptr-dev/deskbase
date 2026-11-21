@@ -1,3 +1,4 @@
+import { occurrence } from './recurrence'
 import type { Habit } from '../types'
 import { addDays, dayKey, today, weekStartOf } from './util'
 
@@ -25,6 +26,7 @@ const isFrozen = (h: Habit, k: string): boolean => !!h.frozen?.includes(k)
 
 export function habitScheduled(h: Habit, k: string): boolean {
   if (isWeekly(h)) return true
+  if (h.schedule && h.kind === 'good') return k >= h.schedule.start && occurrence(h.schedule, k) === k
   if (!h.days?.length || h.days.length === 7) return true
   const d = new Date(k + 'T00:00:00').getDay()
   return h.days.includes(d)
@@ -75,7 +77,7 @@ export function habitStreak(h: Habit): number {
   let k = t
   // Today not done yet doesn't break the streak.
   if (!habitDoneOn(h, k)) k = addDays(k, -1)
-  for (let i = 0; i < 3650; i++) {
+  for (let i = 0; i < 3650 && (!h.schedule || k >= h.schedule.start); i++) {
     if (!habitScheduled(h, k) || isFrozen(h, k)) { k = addDays(k, -1); continue }
     if (habitDoneOn(h, k)) { streak++; k = addDays(k, -1) } else break
   }

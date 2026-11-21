@@ -1,15 +1,18 @@
 import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, Connection, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
+import { boardKey } from '../../../shared/trello'
+import { normalizeRepeat } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 16
+export const SCHEMA = 19
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
   { type: 'database', name: 'Database', icon: 'database', desc: 'Table, board, gallery, calendar' },
   { type: 'dashboard', name: 'Dashboard', icon: 'layout-dashboard', desc: 'Panels you arrange on a grid' },
   { type: 'tasks', name: 'To-do list', icon: 'square-check-big', desc: 'Tasks with dates and reminders' },
+  { type: 'project', name: 'Project', icon: 'briefcase', desc: 'Project tasks and a linked Trello board' },
   { type: 'board', name: 'Board', icon: 'square-kanban', desc: 'Kanban columns' },
   { type: 'calendar', name: 'Calendar', icon: 'calendar', desc: 'Month, week and agenda' },
   { type: 'habits', name: 'Habits', icon: 'repeat', desc: 'Daily habits and streaks' },
@@ -237,6 +240,7 @@ const obj = (x: any): Record<string, any> => (x && typeof x === 'object' && !Arr
 function normBlocks(list: any[]): Block[] {
   return list.filter((b) => b && typeof b === 'object').map((b) => {
     const out: Block = { ...b, id: typeof b.id === 'string' && b.id ? b.id : uid(), type: typeof b.type === 'string' ? b.type : 'p', text: typeof b.text === 'string' ? b.text : '' }
+    if (out.type === 'tool' && typeof out.ref !== 'string') delete out.ref
     if (out.type === 'columns' || out.type === 'tabs') {
       const min = out.type === 'columns' ? 2 : 1
       const cols = Array.isArray(b.cols) ? b.cols.filter(Array.isArray).map((c: any[]) => normBlocks(c)) : []
@@ -338,6 +342,11 @@ export function normalize(raw: any): AppData {
       }
       if (!p.db.views.length) p.db.views.push({ id: uid(), name: 'Table', type: 'table', filters: [], hidden: [] })
     }
+    if (p.trelloBoard !== undefined) {
+      const key = p.type === 'project' && typeof p.trelloBoard === 'string' ? boardKey(p.trelloBoard) : null
+      if (key) p.trelloBoard = key
+      else delete p.trelloBoard
+    }
     if (p.type === 'dashboard') p.widgets = Array.isArray(p.widgets) ? p.widgets.filter((w) => w && w.id && w.type).map((w) => ({ ...w, config: obj(w.config), style: normalizeStyle(w.style, true) })) : []
     if (p.source && (p.source.kind !== 'notion' || typeof p.source.id !== 'string')) p.source = null
     if (p.rowOf) p.props = obj(p.props)
@@ -358,7 +367,9 @@ export function normalize(raw: any): AppData {
   for (const t of Object.values(d.tasks)) {
     t.tags = t.tags ?? []
     t.subtasks = t.subtasks ?? []
-    t.repeat = t.repeat ?? 'none'
+    t.repeat = normalizeRepeat(t.repeat)
+    const lead = t.reminderBeforeMinutes
+    if (lead != null && (!Number.isSafeInteger(lead) || lead < 0 || lead > 525600)) delete t.reminderBeforeMinutes
     t.status = t.status ?? (t.done ? 'done' : 'todo')
     t.difficulty = t.difficulty ?? 'easy'
     t.priority = t.priority ?? 0
@@ -366,6 +377,11 @@ export function normalize(raw: any): AppData {
   }
   for (const h of Object.values(d.habits)) {
     h.log = h.log ?? {}
+    if (h.schedule) {
+      const rule = normalizeRepeat(h.schedule)
+      if (typeof rule === 'object' && h.kind === 'good' && h.period !== 'week') h.schedule = rule
+      else delete h.schedule
+    }
     h.days = h.days ?? [0, 1, 2, 3, 4, 5, 6]
     h.period = h.period === 'week' ? 'week' : 'day'
     h.dayNotes = h.dayNotes ?? {}

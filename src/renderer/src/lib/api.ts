@@ -1,3 +1,4 @@
+import type { TrelloBoard, TrelloAccess, TrelloEdit } from '../../../shared/trello'
 import { type ConnSpec, type FeedResult, feedUrl, githubItems, parseFeed, parseIcs } from '../../../shared/feeds'
 import { download } from './util'
 import { migrate } from '../../../main/migrations'
@@ -80,6 +81,12 @@ export interface Bridge {
     abort(id: string): Promise<void>
     onChunk(cb: (id: string, text: string, thinking?: boolean) => void): () => void
   }
+  trello: {
+    read(page: string, board: string): Promise<TrelloBoard>
+    connect(page: string, board: string, access: TrelloAccess): Promise<TrelloBoard>
+    edit(page: string, board: string, edit: TrelloEdit): Promise<void>
+    disconnect(page: string): Promise<void>
+  }
   conn: {
     secrets(): Promise<string[]>
     setSecret(id: string, value: string | null): Promise<string[]>
@@ -111,6 +118,8 @@ export interface Bridge {
 // Browser preview: feeds are fetched straight from the page (works for servers that allow it).
 const CONN_KEY = 'deskbase:conn'
 const webSecrets = (): Record<string, string> => { try { return JSON.parse(localStorage.getItem(CONN_KEY) ?? '{}') } catch { return {} } }
+const desktopTrello = async (): Promise<never> => { throw new Error('Connect to Trello in the Windows app.') }
+
 const webConn: Bridge['conn'] = {
   secrets: async () => Object.keys(webSecrets()),
   setSecret: async (id, value) => { const s = webSecrets(); if (value) s[id] = value; else delete s[id]; localStorage.setItem(CONN_KEY, JSON.stringify(s)); return Object.keys(s) },
@@ -313,6 +322,9 @@ const browserBridge: Bridge = {
     onCommand: () => () => {}
   },
   ai: webAi,
+  trello: {
+    read: desktopTrello, connect: desktopTrello, edit: desktopTrello, disconnect: desktopTrello
+  },
   conn: webConn,
   media: { watch: async () => {}, control: async () => {}, onState: () => () => {} },
   notion: {

@@ -1,8 +1,13 @@
+import { createPortal } from 'react-dom'
+import { TaskReminder, TaskSnooze } from './TaskTiming'
+import { TaskRepeatEditor } from './TaskRepeatEditor'
+import { repeatLabel } from '../lib/recurrence'
+import { parseQuickAdd } from '../lib/quickAdd'
 import { useMemo, useState } from 'react'
 import { act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
-import type { Repeat, Task } from '../types'
-import { formatTime, friendlyDay, parseQuickAdd, snoozeOptions, today, uid } from '../lib/util'
-import { AutoText, Button, Checkbox, ConfirmButton, Menu, type MenuItem, Popover, Segmented } from './ui'
+import type { Task } from '../types'
+import { formatTime, friendlyDay, snoozeOptions, today, uid } from '../lib/util'
+import { AutoText, Button, Checkbox, ConfirmButton, Menu, type MenuItem, Popover, Segmented, useDoc } from './ui'
 import { Icon } from './Icon'
 
 export const PRIORITY = [
@@ -12,14 +17,10 @@ export const PRIORITY = [
   { v: 3, label: 'High', color: '#ff453a' }
 ] as const
 
-export const REPEATS: { v: Repeat; label: string }[] = [
-  { v: 'none', label: 'Never' }, { v: 'daily', label: 'Daily' }, { v: 'weekdays', label: 'Weekdays' },
-  { v: 'weekly', label: 'Weekly' }, { v: 'monthly', label: 'Monthly' }, { v: 'yearly', label: 'Yearly' }
-]
-
 export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', autoFocus, onAdded, onEscape }: { pageId: string; defaults?: Partial<Task>; placeholder?: string; autoFocus?: boolean; onAdded?: (id: string) => void; onEscape?: () => void }): JSX.Element {
   const [v, setV] = useState('')
-  const parsed = useMemo(() => (v.trim() ? parseQuickAdd(v) : null), [v])
+  const weekStart = useData(d => d.settings.weekStart)
+  const parsed = useMemo(() => (v.trim() ? parseQuickAdd(v, weekStart, defaults.due) : null), [v, weekStart, defaults.due])
   const submit = (): void => {
     if (!parsed?.title) return
     const id = addTask(pageId, {
@@ -51,7 +52,7 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', au
         <div className="quickadd-chips">
           {parsed.due && <span className="chip"><Icon name="calendar" size={12} />{friendlyDay(parsed.due)}</span>}
           {parsed.time && <span className="chip"><Icon name="clock" size={12} />{parsed.time}</span>}
-          {parsed.repeat && <span className="chip"><Icon name="repeat" size={12} />{parsed.repeat}</span>}
+          {parsed.repeat && <span className="chip"><Icon name="repeat" size={12} />{repeatLabel(parsed.repeat)}</span>}
           {parsed.priority ? <span className="chip" style={{ color: PRIORITY[parsed.priority].color }}><Icon name="flag" size={12} />{PRIORITY[parsed.priority].label}</span> : null}
           {parsed.tags.map((t) => <span key={t} className="chip">#{t}</span>)}
         </div>
@@ -104,7 +105,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
         <div className="task-title">{task.title || <span className="muted">Untitled</span>}</div>
         <div className="task-meta">
           {task.due && <span className={`meta ${overdue ? 'danger' : task.due === today() ? 'accent' : ''}`}><Icon name="calendar" size={12} />{friendlyDay(task.due)}{task.time ? ' ' + formatTime(task.time, use24h) : ''}</span>}
-          {task.repeat !== 'none' && <span className="meta"><Icon name="repeat" size={12} /></span>}
+          {task.repeat !== 'none' && <span className="meta" title={repeatLabel(task.repeat)}><Icon name="repeat" size={12} />{repeatLabel(task.repeat)}</span>}
           {task.subtasks.length > 0 && <span className="meta"><Icon name="check" size={12} />{subDone}/{task.subtasks.length}</span>}
           {task.notes && <span className="meta"><Icon name="note" size={12} /></span>}
           {task.estimate ? <span className="meta"><Icon name="clock" size={12} />{task.estimate}m</span> : null}
@@ -126,7 +127,7 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
   const [subInput, setSubInput] = useState('')
   if (!task) return null
   const set = (fn: (t: Task) => void, key?: string): void => updateTask(id, fn, key)
-  const listPages = Object.values(pages).filter((p) => !p.deletedAt && ['tasks', 'board', 'today'].includes(p.type))
+  const listPages = Object.values(pages).filter((p) => !p.deletedAt && ['tasks', 'board', 'project', 'today'].includes(p.type))
   return (
     <div className="drawer glass-strong" onClick={(e) => e.stopPropagation()}>
       <div className="drawer-head">
@@ -137,21 +138,17 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
       <div className="drawer-body">
         <div className="field-grid">
           <label>Due</label>
-          <div className="row gap-sm">
+          <div className="row gap-sm wrap">
             <input id={`due-${id}`} type="date" className="input input-sm" value={task.due ?? ''} onChange={(e) => set((t) => { t.due = e.target.value || null })} />
             <input id={`time-${id}`} type="time" className="input input-sm" value={task.time ?? ''} onChange={(e) => set((t) => { t.time = e.target.value || null })} />
             {task.due && <Button small kind="ghost" icon="x" title="Clear date" onClick={() => set((t) => { t.due = null; t.time = null })} />}
           </div>
           {!task.done && <>
             <label>Snooze</label>
-            <div className="row gap-xs wrap">
-              {snoozeOptions().map((o) => <button key={o.label} className="chip-btn" title={friendlyDay(o.due)} onClick={() => snoozeTask(id, o.due)}>{o.label}</button>)}
-            </div>
+            <TaskSnooze key={id} task={task} />
           </>}
-          <label>Repeat</label>
-          <select id={`repeat-${id}`} className="input input-sm" value={task.repeat} onChange={(e) => set((t) => { t.repeat = e.target.value as Repeat; if (t.repeat !== 'none' && !t.due) t.due = today() })}>
-            {REPEATS.map((r) => <option key={r.v} value={r.v}>{r.label}</option>)}
-          </select>
+          <label htmlFor={`repeat-${id}`}>Repeat</label>
+          <TaskRepeatEditor key={id} task={task} />
           <label>Priority</label>
           <Segmented small value={task.priority} onChange={(v) => set((t) => { t.priority = v as Task['priority'] })} options={PRIORITY.map((p) => ({ value: p.v, label: p.label }))} />
           <label>Estimate</label>
@@ -160,9 +157,7 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
             <span className="muted">minutes</span>
           </div>
           <label>Reminder</label>
-          <div className="row gap-sm">
-            <input id={`remind-${id}`} type="datetime-local" className="input input-sm" value={task.remindAt ? new Date(task.remindAt - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''} onChange={(e) => set((t) => { t.remindAt = e.target.value ? new Date(e.target.value).getTime() : null; t.reminded = false })} />
-          </div>
+          <TaskReminder key={id} task={task} />
           <label>Tags</label>
           <div className="tags-edit">
             {task.tags.map((t) => <span key={t} className="chip">#{t}<button onClick={() => set((x) => { x.tags = x.tags.filter((y) => y !== t) })}><Icon name="x" size={10} /></button></span>)}
@@ -221,10 +216,11 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
 export function useTaskDrawer(): [string | null, (id: string | null) => void, JSX.Element | null] {
   const [open, setOpen] = useState<string | null>(null)
   const exists = useApp((s) => (open ? Boolean(s.data.tasks[open]) : false))
-  const el = open && exists ? (
+  const doc = useDoc()
+  const el = open && exists ? createPortal(
     <div className="drawer-backdrop" onClick={() => setOpen(null)}>
-      <TaskDetail id={open} onClose={() => setOpen(null)} />
-    </div>
+      <TaskDetail key={open} id={open} onClose={() => setOpen(null)} />
+    </div>, doc.body
   ) : null
   return [open, setOpen, el]
 }

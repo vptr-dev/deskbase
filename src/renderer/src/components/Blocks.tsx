@@ -342,7 +342,7 @@ export function ButtonBlock({ block, locked, set, addTodos }: { block: Block; lo
 
 // ---------- link to page ----------
 
-export function PagePicker({ onPick, exclude, only }: { onPick: (id: string) => void; exclude?: string; only?: Page['type'] }): JSX.Element {
+export function PagePicker({ onPick, exclude, only, toolsOnly }: { onPick: (id: string) => void; exclude?: string; only?: Page['type']; toolsOnly?: boolean }): JSX.Element {
   const [q, setQ] = useState('')
   const pages = useData((d) => d.pages)
   const recent = useData((d) => d.recent)
@@ -350,7 +350,7 @@ export function PagePicker({ onPick, exclude, only }: { onPick: (id: string) => 
   const list = (ql
     ? Object.values(pages).filter((p) => !p.deletedAt && (p.title || 'untitled').toLowerCase().includes(ql))
     : [...recent.map((id) => pages[id]).filter(Boolean), ...Object.values(pages)].filter((p, i, all) => p && !p.deletedAt && all.indexOf(p) === i)
-  ).filter((p) => p.id !== exclude && !p.rowOf && (!only || p.type === only)).slice(0, 8)
+  ).filter((p) => p.id !== exclude && !p.rowOf && (!toolsOnly || p.type !== 'doc') && (!only || p.type === only)).slice(0, 8)
   return (
     <div className="page-picker">
       <input className="input input-sm" autoFocus placeholder="Find a page" value={q} onChange={(e) => setQ(e.target.value)}

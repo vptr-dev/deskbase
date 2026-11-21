@@ -1,7 +1,7 @@
 // Cut a release: node scripts/release.mjs [patch|minor|major]
 // Checks the tree is clean, type-checks and builds, bumps the version, moves the
-// "Unreleased" notes in CHANGELOG.md under the new version, commits, tags and pushes.
-// Pushing the tag starts the GitHub workflow that builds the installer and publishes
+// "Unreleased" notes in CHANGELOG.md under the new version, commits and pushes.
+// Pushing the release commit starts the GitHub workflow that builds the installer and publishes
 // the release that installed apps update from.
 import { execSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -33,14 +33,17 @@ lock.version = next
 if (lock.packages?.['']) lock.packages[''].version = next
 fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n')
 
+const readme = fs.readFileSync('README.md', 'utf8')
+const updated = readme.replace(/Deskbase-Setup-\d+\.\d+\.\d+\.exe/, `Deskbase-Setup-${next}.exe`)
+if (updated === readme) throw new Error('README.md must name the current installer')
+fs.writeFileSync('README.md', updated)
+
 const date = new Date().toISOString().slice(0, 10)
 let log = fs.readFileSync('CHANGELOG.md', 'utf8')
 log = log.replace('## Unreleased', `## Unreleased\n\n## ${next} — ${date}`)
 fs.writeFileSync('CHANGELOG.md', log)
 
-run('git add package.json package-lock.json CHANGELOG.md')
+run('git add package.json package-lock.json CHANGELOG.md README.md')
 run(`git commit -m "Release v${next}"`)
-run(`git tag v${next}`)
-run('git push')
-run(`git push origin v${next}`)
-console.log(`\nReleased v${next}. GitHub Actions is building the installer.`)
+run('git push origin HEAD:main')
+console.log(`\nPushed v${next}. GitHub Actions builds and checks the installer before publishing.`)

@@ -281,7 +281,7 @@ function AddPanel({ onClose }: { onClose: () => void }): JSX.Element {
   }
   const def = widgetDef(draft.type)
   return (
-    <Modal onClose={onClose} width={1080} className="add-panel">
+    <Modal onClose={onClose} width={1080} className="add-panel" title="Add a panel">
       <div className="add-panel-layout">
         <nav className="add-panel-cats">
           <div className="add-panel-search"><Icon name="search" size={14} /><input autoFocus className="input-bare" placeholder="Search panels" value={q} onChange={(e) => setQ(e.target.value)} /></div>

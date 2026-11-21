@@ -1,8 +1,9 @@
+import { parseQuickAdd } from '../lib/quickAdd'
 import { useState } from 'react'
 import { act, emit, pageItems, removeItem, unemit, upsert, useData, patch, fireConfetti } from '../store'
 import type { Goal, Task } from '../types'
 import { COLORS } from '../lib/defaults'
-import { diffDays, friendlyDay, parseQuickAdd, today, uid } from '../lib/util'
+import { diffDays, friendlyDay, today, uid } from '../lib/util'
 import { addTask, setTaskDone } from '../store'
 import { Button, ColorDots, ConfirmButton, Empty, IconPickerButton, Modal, Ring, Segmented } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
@@ -63,6 +64,7 @@ function GoalEditor({ goal, onClose }: { goal: Goal; onClose: () => void }): JSX
 }
 
 function GoalCard({ g, onEdit }: { g: Goal; onEdit: () => void }): JSX.Element {
+  const weekStart = useData(d => d.settings.weekStart)
   const listPage = useData((d) => Object.values(d.pages).find((p) => p.type === 'tasks' && !p.deletedAt)?.id)
   const [ms, setMs] = useState('')
   const tasks = useData((d) => d.tasks)
@@ -98,7 +100,7 @@ function GoalCard({ g, onEdit }: { g: Goal; onEdit: () => void }): JSX.Element {
           {linked.length > 8 && <div className="muted small">+{linked.length - 8} more</div>}
           {listPage && <input id={`gt-${g.id}`} className="input input-sm" placeholder="Add a task for this goal" value={ms} onChange={(e) => setMs(e.target.value)} onKeyDown={(e) => {
             if (e.key === 'Enter' && ms.trim()) {
-              const q = parseQuickAdd(ms.trim())
+              const q = parseQuickAdd(ms.trim(), weekStart)
               addTask(listPage, { title: q.title || ms.trim(), due: q.due ?? null, time: q.time ?? null, priority: q.priority ?? 0, tags: q.tags, repeat: q.repeat ?? 'none', goalId: g.id })
               setMs('')
             }

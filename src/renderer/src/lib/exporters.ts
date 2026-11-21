@@ -16,6 +16,7 @@ function blockToMd(b: Block, n: number): string {
     case 'callout': return `> **Note:** ${b.text}`
     case 'code': return '```\n' + b.text + '\n```'
     case 'toggle': return `<details><summary>${b.text}</summary>\n\n${b.body ?? ''}\n</details>`
+    case 'tool': return '[[' + (getData().pages[b.ref ?? '']?.title || 'Tool') + ']]'
     case 'divider': return '---'
     case 'table': {
       const rows = b.rows ?? []
@@ -35,7 +36,7 @@ export function pageToMarkdown(id: string): string {
   let n = 0
   for (const b of p.blocks) {
     n = b.type === 'number' ? n + 1 : 0
-    if (b.text || b.type === 'divider' || b.type === 'table') out.push(blockToMd(b, n))
+    if (b.text || b.type === 'divider' || b.type === 'table' || b.type === 'tool') out.push(blockToMd(b, n))
   }
   const tasks = pageItems(d.tasks, id)
   if (tasks.length) {

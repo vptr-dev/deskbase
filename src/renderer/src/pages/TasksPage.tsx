@@ -253,7 +253,7 @@ function BoardAdd({ pageId, status }: { pageId: string; status: TaskStatus }): J
 
 /** Floating action bar for a multi-selection of tasks (Ctrl/Shift click). */
 export function BulkBar({ ids, onClear }: { ids: string[]; onClear: () => void }): JSX.Element {
-  const lists = useData((d) => Object.values(d.pages).filter((p) => !p.deletedAt && (p.type === 'tasks' || p.type === 'board')))
+  const lists = useData((d) => Object.values(d.pages).filter((p) => !p.deletedAt && (p.type === 'tasks' || p.type === 'board' || p.type === 'project')))
   const t0 = today()
   const each = (fn: (t: Task) => void): void => act((d) => { for (const id of ids) if (d.tasks[id]) fn(d.tasks[id]) })
   const n = ids.length

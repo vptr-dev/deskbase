@@ -3,6 +3,7 @@ export type PageType =
   | 'today'
   | 'tasks'
   | 'board'
+  | 'project'
   | 'calendar'
   | 'habits'
   | 'journal'
@@ -41,6 +42,7 @@ export type BlockType =
   | 'synced'
   | 'tabs'
   | 'database'
+  | 'tool'
 
 export interface Block {
   id: string
@@ -64,7 +66,7 @@ export interface Block {
   widths?: number[]
   /** callout: its icon */
   icon?: string
-  /** link and database: the page id; synced: "pageId/blockId" of the original block */
+  /** link, database and tool: the page id; synced: "pageId/blockId" of the original block */
   ref?: string
   /** background color behind the block (a color name or #hex) */
   bg?: string
@@ -97,6 +99,7 @@ export interface Page {
   /** per-page view preferences (filters, sort, layout) */
   view?: Record<string, any>
   /** database pages: properties and views */
+  trelloBoard?: string
   db?: DbSchema
   /** set when this page is a row of the database page with this id (rows are hidden from the sidebar) */
   rowOf?: string | null
@@ -341,7 +344,16 @@ export interface ValueRule {
 }
 
 export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'epic'
-export type Repeat = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly'
+export interface CustomRepeat {
+  unit: 'day' | 'week' | 'month' | 'year'
+  interval: number
+  start: string
+  days: number[]
+  weekStart: 0 | 1
+  until?: string
+}
+export type RepeatPreset = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly'
+export type Repeat = RepeatPreset | CustomRepeat
 export type TaskStatus = 'todo' | 'doing' | 'done'
 export type StatKey = 'str' | 'int' | 'wis' | 'cha' | 'vit' | 'cre'
 
@@ -369,6 +381,8 @@ export interface Task {
   pinned?: boolean
   archived?: boolean
   remindAt?: number | null
+  reminderBeforeMinutes?: number
+  remindedFor?: number
   reminded?: boolean
   /** goal this task counts toward */
   goalId?: string | null
@@ -391,6 +405,7 @@ export interface Habit {
   archived?: boolean
   notes?: string
   /** 'week': `target` is times per week, any day counts */
+  schedule?: CustomRepeat
   period?: 'day' | 'week'
   dayNotes?: Record<string, string>
   /** days covered by a streak freeze */

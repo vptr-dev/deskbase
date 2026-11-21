@@ -1,3 +1,5 @@
+import { firstScheduledDate, ScheduleFields } from '../components/ScheduleFields'
+import { repeatLabel } from '../lib/recurrence'
 import { useState } from 'react'
 import { act, emit, pageItems, removeItem, unemit, upsert, useData, patch, updatePage } from '../store'
 import type { Habit } from '../types'
@@ -29,6 +31,7 @@ function newHabit(pageId: string, order: number): Habit {
 }
 
 function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }): JSX.Element {
+  const weekStart = useData(d => d.settings.weekStart)
   const [h, setH] = useState<Habit>(habit)
   const set = (p: Partial<Habit>): void => setH({ ...h, ...p })
   return (
@@ -40,22 +43,27 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }):
           <input id="habit-name" className="input grow" autoFocus placeholder="e.g. Drink water, Read 20 pages" value={h.name} onChange={(e) => set({ name: e.target.value })} />
         </div>
         <label>Type</label>
-        <Segmented value={h.kind} onChange={(kind) => set({ kind })} options={[{ value: 'good', label: 'Build a habit' }, { value: 'bad', label: 'Quit a habit' }]} />
+        <Segmented value={h.kind} onChange={(kind) => set({ kind, schedule: kind === 'bad' ? undefined : h.schedule })} options={[{ value: 'good', label: 'Build a habit' }, { value: 'bad', label: 'Quit a habit' }]} />
         {h.kind === 'good' && <>
           <label>Frequency</label>
-          <Segmented small value={h.period ?? 'day'} onChange={(period) => set({ period, target: period === 'week' ? Math.min(7, Math.max(1, h.target > 1 ? h.target : 3)) : 1 })} options={[{ value: 'day', label: 'Daily' }, { value: 'week', label: 'Times per week' }]} />
+          <Segmented small value={h.schedule ? 'custom' : h.period ?? 'day'} onChange={mode => {
+            if (mode === 'custom') set({ period: 'day', schedule: { unit: 'week', start: today(), interval: 1, weekStart, days: [...h.days] } })
+            else set({ period: mode, schedule: undefined, target: mode === 'week' ? Math.min(7, Math.max(1, h.target > 1 ? h.target : 3)) : 1 })
+          }} options={[{ value: 'day', label: 'Daily' }, { value: 'week', label: 'Times per week' }, { value: 'custom', label: 'Custom schedule' }]} />
           {h.period === 'week' ? <>
             <label>Times per week</label>
             <Segmented small value={Math.min(7, h.target)} onChange={(target) => set({ target })} options={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: String(n) }))} />
           </> : <>
             <label>Times per day</label>
             <input id="habit-target" type="number" min={1} max={50} className="input w-80" value={h.target} onChange={(e) => set({ target: Math.max(1, Number(e.target.value) || 1) })} />
-            <label>Days</label>
+            {h.schedule ? <div className="repeat-form">
+              <ScheduleFields id={h.id} draft={h.schedule} onChange={schedule => set({ schedule })} />
+            </div> : <><label>Days</label>
             <div className="day-picker">
               {DAYS_SHORT.map((d, i) => (
                 <button key={d} className={h.days.includes(i) ? 'active' : ''} onClick={() => set({ days: h.days.includes(i) ? h.days.filter((x) => x !== i) : [...h.days, i].sort() })}>{d[0]}</button>
               ))}
-            </div>
+            </div></>}
           </>}
         </>}
         <label>Color</label>
@@ -67,7 +75,7 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }):
         {habit.name && <ConfirmButton onConfirm={() => { removeItem('habits', h.id, 'habit'); onClose() }} />}
         <div className="spacer" />
         <Button onClick={onClose}>Cancel</Button>
-        <Button kind="primary" disabled={!h.name.trim()} onClick={() => { upsert('habits', { ...h, days: h.days.length ? h.days : [0, 1, 2, 3, 4, 5, 6] }); onClose() }}>Save</Button>
+        <Button kind="primary" disabled={!h.name.trim() || (!!h.schedule && !firstScheduledDate(h.schedule))} onClick={() => { upsert('habits', { ...h, days: h.days.length ? h.days : [0, 1, 2, 3, 4, 5, 6] }); onClose() }}>Save</Button>
       </div>
     </Modal>
   )
@@ -149,7 +157,7 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
                 onDrop={(e) => { e.preventDefault(); if (dragId) reorder(dragId, h.id); setDragId(null); setOverId(null) }}>
                 <button className="habit-name" draggable onDragStart={(e) => { setDragId(h.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', h.id) }} onDragEnd={() => { setDragId(null); setOverId(null) }} onClick={() => setDetail(detail === h.id ? null : h.id)}>
                   <span className="habit-icon" style={{ background: h.color + '26', color: h.color }}><Glyph value={h.icon} fallback="circle-check" size={16} /></span>
-                  <span className="habit-title">{h.name}{h.kind === 'bad' && <span className="muted small"> · quitting</span>}{weekly && <span className="muted small"> · {habitWeekCount(h, t)}/{h.target} this week</span>}</span>
+                  <span className="habit-title">{h.name}{h.schedule && <span className="muted small"> · {repeatLabel(h.schedule)}</span>}{h.kind === 'bad' && <span className="muted small"> · quitting</span>}{weekly && <span className="muted small"> · {habitWeekCount(h, t)}/{h.target} this week</span>}</span>
                 </button>
                 {days.map((k) => {
                   const v = h.log[k] ?? 0
@@ -236,8 +244,9 @@ function MonthChains({ habits }: { habits: Habit[] }): JSX.Element {
         </div>
         {habits.map((h) => {
           const done = (k: string): boolean => (h.kind === 'good' ? habitDoneOn(h, k) : !(h.log[k] > 0) && k <= t && k >= dayOf(h.createdAt))
-          const hits = days.filter((k) => k <= t && done(k)).length
-          const elapsed = days.filter((k) => k <= t && k >= dayOf(h.createdAt)).length
+          const counted = days.filter(k => k <= t && k >= dayOf(h.createdAt) && (!h.schedule || habitScheduled(h, k)))
+          const hits = counted.filter(done).length
+          const elapsed = counted.length
           return (
             <div key={h.id} className="chain-row" style={{ ['--n' as any]: count, ['--c' as any]: h.color }}>
               <span className="chain-name ellipsis" title={h.name}><Glyph value={h.icon} size={13} color={h.color} /> {h.name}</span>

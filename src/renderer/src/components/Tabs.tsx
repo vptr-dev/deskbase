@@ -8,6 +8,7 @@ import type { Page } from '../types'
 
 function tabLook(page: string | null, pages: Record<string, Page>): { title: string; icon: string; color?: string } {
   if (page === '@desktop') return { title: 'Desktop', icon: 'monitor' }
+  if (page === '@settings') return { title: 'Settings', icon: 'settings' }
   if (page === '@appearance') return { title: 'Appearance', icon: 'palette' }
   if (page === '@assistant') return { title: 'Assistant', icon: 'sparkle' }
   if (page === '@connections') return { title: 'Connections', icon: 'plug' }

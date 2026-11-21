@@ -82,8 +82,20 @@ export function MenuButton({ items, icon = 'more', title = 'More', label, small 
   )
 }
 
-export function Modal({ onClose, children, width = 560, className = '' }: { onClose: () => void; children: ReactNode; width?: number; className?: string }): JSX.Element {
+export function Modal({ onClose, children, width = 560, className = '', title }: { onClose: () => void; children: ReactNode; width?: number; className?: string; title?: string }): JSX.Element {
   const doc = useDoc()
+  const dialog = useRef<HTMLDivElement>(null)
+  const opener = useRef(doc.activeElement as HTMLElement | null)
+  useLayoutEffect(() => {
+    const root = doc.getElementById('root')
+    const wasInert = root?.inert ?? false
+    if (root) root.inert = true
+    if (!dialog.current?.contains(doc.activeElement)) dialog.current?.focus({ preventScroll: true })
+    return () => {
+      if (root) root.inert = wasInert
+      opener.current?.focus({ preventScroll: true })
+    }
+  }, [doc])
   useEffect(() => {
     const key = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
     doc.addEventListener('keydown', key)
@@ -91,7 +103,11 @@ export function Modal({ onClose, children, width = 560, className = '' }: { onCl
   }, [onClose, doc])
   return createPortal(
     <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className={`modal glass-strong ${className}`} style={{ width }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div ref={dialog} className={`modal glass-strong ${className}`} style={{ width }} onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label={title} aria-modal="true" tabIndex={-1}>
+        {title && <header className="dialog-titlebar">
+          <h2>{title}</h2>
+          <button className="icon-btn" aria-label={`Close ${title.toLowerCase()}`} title="Close (Esc)" onClick={onClose}><Icon name="x" size={17} /></button>
+        </header>}
         {children}
       </div>
     </div>,
@@ -310,28 +326,25 @@ export function BarChart({ data, height = 120, color = 'var(--accent)', format =
 }
 
 /** A long page of settings with an index beside it: click a heading to go there; the one in view is marked. */
-export function useSectionIndex(ids: string[], initial?: string): { body: React.RefObject<HTMLDivElement>; active: string; go: (id: string, smooth?: boolean) => void } {
+export function useSectionIndex(ids: string[], initial?: string): { body: React.RefObject<HTMLDivElement>; active: string; go: (id: string) => void } {
   const body = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(initial && ids.includes(initial) ? initial : ids[0])
-  const hold = useRef(0)
   const key = ids.join(',')
   const scroller = (): HTMLElement | null => {
     let el: HTMLElement | null = body.current
-    while (el && !(el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement
+    while (el && !/^(auto|scroll)$/.test(getComputedStyle(el).overflowY)) el = el.parentElement
     return el ?? body.current
   }
   const find = (id: string): HTMLElement | null => body.current?.querySelector<HTMLElement>(`[data-section="${id}"]`) ?? null
-  const go = (id: string, smooth = true): void => {
+  const go = (id: string): void => {
     const sc = scroller()
     const el = find(id)
     if (!sc || !el) return
-    hold.current = Date.now() + 700
     setActive(id)
-    sc.scrollTo({ top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 8, behavior: smooth ? 'smooth' : 'auto' })
+    sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 8
   }
   useEffect(() => {
     const spy = (): void => {
-      if (Date.now() < hold.current) return
       const sc = scroller()
       if (!sc) return
       const top = sc.getBoundingClientRect().top
@@ -343,7 +356,7 @@ export function useSectionIndex(ids: string[], initial?: string): { body: React.
     document.addEventListener('scroll', spy, true)
     return () => document.removeEventListener('scroll', spy, true)
   }, [key])
-  useLayoutEffect(() => { if (initial && ids.includes(initial)) go(initial, false) }, [])
+  useLayoutEffect(() => { if (initial && ids.includes(initial)) go(initial) }, [])
   useEffect(() => { if (!ids.includes(active)) setActive(ids[0]) }, [key])
   return { body, active, go }
 }
@@ -352,7 +365,7 @@ export function SideIndex({ items, active, go, className = '' }: { items: { id: 
   return (
     <nav className={`side-index ${className}`}>
       {items.map((it) => (
-        <button key={it.id} className={active === it.id ? 'active' : ''} onClick={() => go(it.id)}>
+        <button key={it.id} aria-current={active === it.id ? 'location' : undefined} className={active === it.id ? 'active' : ''} onClick={() => go(it.id)}>
           {it.icon && <Icon name={it.icon} size={14} />}<span>{it.label}</span>
         </button>
       ))}

@@ -1,14 +1,15 @@
+import { nextTaskDate, normalizeRepeat, shiftTaskReminder } from './lib/recurrence'
 import { create } from 'zustand'
 import { applyPatches, enablePatches, type Patch, produceWithPatches } from 'immer'
 import type { AppData, Page, PageType, Task } from './types'
 import { api } from './lib/api'
 import { freshData, newPage, normalize } from './lib/defaults'
 import { applyRules, revertRules, type ValueEvent } from './lib/values'
-import { addDays, addMonths, friendlyDay, parseDay, today, uid } from './lib/util'
+import { addDays, dayKey, friendlyDay, parseDay, today, uid } from './lib/util'
 
 enablePatches()
 
-export type Overlay = null | 'search' | 'settings' | 'trash' | 'newPage' | 'shortcuts' | 'notionImport' | 'movePage' | 'quickAdd' | 'values' | 'history'
+export type Overlay = null | 'search' | 'trash' | 'newPage' | 'shortcuts' | 'notionImport' | 'movePage' | 'quickAdd' | 'values' | 'history'
 
 export interface Toast { id: string; text: string; icon?: string; kind?: 'xp' | 'info' | 'level' | 'achievement' | 'error'; undo?: boolean }
 
@@ -16,6 +17,7 @@ interface Store {
   ready: boolean
   data: AppData
   current: string | null
+  settingsTarget: 'top' | 'assistant' | null
   overlay: Overlay
   overlayArg: any
   toasts: Toast[]
@@ -31,6 +33,7 @@ export const useApp = create<Store>(() => ({
   current: null,
   overlay: null,
   overlayArg: null,
+  settingsTarget: null,
   toasts: [],
   saving: 'saved',
   loadError: null,
@@ -150,8 +153,8 @@ export const fireConfetti = (): void => { if (!getData().settings.reduceMotion) 
 
 // ---------- navigation ----------
 /** Views that aren't pages. */
-export type View = '@desktop' | '@appearance' | '@assistant' | '@connections'
-export const isView = (id: string | null): id is View => id === '@desktop' || id === '@appearance' || id === '@assistant' || id === '@connections'
+export type View = '@desktop' | '@appearance' | '@assistant' | '@connections' | '@settings'
+export const isView = (id: string | null): id is View => id === '@desktop' || id === '@appearance' || id === '@assistant' || id === '@connections' || id === '@settings'
 
 /** Bring the main window forward when something is opened from a desktop widget. */
 function reveal(): void {
@@ -161,6 +164,11 @@ function reveal(): void {
 export function openView(view: View): void {
   reveal()
   useApp.setState({ current: view, overlay: null })
+}
+
+export function openSettings(target: 'top' | 'assistant' = 'top'): void {
+  reveal()
+  useApp.setState({ current: '@settings', overlay: null, settingsTarget: target })
 }
 
 export function openPage(id: string): void {
@@ -263,19 +271,25 @@ export function purgePage(id: string): void {
 }
 
 export function duplicatePage(id: string): void {
-  const src = getData().pages[id]
+  const snapshot = getData()
+  const src = snapshot.pages[id]
   if (!src) return
   let newId = ''
   act((d) => {
+    const copies = new Map<string, string>()
     const clone = (pid: string, parent: string | null): string => {
-      const o = d.pages[pid]
+      const o = snapshot.pages[pid]
       const nid = uid()
       const copy: Page = { ...structuredClone(o), id: nid, parentId: parent, children: [], createdAt: Date.now(), updatedAt: Date.now(), favorite: false }
-      copy.blocks = copy.blocks.map((b) => ({ ...b, id: uid() }))
+      copies.set(pid, nid)
+      const renew = (blocks: Page['blocks']): void => {
+        for (const b of blocks) { b.id = uid(); b.cols?.forEach(renew) }
+      }
+      renew(copy.blocks)
       d.pages[nid] = copy
-      for (const coll of ['tasks', 'habits', 'goals', 'metrics'] as const) {
+      for (const coll of ['tasks', 'habits', 'goals', 'metrics', 'journal'] as const) {
         const c = d[coll] as Record<string, any>
-        for (const v of Object.values(c).filter((x: any) => x.pageId === pid)) {
+        for (const v of Object.values(snapshot[coll]).filter(x => x.pageId === pid)) {
           const cid = uid()
           c[cid] = { ...structuredClone(v), id: cid, pageId: nid }
         }
@@ -291,6 +305,13 @@ export function duplicatePage(id: string): void {
       return nid
     }
     newId = clone(id, src.parentId)
+    const relink = (blocks: Page['blocks']): void => {
+      for (const b of blocks) {
+        if ((b.type === 'tool' || b.type === 'database') && b.ref) b.ref = copies.get(b.ref) ?? b.ref
+        b.cols?.forEach(relink)
+      }
+    }
+    for (const copied of copies.values()) relink(d.pages[copied].blocks)
     d.pages[newId].title = (src.title || 'Untitled') + ' (copy)'
     const list = src.parentId ? d.pages[src.parentId].children : d.rootOrder
     list.splice(list.indexOf(id) + 1, 0, newId)
@@ -349,21 +370,6 @@ export function updateTask(id: string, fn: (t: Task) => void, key?: string): voi
   act((d) => { if (d.tasks[id]) fn(d.tasks[id]) }, { key })
 }
 
-function nextDue(due: string, repeat: Task['repeat']): string {
-  switch (repeat) {
-    case 'daily': return addDays(due, 1)
-    case 'weekdays': {
-      let n = addDays(due, 1)
-      while ([0, 6].includes(parseDay(n).getDay())) n = addDays(n, 1)
-      return n
-    }
-    case 'weekly': return addDays(due, 7)
-    case 'monthly': return addMonths(due, 1)
-    case 'yearly': return addMonths(due, 12)
-    default: return due
-  }
-}
-
 export function setTaskDone(id: string, done: boolean): void {
   act((d) => {
     const t = d.tasks[id]
@@ -374,11 +380,17 @@ export function setTaskDone(id: string, done: boolean): void {
     if (done) {
       emit(d, { on: 'task', src: 'task:' + t.id, label: t.title || 'Task', scope: t.pageId, tags: t.tags })
       if (t.repeat !== 'none') {
-        const nid = uid()
-        const base = t.due && t.due > today() ? t.due : t.due ?? today()
-        let nd = nextDue(base, t.repeat)
-        while (nd <= today()) nd = nextDue(nd, t.repeat)
-        d.tasks[nid] = { ...structuredClone(t), id: nid, done: false, status: 'todo', doneAt: null, due: nd, createdAt: Date.now(), reminded: false, subtasks: t.subtasks.map((s) => ({ ...s, done: false })) }
+        const due = t.due ?? today()
+        const next = nextTaskDate(t.repeat, due, today())
+        if (next) {
+          const nid = uid()
+          d.tasks[nid] = {
+            ...t, id: nid, done: false, status: 'todo', doneAt: null, due: next, createdAt: Date.now(),
+            remindAt: shiftTaskReminder(t.remindAt, due, next), reminded: false,
+            tags: [...t.tags], repeat: normalizeRepeat(t.repeat),
+            subtasks: t.subtasks.map(s => ({ ...s, done: false }))
+          }
+        }
         t.repeat = 'none'
       }
     } else {
@@ -396,10 +408,7 @@ export function moveOverdueToToday(pageId?: string): number {
     for (const id of ids) {
       const t = d.tasks[id]
       if (t.remindAt) {
-        const r = new Date(t.remindAt)
-        const nd = parseDay(t0)
-        nd.setHours(r.getHours(), r.getMinutes(), 0, 0)
-        t.remindAt = nd.getTime()
+        t.remindAt = shiftTaskReminder(t.remindAt, t.due ?? dayKey(new Date(t.remindAt)), t0)
         t.reminded = false
       }
       t.due = t0
@@ -414,10 +423,7 @@ export function snoozeTask(id: string, due: string): void {
     const t = d.tasks[id]
     if (!t) return
     if (t.remindAt) {
-      const r = new Date(t.remindAt)
-      const nd = parseDay(due)
-      nd.setHours(r.getHours(), r.getMinutes(), 0, 0)
-      t.remindAt = nd.getTime()
+      t.remindAt = shiftTaskReminder(t.remindAt, t.due ?? dayKey(new Date(t.remindAt)), due)
       t.reminded = false
     }
     t.due = due
