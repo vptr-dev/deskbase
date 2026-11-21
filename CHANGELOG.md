@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.1 — 2026-11-21
+
 - Fixed: with notifications on, a page with a reminder date could make the app stop responding.
 
 ## 0.17.0 — 2026-11-20
