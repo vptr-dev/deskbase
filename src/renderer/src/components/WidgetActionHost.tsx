@@ -127,12 +127,16 @@ export function WidgetActionHost({ widget: w, source, name, globalActions = [], 
   useEffect(() => {
     if (!menu) return
     let live = true
+    let ready = false
+    const win = doc.defaultView
+    const blur = (): void => { if (ready && !doc.hasFocus()) close() }
     void focus().then(() => {
-      if (live) body.current?.querySelector<HTMLElement>(task ? '.quickadd-input' : insert ? 'input' : '[role=menuitem]:not(:disabled)')?.focus({preventScroll:true})
+      if (!live) return
+      body.current?.querySelector<HTMLElement>(task ? '.quickadd-input' : insert ? 'input' : '[role=menuitem]:not(:disabled)')?.focus({preventScroll:true})
+      ready = true
     })
-    const blur = (): void => close()
-    doc.defaultView?.addEventListener('blur', blur)
-    return () => { live = false; doc.defaultView?.removeEventListener('blur', blur) }
+    win?.addEventListener('blur', blur)
+    return () => { live = false; win?.removeEventListener('blur', blur) }
   }, [menu, task, insert, desktopId, doc])
   const planners = Object.values(pages).filter(p => !p.deletedAt && ['tasks','board','project'].includes(p.type))
   return <div {...host} ref={root} data-widget-host="" onContextMenu={e => show(e)}>

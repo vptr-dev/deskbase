@@ -475,6 +475,7 @@ export function deskBounds(id: string): Electron.Rectangle | null {
 export function deskFocus(id: string): void {
   const e = wins.get(id)
   if (!e || e.win.isDestroyed()) return
+  if (e.interacting && e.win.isFocused()) return
   e.interacting = true
   setFocus(e.win, true)
   e.win.focus()

@@ -40,7 +40,10 @@ if (!process.versions.electron) {
     }
     throw new Error('Timed out waiting for ' + label)
   }
-  const evaluate = (win, code) => win.webContents.executeJavaScript(code)
+  const evaluate = async (win, code) => {
+    try { return await win.webContents.executeJavaScript(code) }
+    catch (cause) { throw new Error('Renderer command failed in ' + win.getTitle() + ': ' + code, { cause }) }
+  }
   async function rightClick(win, selector) {
     const code = 'document.querySelector(' + JSON.stringify(selector) + ').dispatchEvent(new MouseEvent("contextmenu", {bubbles:true,cancelable:true,clientX:24,clientY:22}))'
     await evaluate(win, code)
@@ -56,6 +59,7 @@ if (!process.versions.electron) {
       config, x: 32, y: 32, w: 300, h: 220
     }) + ')')
     const win = await waitFor(type + ' window', () => BrowserWindow.getAllWindows().find(w => !before.has(w.id)))
+    await waitFor(type + ' window to be visible', () => win.isVisible())
     await waitFor(type + ' content', () => evaluate(win, '!!document.querySelector(".dw")'))
     return { id, win }
   }
