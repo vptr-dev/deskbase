@@ -6,7 +6,7 @@ import { normalizeRepeat } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 20
+export const SCHEMA = 21
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -19,6 +19,7 @@ export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: str
   { type: 'habits', name: 'Habits', icon: 'repeat', desc: 'Daily habits and streaks' },
   { type: 'journal', name: 'Journal', icon: 'notebook-pen', desc: 'Daily entries and mood' },
   { type: 'goals', name: 'Goals', icon: 'target', desc: 'Goals and milestones' },
+  { type: 'wishlist', name: 'Wishlist', icon: 'shopping-bag', desc: 'Plan purchases and track your budget' },
   { type: 'tracker', name: 'Tracker', icon: 'chart-line', desc: 'Weight, sleep, water, anything' },
   { type: 'focus', name: 'Focus', icon: 'timer', desc: 'Pomodoro timer' },
   { type: 'today', name: 'Today', icon: 'sun', desc: 'Your day at a glance' },
@@ -90,7 +91,6 @@ export const DEFAULT_LOOK: Look = {
   letterSpacing: 0,
   motion: 'normal',
   pageTransition: 'rise',
-  sidebar: 'floating',
   iconStroke: 1.75,
   backdropImage: null,
   backdropBlur: 0,
@@ -238,9 +238,12 @@ const obj = (x: any): Record<string, any> => (x && typeof x === 'object' && !Arr
 
 /** Fill in anything missing so older or hand-edited files always load. */
 /** Keeps blocks well formed: an id and a text string each; columns hold lists of blocks. */
+const optionalColor = (v: unknown): string | undefined => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : undefined
+
 function normBlocks(list: any[]): Block[] {
   return list.filter((b) => b && typeof b === 'object').map((b) => {
     const out: Block = { ...b, id: typeof b.id === 'string' && b.id ? b.id : uid(), type: typeof b.type === 'string' ? b.type : 'p', text: typeof b.text === 'string' ? b.text : '' }
+    if (out.iconColor !== undefined && !optionalColor(out.iconColor)) delete out.iconColor
     if (out.type === 'tool' && typeof out.ref !== 'string') delete out.ref
     if (out.type === 'columns' || out.type === 'tabs') {
       const min = out.type === 'columns' ? 2 : 1
@@ -330,6 +333,17 @@ export function normalize(raw: any): AppData {
   for (const p of Object.values(d.pages)) {
     p.icon = p.icon ? emojiToIcon(p.icon, typeInfo(p.type).icon) : ''
     p.children = Array.isArray(p.children) ? [...new Set(p.children.filter((c: unknown) => typeof c === 'string'))] : []
+    if (p.type === 'wishlist') {
+      const list = p.wishlist
+      p.wishlist = {
+        items: Array.isArray(list?.items) ? list.items.filter(item => item && typeof item.name === 'string').map(item => ({
+          id: typeof item.id === 'string' && item.id ? item.id : uid(), name: item.name,
+          cost: typeof item.cost === 'number' && Number.isFinite(item.cost) && item.cost >= 0 ? item.cost : null, purchased: item.purchased === true, purchasedOn: typeof item.purchasedOn === 'string' ? item.purchasedOn : undefined
+        })) : [],
+        currency: ['GBP','USD','EUR','CAD','AUD','JPY','INR'].includes(list?.currency ?? '') ? list!.currency : 'GBP',
+        budget: typeof list?.budget === 'number' && Number.isFinite(list.budget) && list.budget >= 0 ? list.budget : null
+      }
+    }
     p.blocks = Array.isArray(p.blocks) ? normBlocks(p.blocks) : []
     if (!p.blocks.length) p.blocks = [{ id: uid(), type: 'p', text: '' }]
     p.view = p.view ?? {}
@@ -366,6 +380,8 @@ export function normalize(raw: any): AppData {
     if (!p.parentId && !d.rootOrder.includes(p.id)) d.rootOrder.push(p.id)
   }
   for (const t of Object.values(d.tasks)) {
+    if (t.textColor !== undefined && !optionalColor(t.textColor)) delete t.textColor
+    if (t.iconColor !== undefined && !optionalColor(t.iconColor)) delete t.iconColor
     t.tags = t.tags ?? []
     t.subtasks = t.subtasks ?? []
     t.repeat = normalizeRepeat(t.repeat)
@@ -462,7 +478,9 @@ export function normalizeLook(raw: any): Look {
     letterSpacing: num(l.letterSpacing, -4, 8, 0),
     motion: ['off', 'subtle', 'normal', 'lively'].includes(l.motion) ? l.motion : D.motion,
     pageTransition: ['fade', 'slide', 'rise', 'none'].includes(l.pageTransition) ? l.pageTransition : D.pageTransition,
-    sidebar: 'floating',
+    sidebarIconColor: optionalColor(l.sidebarIconColor),
+    sidebarSubtitleColor: optionalColor(l.sidebarSubtitleColor),
+    pagesSubtitle: typeof l.pagesSubtitle === 'string' ? l.pagesSubtitle.slice(0, 60) : undefined,
     iconStroke: num(l.iconStroke, 1, 2.75, D.iconStroke),
     backdropImage: typeof l.backdropImage === 'string' && l.backdropImage.startsWith('data:image/') ? l.backdropImage : null,
     backdropBlur: num(l.backdropBlur, 0, 60, 0),
@@ -528,6 +546,9 @@ function normalizeDesktop(raw: any): Desktop {
   const active = spaces.some((s: any) => s.id === r.active) ? r.active : spaces[0].id
   const known = new Set(spaces.map((s: any) => s.id))
   return {
+    templates: Array.isArray(r.templates) ? r.templates.filter((t: any) => t && typeof t.id === 'string' && typeof t.name === 'string' && Array.isArray(t.panels)).map((t: any) => ({
+      id: t.id, name: t.name, panels: t.panels.filter((w: any) => w && typeof w.type === 'string' && w.config && typeof w.config === 'object')
+    })) : [],
     enabled: r.enabled !== false,
     spaces,
     active,

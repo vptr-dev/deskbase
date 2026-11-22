@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { act, getData, moveOverdueToToday, setTaskDone, toast, updatePage, useData } from '../store'
+import { act, createPage, openPage, getData, moveOverdueToToday, setTaskDone, toast, updatePage, useData } from '../store'
 import type { Task, TaskStatus } from '../types'
-import { addDays, friendlyDay, today } from '../lib/util'
+import { addDays, friendlyDay, today, uid } from '../lib/util'
 import { QuickAdd, TaskRow, PRIORITY, useTaskDrawer } from '../components/TaskItems'
-import { Button, MenuButton, Progress, Segmented } from '../components/ui'
+import { Button, Modal, MenuButton, Progress, Segmented } from '../components/ui'
 import { Icon } from '../components/Icon'
 
 type Filter = 'all' | 'today' | 'upcoming' | 'overdue' | 'nodate' | 'done'
@@ -44,7 +44,7 @@ export function sortTasks(tasks: Task[], sort: Sort): Task[] {
   return arr
 }
 
-function groupTasks(tasks: Task[], group: Group): { key: string; label: string; items: Task[] }[] {
+export function groupTasks(tasks: Task[], group: Group): { key: string; label: string; items: Task[] }[] {
   if (group === 'none') return [{ key: 'all', label: '', items: tasks }]
   const map = new Map<string, { label: string; items: Task[]; rank: string }>()
   const t = today()
@@ -73,10 +73,36 @@ function groupTasks(tasks: Task[], group: Group): { key: string; label: string; 
 
 export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
   const all = useData((d) => d.tasks)
-  const view = useData((d) => d.pages[pageId]?.view ?? {})
+  const pages = useData(d => d.pages)
+  const page = pages[pageId]
+  const settings = page?.view ?? {}
+  const tabs: { id: string; name: string; options: Record<string, any> }[] = settings.taskViews ?? []
+  const tab = tabs.find(v => v.id === settings.activeView) ?? tabs[0]
+  const view = tab?.options ?? settings
+  const [naming, setNaming] = useState<'planner' | 'view' | 'rename' | null>(null)
+  const [name, setName] = useState('')
+  const askName = (kind: typeof naming, value = ''): void => { setName(value); setNaming(kind) }
+  const saveName = (): void => {
+    if (!name.trim()) return
+    if (naming === 'planner') createPage('tasks', null, name.trim())
+    else updatePage(pageId, p => {
+      p.view ??= {}
+      if (naming === 'rename' && tab) {
+        const current = p.view.taskViews.find((v: {id: string}) => v.id === tab.id)
+        if (current) current.name = name.trim()
+        return
+      }
+      const { taskViews, activeView, ...legacy } = settings
+      const first = { id: uid(), name: 'Tasks', options: legacy }
+      const next = { id: uid(), name: name.trim(), options: { ...(tab?.options ?? legacy) } }
+      p.view.taskViews = [...(tabs.length ? tabs : [first]), next]
+      p.view.activeView = next.id
+    })
+    setNaming(null)
+  }
   const showCompleted = useData((d) => d.settings.showCompleted)
   const tagColors = useData((d) => d.tags)
-  const [q, setQ] = useState('')
+  const q: string = view.query ?? ''
   const [, openTask, drawer] = useTaskDrawer()
   const dragId = useRef<string | null>(null)
   const filter: Filter = view.filter ?? 'all'
@@ -84,7 +110,10 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
   const group: Group = view.group ?? 'none'
   const tag: string | null = view.tag ?? null
   const hideDone = view.hideDone ?? !showCompleted
-  const setView = (k: string, v: unknown): void => updatePage(pageId, (p) => { p.view = { ...(p.view ?? {}), [k]: v } })
+  const setView = (k: string, v: unknown): void => updatePage(pageId, (p) => { p.view ??= {}
+    const current = p.view.taskViews?.find((x: {id: string}) => x.id === tab?.id)
+    if (current) current.options[k] = v
+    else p.view[k] = v })
 
   const mine = useMemo(() => Object.values(all).filter((t) => t.pageId === pageId), [all, pageId])
   const visible = useMemo(() => {
@@ -135,7 +164,25 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
   }
 
   return (
-    <div className="tasks-page">
+    <div className="tasks-page" data-hide-fields={(view.hiddenFields ?? []).join(' ')}>
+      <div className="planner-nav">
+        {page?.type === 'tasks' && <><select aria-label="Task planner" className="input input-sm planner-select" value={pageId} onChange={e => openPage(e.target.value)}>
+          {Object.values(pages).filter(p => p.type === 'tasks' && !p.deletedAt).map(p => <option key={p.id} value={p.id}>{p.title || 'Untitled planner'}</option>)}
+        </select><Button small kind="ghost" icon="plus" onClick={() => askName('planner')}>New planner</Button></>}
+        <div className="spacer" /><Button small kind="ghost" icon="plus" onClick={() => askName('view')}>Add view</Button>
+      </div>
+      {tab && <div className="planner-tabs" role="tablist" aria-label="Saved task views">{tabs.map(v =>
+        <button role="tab" aria-selected={v.id === tab.id} key={v.id} className="chip-btn" onClick={() => updatePage(pageId, p => { p.view!.activeView = v.id })}>{v.name}</button>)}
+        <MenuButton title="View options" items={[
+          { label: 'Rename view', onClick: () => askName('rename', tab.name) },
+          { label: 'Remove view', disabled: tabs.length < 2, onClick: () => updatePage(pageId, p => {
+            p.view!.taskViews = tabs.filter(v => v.id !== tab.id); p.view!.activeView = p.view!.taskViews[0].id
+          }) }
+        ]} /></div>}
+      {naming && <Modal width={360} onClose={() => setNaming(null)}><form onSubmit={e => { e.preventDefault(); saveName() }}>
+        <div className="modal-head"><h3>{naming === 'planner' ? 'New task planner' : naming === 'rename' ? 'Rename view' : 'New saved view'}</h3></div>
+        <div className="modal-body"><label>Name<input className="input" autoFocus value={name} placeholder={naming === 'planner' ? 'Work or Home' : 'Upcoming'} onChange={e => setName(e.target.value)} /></label></div>
+        <div className="modal-foot"><button type="submit" className="btn btn-primary" disabled={!name.trim()}>Save</button></div></form></Modal>}
       <div className="toolbar">
         <Segmented small value={filter} onChange={(v) => setView('filter', v)} options={[
           { value: 'all', label: 'All' }, { value: 'today', label: 'Today' }, { value: 'upcoming', label: 'Upcoming' },
@@ -144,10 +191,14 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
         <div className="spacer" />
         <div className="search-mini">
           <Icon name="search" size={14} />
-          <input id={`task-search-${pageId}`} placeholder="Filter" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input id={`task-search-${pageId}`} placeholder="Filter" value={q} onChange={(e) => setView('query', e.target.value)} />
         </div>
         <MenuButton icon="sort" title="Sort" items={(['manual', 'due', 'priority', 'created', 'title'] as Sort[]).map((s) => ({ label: 'Sort: ' + s, checked: sort === s, onClick: () => setView('sort', s) }))} />
         <MenuButton icon="list" title="Group" items={(['none', 'due', 'priority', 'tag'] as Group[]).map((g) => ({ label: 'Group: ' + g, checked: group === g, onClick: () => setView('group', g) }))} />
+        <MenuButton title="Visible fields" icon="columns-3" items={['date','repeat','tags','priority','details'].map(field => ({
+          label: field[0].toUpperCase() + field.slice(1), checked: !(view.hiddenFields ?? []).includes(field),
+          onClick: () => { const hidden: string[] = view.hiddenFields ?? []; setView('hiddenFields', hidden.includes(field) ? hidden.filter(v => v !== field) : [...hidden, field]) }
+        }))} />
         <MenuButton title="More" items={[
           { label: hideDone ? 'Show completed' : 'Hide completed', icon: hideDone ? 'eye' : 'eyeOff', onClick: () => setView('hideDone', !hideDone) },
           { label: 'Clear completed', icon: 'trash', onClick: () => {
@@ -224,8 +275,8 @@ export function BoardPage({ pageId }: { pageId: string }): JSX.Element {
             <div className="board-items">
               {items.map((t) => (
                 <div key={t.id} className={`card ${t.done ? 'done' : ''}`} draggable onDragStart={(e) => e.dataTransfer.setData('text/task', t.id)} onClick={() => openTask(t.id)}>
-                  <div className="card-title">{t.title || 'Untitled'}</div>
-                  <div className="task-meta">
+                  <div className="card-title" style={{ color: t.textColor }}>{t.title || 'Untitled'}</div>
+                  <div className="task-meta" style={{ ['--task-icon' as string]: t.iconColor }}>
                     {t.due && <span className={`meta ${!t.done && t.due < today() ? 'danger' : ''}`}><Icon name="calendar" size={12} />{friendlyDay(t.due)}</span>}
                     {t.priority > 0 && <span className="meta" style={{ color: PRIORITY[t.priority].color }}><Icon name="flag" size={12} />{PRIORITY[t.priority].label}</span>}
                     {t.subtasks.length > 0 && <span className="meta"><Icon name="check" size={12} />{t.subtasks.filter((s) => s.done).length}/{t.subtasks.length}</span>}

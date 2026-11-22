@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Glyph, Icon } from './Icon'
+import { readableOn } from '../lib/look'
 import { ICON_GROUPS } from '../lib/icon-data'
 
 /** The document UI renders into. Desktop widget windows provide their own. */
@@ -28,15 +29,24 @@ export function Popover({ anchor, onClose, children, align = 'start', width }: {
   const [pos, setPos] = useState<{ left: number; top: number; origin: string }>({ left: -9999, top: -9999, origin: 'top left' })
   useLayoutEffect(() => {
     if (!anchor || !ref.current) return
-    const r = 'getBoundingClientRect' in anchor ? anchor.getBoundingClientRect() : { left: anchor.x, right: anchor.x, top: anchor.y, bottom: anchor.y }
-    const el = ref.current.getBoundingClientRect()
-    let left = align === 'end' ? r.right - el.width : r.left
-    let top = r.bottom + 6
-    let below = true
-    if (top + el.height > view.innerHeight - 8) { top = Math.max(8, r.top - el.height - 6); below = false }
-    left = Math.max(8, Math.min(left, view.innerWidth - el.width - 8))
-    setPos({ left, top, origin: `${below ? 'top' : 'bottom'} ${align === 'end' ? 'right' : 'left'}` })
-  }, [anchor, align])
+    const element = ref.current
+    const place = (): void => {
+      const r = 'getBoundingClientRect' in anchor ? anchor.getBoundingClientRect() : { left: anchor.x, right: anchor.x, top: anchor.y, bottom: anchor.y }
+      const el = element.getBoundingClientRect()
+      let left = align === 'end' ? r.right - el.width : r.left
+      let top = r.bottom + 6
+      let below = true
+      if (top + el.height > view.innerHeight - 8) { top = Math.max(8, r.top - el.height - 6); below = false }
+      left = Math.max(8, Math.min(left, view.innerWidth - el.width - 8))
+      top = Math.max(8, Math.min(top, view.innerHeight - el.height - 8))
+      setPos({ left, top, origin: `${below ? 'top' : 'bottom'} ${align === 'end' ? 'right' : 'left'}` })
+    }
+    place()
+    const resize = new ResizeObserver(place)
+    resize.observe(element)
+    view.addEventListener('resize', place)
+    return () => { resize.disconnect(); view.removeEventListener('resize', place) }
+  }, [anchor, align, view])
   useEffect(() => {
     const down = (e: MouseEvent): void => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
     const key = (e: KeyboardEvent): void => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
@@ -172,7 +182,7 @@ export function Toggle({ checked, onChange, id }: { checked: boolean; onChange: 
 
 export function Checkbox({ checked, onChange, color, size = 18, round }: { checked: boolean; onChange: (v: boolean) => void; color?: string; size?: number; round?: boolean }): JSX.Element {
   return (
-    <button role="checkbox" aria-checked={checked} className={`check ${checked ? 'on' : ''} ${round ? 'round' : ''}`} style={{ width: size, height: size, ['--c' as any]: color }} onClick={(e) => { e.stopPropagation(); onChange(!checked) }}>
+    <button role="checkbox" aria-checked={checked} className={`check ${color ? 'tinted' : ''} ${checked ? 'on' : ''} ${round ? 'round' : ''}`} style={{ width: size, height: size, ['--c' as string]: color, ['--check-ink' as string]: color?.startsWith('#') ? readableOn(color) : undefined }} onClick={(e) => { e.stopPropagation(); onChange(!checked) }}>
       {checked && <Icon name="check" size={size - 6} stroke={3} />}
     </button>
   )
@@ -228,6 +238,16 @@ export function IconPickerButton({ value, onChange, size = 'md', placeholder = '
       )}
     </>
   )
+}
+
+export function OptionalColor({ label, value, onChange }: { label: string; value?: string; onChange: (color?: string) => void }): JSX.Element {
+  return <div className="optional-color">
+    <label className="color-choice">
+      <input type="color" aria-label={label} value={value || '#808080'} onChange={e => onChange(e.target.value)} />
+      <span>{value ? value.toUpperCase() : 'Choose color'}</span>
+    </label>
+    {value && <button className="link small" aria-label={'Reset ' + label.toLowerCase()} onClick={() => onChange(undefined)}>Reset</button>}
+  </div>
 }
 
 export function ColorDots({ value, colors, onChange }: { value: string; colors: string[]; onChange: (c: string) => void }): JSX.Element {

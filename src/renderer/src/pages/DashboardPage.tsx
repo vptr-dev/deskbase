@@ -1,3 +1,4 @@
+import { PanelBody } from '../components/PanelBody'
 import { useEffect, useRef, useState } from 'react'
 import { act, toast, updatePage, useData } from '../store'
 import type { Widget, WidgetStyle, WidgetType } from '../types'
@@ -67,6 +68,8 @@ export function initialConfig(type: WidgetType, d: import('../types').AppData, e
   const def = widgetDef(type)
   const config: Record<string, any> = { ...(def.config ?? {}) }
   const live = Object.values(d.pages).filter((x) => !x.deletedAt && !x.rowOf && x.id !== exclude)
+  if (type === 'wishlist') config.pageId = live.find(p => p.type === 'wishlist')?.id
+  if (type === 'tracker') config.metricId = Object.values(d.metrics).find(m => live.some(p => p.id === m.pageId))?.id
   if (type === 'value' || type === 'progress') config.valueId = Object.values(d.values).sort((a, b) => a.order - b.order)[0]?.id ?? null
   if (type === 'database') config.dbId = live.find((x) => x.type === 'database')?.id ?? null
   if (type === 'dbchart') { const db = live.find((x) => x.type === 'database'); config.dbId = db?.id ?? null; config.by = (db?.db?.props.find((p) => p.type === 'status') ?? db?.db?.props.find((p) => p.type === 'select'))?.id ?? null }
@@ -78,7 +81,7 @@ export function initialConfig(type: WidgetType, d: import('../types').AppData, e
   return config
 }
 
-export const NEEDS_SETUP: WidgetType[] = ['value', 'progress', 'database', 'countdown', 'page', 'text', 'image']
+export const NEEDS_SETUP: WidgetType[] = ['tracker', 'wishlist', 'button', 'value', 'progress', 'database', 'countdown', 'page', 'text', 'image']
 
 function AddWidgetDialog({ pageId, onClose }: { pageId: string; onClose: () => void }): JSX.Element {
   const cols = useData((d) => d.pages[pageId]?.view?.cols ?? 12)
@@ -225,7 +228,7 @@ export function DashboardGrid({ pageId, bare }: { pageId: string; bare?: boolean
                     </>}
                   </div>
                 )}
-                <div className="widget-body"><WidgetBody w={w} setConfig={(k, v) => patchWidget(pageId, w.id, (x) => { x.config[k] = v }, 'wcfg:' + w.id + k)} /></div>
+                <PanelBody><WidgetBody w={w} setConfig={(k, v) => patchWidget(pageId, w.id, (x) => { x.config[k] = v }, 'wcfg:' + w.id + k)} /></PanelBody>
                 {editing && <span className="widget-resize" title="Resize" onPointerDown={(e) => startDrag(e, w, 'resize')}><Icon name="resize" size={12} /></span>}
               </div>
             )

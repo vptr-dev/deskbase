@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { PanelTemplates } from '../components/PanelTemplates'
 import { act, getData, useData } from '../store'
 import type { DeskWidget, WidgetStyle, WidgetType } from '../types'
 import { api, type DisplayInfo, isDesktop } from '../lib/api'
@@ -55,7 +56,7 @@ function ScreenMap({ widgets, displays, selected, onSelect }: { widgets: DeskWid
     e.preventDefault()
     e.stopPropagation()
     onSelect(w.id)
-    if (w.locked && mode === 'move') return
+    if (w.locked) return
     const start = rectOf(w, displays)
     const sx = e.clientX
     const sy = e.clientY
@@ -373,6 +374,10 @@ export function DesktopPage(): JSX.Element {
       </div>
       <div className="desk-toolbar">
         <Button kind="primary" small icon="plus" onClick={() => setAdding(true)}>Add panel</Button>
+        <PanelTemplates />
+        {panels.some(w => w.locked) && <Button small icon="unlock" onClick={() => act(d => {
+          for (const panel of d.desktop.widgets) if (panel.space === d.desktop.active) panel.locked = false
+        })}>Unlock panels</Button>}
         {isDesktop && <Button small kind={editing ? 'primary' : 'default'} icon={editing ? 'check' : 'move'} onClick={() => setDeskEditing(!editing)}>{editing ? 'Done arranging' : 'Arrange on desktop'}</Button>}
         <div className="spacer" />
         <span className="muted small">Show on desktop</span>

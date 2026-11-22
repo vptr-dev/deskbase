@@ -6,7 +6,7 @@ import { ACCENTS, BACKDROPS, DEFAULT_LOOK, DEFAULT_WIDGET_STYLE, normalizeLook }
 import { FONT_CHOICES, PRESETS, TEXT_TONES, exportTheme, parseTheme, type ThemePreset } from '../lib/look'
 import { api, isDesktop } from '../lib/api'
 import { pickImageData } from '../lib/image'
-import { Button, Checkbox, Segmented, SideIndex, Toggle, useSectionIndex } from '../components/ui'
+import { Button, Checkbox, OptionalColor, Segmented, SideIndex, Toggle, useSectionIndex } from '../components/ui'
 import { Icon } from '../components/Icon'
 import { DeskLookPicker, Field, StyleFields } from '../components/WidgetConfig'
 import { fullStyle, widgetClass, widgetVars } from '../lib/widgetStyle'
@@ -336,6 +336,10 @@ export function AppearancePage(): JSX.Element {
                 </div>
               </Row>
             )}
+            <Row label="Sidebar icons"><OptionalColor label="Sidebar icon color" value={l.sidebarIconColor} onChange={sidebarIconColor => setLook({ sidebarIconColor }, 'sidebar-icons')} /></Row>
+            <Row label="Pages subtitle"><input className="input input-sm" aria-label="Pages subtitle" maxLength={60}
+              value={l.pagesSubtitle ?? ''} placeholder="Pages" onChange={e => setLook({ pagesSubtitle: e.target.value || undefined }, 'pages-subtitle')} /></Row>
+            <Row label="Sidebar subtitles" sub="Pages and Favorites"><OptionalColor label="Sidebar subtitle color" value={l.sidebarSubtitleColor} onChange={sidebarSubtitleColor => setLook({ sidebarSubtitleColor }, 'sidebar-subtitles')} /></Row>
             <Row label="Soft edges" sub="Softens the edges of letters"><Slider value={l.textSoft} min={0} max={100} unit="%" onChange={(v) => setLook({ textSoft: v }, 'tsoft')} /></Row>
           </Section>
 

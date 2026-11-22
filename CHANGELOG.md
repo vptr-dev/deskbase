@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.20.0 - 2026-11-22
+
+- Added named task planners, saved views with panel support, linked or fresh layout templates, and multi-step buttons with grouped undo.
+- Unified the sidebar with the window and added sidebar icon, section label and to-do color controls.
+- Desktop and dashboard panels adapt to their available space. Locked desktop panels keep content controls and task menus available.
+- Blur panels retain a decoded wallpaper across capture failures and brief black frames.
+- Added a repeat schedule picker and row-level schedule editing to task panels.
+- Added tracker panels, a calories preset, and wishlist pages and widgets with shared budgets and purchase history.
+- Custom buttons on pages and panels can create tasks, show or hide sections, and change values.
+
 ## 0.19.0 - 2026-11-21
 
 - Added an erase confirmation dialog with cancel and backup checks. Restored the floating sidebar and added workspace icon colors and removal.

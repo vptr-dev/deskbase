@@ -5,6 +5,7 @@ import { JournalPage } from './JournalPage'
 import { GoalsPage } from './GoalsPage'
 import { CalendarPage } from './CalendarPage'
 import { FocusPage } from './FocusPage'
+import { WishlistPage } from './WishlistPage'
 import { TrackerPage } from './TrackerPage'
 import { TodayPage } from './TodayPage'
 import { ReviewPage } from './ReviewPage'
@@ -23,6 +24,7 @@ export function ToolBody({ page, embedded = false }: { page: Page; embedded?: bo
     case 'journal': return <JournalPage pageId={page.id} />
     case 'goals': return <GoalsPage pageId={page.id} />
     case 'focus': return <FocusPage />
+    case 'wishlist': return <WishlistPage key={page.id} page={page} />
     case 'tracker': return <TrackerPage pageId={page.id} />
     case 'review': return <ReviewPage pageId={page.id} />
     case 'database': return embedded ? <DatabaseView dbId={page.id} embedded /> : <DatabasePage pageId={page.id} />

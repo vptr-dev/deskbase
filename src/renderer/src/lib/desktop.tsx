@@ -1,3 +1,4 @@
+import { PanelBody } from '../components/PanelBody'
 import { createRoot, type Root } from 'react-dom/client'
 import { create } from 'zustand'
 import { act, getData, openView, toast, useApp, useData } from '../store'
@@ -23,13 +24,23 @@ interface WallState { wp: Backdrop | null; displays: DisplayInfo[] }
 export const useWall = create<WallState>(() => ({ wp: null, displays: [] }))
 const frosted = (m: string): boolean => m === 'blur' || m === 'acrylic'
 
+let loadingWall = false
 async function loadWall(): Promise<void> {
+  if (loadingWall) return
+  loadingWall = true
   try {
     const [r, displays] = await Promise.all([api.desk.backdrop(useWall.getState().wp?.stamp), api.displays()])
     const same = JSON.stringify(displays) === JSON.stringify(useWall.getState().displays)
     if (r && 'same' in r) { if (!same) useWall.setState({ displays }); return }
-    useWall.setState({ wp: r && r.displays.length ? r : null, displays })
-  } catch { /* keep what we have */ }
+    if (!r?.displays.length) return
+    await Promise.all(r.displays.map(async display => {
+      const image = new Image()
+      image.src = display.url
+      await image.decode()
+    }))
+    useWall.setState({ wp: r, displays })
+  } catch { /* Keep the last decoded wallpaper if capture or decoding failed. */ }
+  finally { loadingWall = false }
 }
 
 /** Where a panel's window is on screen, live while it is dragged. */
@@ -206,11 +217,10 @@ export async function addDesktopWidget(type: WidgetType, init: Partial<DeskWidge
 // ---------- context menu ----------
 async function showMenu(id: string, editable: boolean): Promise<void> {
   const w = findDesk(id)
-  if (!w) return
+  if (!w || w.locked) return
   const editing = useDesk.getState().editing
   const d = getData()
   const page = typeof w.config.pageId === 'string' ? d.pages[w.config.pageId] : undefined
-  const allLocked = activePanels(d.desktop).every((x) => x.locked)
   const st = fullStyle(d.desktop.style, w.style)
   const touching = touchingPanels(w).length > 1
   const items: DeskMenuItem[] = [
@@ -220,7 +230,7 @@ async function showMenu(id: string, editable: boolean): Promise<void> {
       { id: 'paste', label: 'Paste', role: 'paste' },
       { id: 'sep0', label: '', type: 'separator' }
     ] as DeskMenuItem[] : []),
-    { id: 'lock', label: w.locked ? 'Unlock movement' : 'Lock movement' },
+    { id: 'lock', label: 'Lock panel' },
     { id: 'edit', label: 'Edit panel…' },
     { id: 'look', label: 'Look', submenu: [
       { id: 'look:shared', label: 'Shared style', checked: Object.keys(w.style).length === 0 },
@@ -237,7 +247,7 @@ async function showMenu(id: string, editable: boolean): Promise<void> {
     { id: 'click', label: 'Click-through', checked: !!(w.config.clickThrough) },
     { id: 'sep2', label: '', type: 'separator' },
     { id: 'arrange', label: editing ? 'Done arranging' : 'Arrange panels' },
-    { id: 'lock-all', label: allLocked ? 'Unlock all panels' : 'Lock all panels' },
+    { id: 'lock-all', label: 'Lock all panels' },
     { id: 'sep3', label: '', type: 'separator' },
     { id: 'duplicate', label: 'Duplicate' },
     { id: 'hide', label: 'Hide' },
@@ -259,7 +269,7 @@ export function runCommand(id: string, cmd: string): void {
   if (cmd.startsWith('space:')) { switchSpace(cmd.slice(6)); return }
   if (cmd === 'next-space') { cycleSpace(1); return }
   if (cmd === 'lock-all') {
-    act((d) => { const list = activePanels(d.desktop); const lock = !list.every((x) => x.locked); for (const x of list) x.locked = lock })
+    act((d) => { for (const x of activePanels(d.desktop)) x.locked = true })
     return
   }
   if (!w) return
@@ -337,7 +347,7 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
   if (!w) return null
   const st = fullStyle(base, w.style, auto)
   const title = widgetTitle(w, data)
-  const movable = editing || !w.locked
+  const movable = !w.locked
 
   // Drag anywhere on a panel. On buttons and links it starts once the pointer has moved a little,
   // so a plain click still clicks; text fields never drag.
@@ -345,7 +355,7 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
     if (e.button !== 0 || !movable) return
     const t = e.target as HTMLElement
     if (mode === 'move' && !editing && t.closest('input, textarea, select, [contenteditable="true"]')) return
-    const soft = mode === 'move' && !editing && !!t.closest('button, a, label, .check, .mb-todo')
+    const soft = mode === 'move' && !editing && !!t.closest('button, a, label, .check, .mb-todo, .task-row, [role="button"]')
     e.stopPropagation()
     const sx = e.screenX
     const sy = e.screenY
@@ -394,10 +404,10 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
     <DocContext.Provider value={doc}>
       <Frost doc={doc} w={w} material={st.material} radius={st.radius} amount={st.blur} />
       <div
-        className={`dw wt-${w.type} ${widgetClass(st)} ${editing ? 'editing' : ''} ${selected && editing ? 'selected' : ''} ${w.locked ? 'locked' : ''}`}
+        className={`dw wt-${w.type} ${widgetClass(st)} ${editing && movable ? 'editing' : ''} ${selected && editing ? 'selected' : ''} ${w.locked ? 'locked' : ''}`}
         data-theme={st.theme === 'auto' ? undefined : st.theme}
         style={widgetVars(st)}
-        onContextMenu={(e) => { e.preventDefault(); showMenu(id, !!(e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) }}
+        onContextMenu={(e) => { if (w.locked || e.defaultPrevented) return; e.preventDefault(); void showMenu(id, !!(e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) }}
         onPointerDown={(e) => {
           if (editing) useDesk.setState({ selected: id })
           // Panels don't take focus on a click; a text field asks for it so you can type.
@@ -413,8 +423,8 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
             <span className="widget-title ellipsis">{title}</span>
           </div>
         )}
-        <div className="dw-body"><WidgetBody w={w} setConfig={(k, v) => patchDesk(id, (x) => { x.config[k] = v }, 'dcfg:' + id + k)} /></div>
-        {editing && (
+        <PanelBody desktop><WidgetBody w={w} setConfig={(k, v) => patchDesk(id, (x) => { x.config[k] = v }, 'dcfg:' + id + k)} /></PanelBody>
+        {editing && movable && (
           <div className="dw-edit">
             <span className="dw-edit-label">{widgetDef(w.type).name}{w.locked ? ' · locked' : ''}</span>
             <span className="dw-edit-size">{Math.round(w.w)} × {Math.round(w.h)}</span>

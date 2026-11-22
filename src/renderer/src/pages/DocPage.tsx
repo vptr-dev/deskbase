@@ -1,3 +1,4 @@
+import { blockTextColor } from '../lib/look'
 import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { act, getData, toast, updatePage, useApp, useData } from '../store'
@@ -7,7 +8,7 @@ import { uid } from '../lib/util'
 import { newPage, PAGE_TYPES, typeInfo } from '../lib/defaults'
 import { openFromClick } from '../lib/tabs'
 import { blockRefs as refs, focusBlock } from '../lib/links'
-import { AutoText, Button, Checkbox, IconPickerButton, Menu, Popover, type MenuItem } from '../components/ui'
+import { AutoText, Button, Checkbox, OptionalColor, IconPickerButton, Menu, Popover, type MenuItem } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
 import { ToolBody } from './ToolBody'
 import { DatabaseView } from './DatabasePage'
@@ -70,7 +71,6 @@ const DIVIDERS = [['line', 'Line'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], 
 
 /** Named colors for text and backgrounds; each theme has its own shade (--tc-* and --bc-* in styles.css). */
 const COLOR_NAMES = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'] as const
-const textColor = (c?: string): string | undefined => (!c ? undefined : c.startsWith('#') ? c : `var(--tc-${c})`)
 const bgColor = (c?: string): string | undefined => (!c ? undefined : c.startsWith('#') ? `color-mix(in srgb, ${c} 16%, transparent)` : `var(--bc-${c})`)
 const EMPTY: Block[] = []
 const NONE: string[] = []
@@ -529,7 +529,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
       {!col && !locked && <div className="insert-block-row">
         <button className="page-add" aria-haspopup="menu" onClick={e => setInsertMenu(e.currentTarget)}><Icon name="plus" size={14} />Insert block</button>
         {insertMenu && <Popover anchor={insertMenu} onClose={() => setInsertMenu(null)} width={242}>
-          <Menu onClose={() => setInsertMenu(null)} items={SLASH.filter(item => ['tool', 'tabs', 'columns', 'database'].includes(item.type)).map(item => ({
+          <Menu onClose={() => setInsertMenu(null)} items={SLASH.filter(item => ['tool', 'tabs', 'columns', 'database', 'button'].includes(item.type)).map(item => ({
             label: item.label, icon: item.icon, onClick: () => {
               const tail = current().at(-1)
               const id = tail?.type === 'p' && !tail.text ? tail.id : insertAfter(tail?.id ?? '')
@@ -583,7 +583,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           default:
             content = (
               <div className="block-body">
-                {b.type === 'todo' && <Checkbox checked={!!b.checked} onChange={(v) => setBlock(b.id, (x) => { x.checked = v })} size={17} />}
+                {b.type === 'todo' && <Checkbox color={b.iconColor} checked={!!b.checked} onChange={(v) => setBlock(b.id, (x) => { x.checked = v })} size={17} />}
                 {b.type === 'bullet' && <span className="bullet">•</span>}
                 {b.type === 'number' && <span className="numlabel">{n}.</span>}
                 {isToggle && (
@@ -610,7 +610,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
             key={b.id}
             data-block={b.id}
             className={`block block-${b.type} ${headLevel ? 'block-' + headLevel : ''} ${dragOver?.slice(1) === b.id ? (dragOver[0] === '<' ? 'drop-above' : 'drop-below') : ''} ${selIds.includes(b.id) ? 'selected' : ''} ${b.bg ? 'has-bg' : ''}`}
-            style={{ paddingLeft: 28 + (b.indent ?? 0) * 24, color: textColor(b.color), ['--ind' as string]: (b.indent ?? 0) * 24 + 'px', ['--bgc' as string]: bgColor(b.bg) }}
+            style={{ paddingLeft: 28 + (b.indent ?? 0) * 24, color: blockTextColor(b.color), ['--ind' as string]: (b.indent ?? 0) * 24 + 'px', ['--bgc' as string]: bgColor(b.bg) }}
             onDragOver={e => {
               if (locked || movingBlocks?.pageId !== pageId) return
               e.preventDefault(); e.stopPropagation()
@@ -711,6 +711,10 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
                   </div>
                 </div>
               )}
+              {b.type === 'todo' && <div className="color-rows">
+                <div className="color-label">Checkbox icon</div>
+                <OptionalColor label="To-do icon color" value={b.iconColor} onChange={color => paint(x => { if (x.type === 'todo') x.iconColor = color })} />
+              </div>}
               <ColorRows text={b.color} bg={b.bg} onText={(c) => paint((x) => { x.color = c || undefined })} onBg={(c) => paint((x) => { x.bg = c || undefined })} />
             </>
           })()}

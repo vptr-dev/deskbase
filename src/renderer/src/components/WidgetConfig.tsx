@@ -1,3 +1,5 @@
+import { ButtonActionFields, defaultAction } from './ButtonActions'
+import type { PanelButton } from './PersonalWidgets'
 import { isService, type ServiceId } from '../../../shared/services'
 import type { ReactNode } from 'react'
 import { openView, setSettings, useData } from '../store'
@@ -111,8 +113,19 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
     </Field>
   )
 
+  const editButton = (config: PanelButton, save: (patch: PanelButton) => void): JSX.Element => <>
+    <Field label="Button label"><input className="input input-sm" value={config.label ?? ''} placeholder="Button" onChange={e => save({ label: e.target.value })} /></Field>
+    <ButtonActionFields action={config.action ?? defaultAction} onChange={action => save({ action })} />
+  </>
   return (
     <div className="form-grid">
+      {w.type === 'button' && editButton(c, changes => patch(widget => { Object.assign(widget.config, changes) }))}
+      {w.type === 'wishlist' && <Field label="Wishlist"><PagePicker value={c.pageId ?? ''} pages={live.filter(p => p.type === 'wishlist')} empty="First wishlist" onChange={v => set('pageId', v)} /></Field>}
+      {w.type === 'tracker' && <>
+        <Field label="Tracker"><select className="input input-sm" value={c.metricId ?? ''} onChange={e => set('metricId', e.target.value)}>
+          <option value="">First tracker</option>{Object.values(d.metrics).filter(m => live.some(p => p.id === m.pageId)).map(m => <option value={m.id} key={m.id}>{m.name} ({d.pages[m.pageId].title})</option>)}</select></Field>
+        <Field label="Quick log amount"><input className="input input-sm" type="number" step="any" min="0.01" value={c.step ?? 1} onChange={e => { if (e.target.valueAsNumber > 0) set('step', e.target.valueAsNumber) }} /></Field>
+      </>}
       {w.type === 'value' && <>{valuePicker}
         <Field label="Step"><input className="input input-sm w-80" type="number" step="any" value={c.step ?? 1} onChange={(e) => set('step', Number(e.target.value) || 1)} /></Field>
         <Field label="Small chart"><Toggle checked={c.showChart !== false} onChange={(v) => set('showChart', v)} /></Field>
@@ -155,6 +168,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
       {w.type === 'tasks' && <>
         <Field label="Show"><Segmented small value={c.filter ?? 'today'} onChange={(v) => set('filter', v)} options={[{ value: 'today', label: 'Today' }, { value: 'overdue', label: 'Overdue' }, { value: 'upcoming', label: 'Next 7 days' }, { value: 'all', label: 'All open' }]} /></Field>
         <Field label="From"><PagePicker value={c.pageId ?? ''} pages={lists} empty="All lists" onChange={(v) => set('pageId', v)} /></Field>
+        {page?.view?.taskViews?.length > 0 && <Field label="Saved view"><select aria-label="Saved task view" className="input input-sm" value={c.taskViewId ?? ''} onChange={e => set('taskViewId', e.target.value)}><option value="">Use panel filter</option>{page?.view?.taskViews.map((v: {id: string; name: string}) => <option value={v.id} key={v.id}>{v.name}</option>)}</select></Field>}
         <Field label="Quick add"><Toggle checked={c.quickAdd !== false} onChange={(v) => set('quickAdd', v)} /></Field>
       </>}
       {w.type === 'agenda' && <><Field label="Days"><Segmented small value={c.days ?? 5} onChange={(v) => set('days', v)} options={[3, 5, 7, 14].map((n) => ({ value: n, label: String(n) }))} /></Field>
@@ -392,6 +406,8 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         {c.look === 'clock' && <Field label="Time"><input className="input input-sm w-80" type="time" value={c.time ?? ''} onChange={(e) => set('time', e.target.value)} /></Field>}
         {(c.look === 'ring' || c.look === 'bar') && <Field label="Counting from" sub="The ring or bar fills up from this day"><input className="input input-sm" type="date" value={c.from ?? ''} onChange={(e) => set('from', e.target.value)} /></Field>}
       </>}
+      {w.type !== 'button' && <><Field label="Custom button"><Toggle checked={!!c.footerButton} onChange={on => set('footerButton', on ? { label: 'Button' } : null)} /></Field>
+        {c.footerButton && editButton(c.footerButton, changes => set('footerButton', { ...c.footerButton, ...changes }))}</>}
       {w.type === 'quickadd' && <Field label="Add to"><PagePicker value={c.pageId ?? ''} pages={lists} empty="First to-do list" onChange={(v) => set('pageId', v)} /></Field>}
       {w.type === 'page' && <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs} onChange={(v) => set('pageId', v)} /></Field>}
       {w.type === 'text' && <>

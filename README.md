@@ -6,11 +6,19 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.19.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.20.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
 
 ## What's inside
 
 - **Desktop panels** that live on the desktop like Rainmeter skins (no taskbar buttons, not in Alt+Tab): tasks, pages (or just today's part), clocks in many styles, world clock, timers, stopwatch, sunrise and sunset, weather, moon, system use, network speed, battery, calculator, recent pages, database charts, activity heatmap, deadlines, launcher, web search, study progress, table totals, month and more. Each has its own styles and parts to show or hide; set one up with a live preview before adding it. Move, resize, lock and group them.
+- **Named planners and saved views**. Open To-do and choose **New planner** for a separate Work or Home list. Choose **Add view** to keep filters, sorting, grouping and visible fields in a named tab. Task panels can follow a saved view.
+- **Reusable layouts**. Mark a page with **Use as a template**, then pick it in **New page**. For desktop panels, use **Desktop > Layout templates**. Choose linked lists to share updates or fresh lists to start independently.
+- **Multi-step buttons**. Choose **Add step** in a button's settings. A purchase button can mark an item bought, deduct its price from a value and write a dated expense to a page. Undo reverses the data changes together.
+- **Recurring tasks on panels**. Use the repeat icon next to **Add a task** to choose an interval, weekdays and an optional end date. Right-click a task to edit its schedule.
+- **Wishlist and purchases**. Add a Wishlist page, insert one into a document or select it in a desktop or dashboard widget. Enter prices, track a budget and move items between Wishlist and Purchased.
+- **Tracker panels**. Pick a tracker such as water or calories and log directly to the same history as the tracker page.
+- **Custom buttons**. Insert a button on a page, add a button panel or enable **Custom button** in another widget. Buttons can reveal a toggle, change or set a value, add to-dos, create a task, or open a page or link.
+- **Panel locking**. Lock a panel from its right-click menu. Its content stays interactive. Open **Desktop** to unlock panels.
 - **Workspaces**, each with its own panel layout.
 - **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts, text tone and colors, with its own section for the desktop panels.
 - **Application menu** in the upper-left corner for files, editing, views, history, windows and keyboard shortcuts.

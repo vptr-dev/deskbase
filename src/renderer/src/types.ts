@@ -10,6 +10,7 @@ export type PageType =
   | 'goals'
   | 'focus'
   | 'tracker'
+  | 'wishlist'
   | 'review'
   | 'database'
   | 'dashboard'
@@ -64,6 +65,8 @@ export interface Block {
   labels?: string[]
   /** columns: each column's share of the width (equal when missing) */
   widths?: number[]
+  /** To-do checkbox color. */
+  iconColor?: string
   /** callout: its icon */
   icon?: string
   /** link, database and tool: the page id; synced: "pageId/blockId" of the original block */
@@ -73,12 +76,26 @@ export interface Block {
   /** divider look, image width, button look */
   style?: string
   /** what a button does */
-  action?: { kind: 'link' | 'page' | 'todos'; target: string }
+  action?: ButtonAction
   /** to-dos from the Notion API: the Notion block id, for sending checks back */
   nid?: string
 }
 
+export interface ButtonAction {
+  kind: 'link' | 'page' | 'todos' | 'toggle' | 'addValue' | 'setValue' | 'task' | 'purchase' | 'expense'
+  target: string
+  pageId?: string
+  amount?: number
+  usePurchasePrice?: boolean
+  then?: ButtonAction[]
+  title?: string
+}
+
+export interface WishItem { id: string; name: string; cost: number | null; purchased: boolean; purchasedOn?: string }
+export interface PurchaseList { items: WishItem[]; budget: number | null; currency: string }
+
 export interface Page {
+  wishlist?: PurchaseList
   id: string
   title: string
   icon: string
@@ -167,6 +184,7 @@ export type WidgetType =
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
   | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
   | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'launcher' | 'search' | 'quote' | 'battery'
+  | 'tracker' | 'wishlist' | 'button'
   | 'network' | 'calculator' | 'recent' | 'dbchart' | 'activity' | 'deadlines' | 'events' | 'feed' | 'github' | 'mail' | 'todoist' | 'media'
 export interface Widget {
   id: string
@@ -247,6 +265,7 @@ export interface DeskSpace {
   icon: string
 }
 export interface Desktop {
+  templates?: { id: string; name: string; panels: DeskWidget[] }[]
   enabled: boolean
   spaces: DeskSpace[]
   /** id of the workspace on screen */
@@ -290,7 +309,9 @@ export interface Look {
   letterSpacing: number
   motion: Motion
   pageTransition: 'fade' | 'slide' | 'rise' | 'none'
-  sidebar: 'floating'
+  sidebarIconColor?: string
+  sidebarSubtitleColor?: string
+  pagesSubtitle?: string
   iconStroke: number
   /** picture behind the glass (data URL) */
   backdropImage: string | null
@@ -362,6 +383,8 @@ export type StatKey = 'str' | 'int' | 'wis' | 'cha' | 'vit' | 'cre'
 export interface Subtask { id: string; title: string; done: boolean }
 
 export interface Task {
+  textColor?: string
+  iconColor?: string
   id: string
   pageId: string
   title: string

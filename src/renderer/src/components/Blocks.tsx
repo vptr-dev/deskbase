@@ -1,3 +1,4 @@
+import { ButtonActionFields, defaultAction, runButtonAction } from './ButtonActions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -299,18 +300,10 @@ export function EquationBlock({ block, locked, set }: { block: Block; locked?: b
 
 // ---------- button ----------
 
-const ACTIONS = [{ value: 'link', label: 'Open link' }, { value: 'page', label: 'Open page' }, { value: 'todos', label: 'Add to-dos' }] as const
-
 export function ButtonBlock({ block, locked, set, addTodos }: { block: Block; locked?: boolean; set: SetBlock; addTodos: (lines: string[]) => void }): JSX.Element {
   const [cfg, setCfg] = useState<HTMLElement | null>(null)
-  const pages = useData((d) => d.pages)
-  const a = block.action ?? { kind: 'todos' as const, target: '' }
-  const run = (e: React.MouseEvent): void => {
-    if (a.kind === 'link' && a.target) api.launch(a.target)
-    else if (a.kind === 'page' && a.target && pages[a.target] && !pages[a.target].deletedAt) openFromClick(a.target, e)
-    else if (a.kind === 'todos') addTodos((a.target || 'To-do').split('\n').map((s) => s.trim()).filter(Boolean))
-  }
-  const live = Object.values(pages).filter((p) => !p.deletedAt).sort((x, y) => (x.title || '').localeCompare(y.title || ''))
+  const a = block.action ?? defaultAction
+  const run = (e: React.MouseEvent): void => runButtonAction(a, e, addTodos)
   return (
     <div className="button-block">
       <button className={`btn ${block.style === 'plain' ? '' : 'btn-primary'}`} onClick={run} onAuxClick={(e) => { if (e.button === 1) run(e) }}>
@@ -321,17 +314,7 @@ export function ButtonBlock({ block, locked, set, addTodos }: { block: Block; lo
         <Popover anchor={cfg} onClose={() => setCfg(null)} width={300}>
           <div className="button-form">
             <label>Label<input className="input input-sm" autoFocus value={block.text} placeholder="Button" onChange={(e) => set((b) => { b.text = e.target.value }, 'btn:' + block.id)} /></label>
-            <Segmented small value={a.kind} options={ACTIONS.map((x) => ({ value: x.value, label: x.label }))} onChange={(k) => set((b) => { b.action = { kind: k, target: '' } })} />
-            {a.kind === 'link' && <label>Address<input className="input input-sm" value={a.target} placeholder="https://… or an app or folder" onChange={(e) => set((b) => { b.action = { kind: 'link', target: e.target.value } }, 'btn-t:' + block.id)} /></label>}
-            {a.kind === 'page' && (
-              <label>Page
-                <select className="input input-sm" value={a.target} onChange={(e) => set((b) => { b.action = { kind: 'page', target: e.target.value } })}>
-                  <option value="">Choose a page</option>
-                  {live.map((p) => <option key={p.id} value={p.id}>{p.title || 'Untitled'}</option>)}
-                </select>
-              </label>
-            )}
-            {a.kind === 'todos' && <label>To-dos, one per line<textarea className="input input-sm" rows={3} value={a.target} placeholder={'Stretch\nDrink water'} onChange={(e) => set((b) => { b.action = { kind: 'todos', target: e.target.value } }, 'btn-t:' + block.id)} /></label>}
+            <ButtonActionFields localTodos action={a} onChange={action => set(b => { b.action = action }, 'btn-action:' + block.id)} />
             <Segmented small value={block.style === 'plain' ? 'plain' : 'filled'} options={[{ value: 'filled', label: 'Filled' }, { value: 'plain', label: 'Plain' }]} onChange={(v) => set((b) => { b.style = v === 'plain' ? 'plain' : '' })} />
           </div>
         </Popover>

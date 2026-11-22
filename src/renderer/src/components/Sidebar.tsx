@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { act, duplicatePage, movePage, openPage, openView, openSettings, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
+import { act, createPage, duplicatePage, movePage, openPage, openView, openSettings, setOverlay, setSettings, trashPage, updatePage, useApp, useData } from '../store'
 import { newTab, openFromClick } from '../lib/tabs'
 import { typeInfo } from '../lib/defaults'
 import { addSpace, removeSpace, switchSpace } from '../lib/desktop'
@@ -188,6 +188,11 @@ export function Sidebar(): JSX.Element {
       <nav className="sidebar-nav">
         <button className="nav-item" onClick={() => setOverlay('search')}><Icon name="search" size={15} /> <span>Search</span><kbd>Ctrl K</kbd></button>
         <button className="nav-item" onClick={() => setOverlay('newPage', { parentId: null })}><Icon name="plus" size={15} /> <span>New page</span><kbd>Ctrl N</kbd></button>
+        <button className={`nav-item ${current && pages[current]?.type === 'tasks' ? 'active' : ''}`} onClick={e => {
+          const list = [...data.recent, ...data.rootOrder, ...Object.keys(pages)].map(id => pages[id]).find(p => p?.type === 'tasks' && !p.deletedAt && !p.template)
+          if (list) openFromClick(list.id, e)
+          else createPage('tasks')
+        }}><Icon name="square-check-big" size={15} /><span>To-do</span></button>
         <button className={`nav-item ${current === '@desktop' ? 'active' : ''}`} onClick={() => openView('@desktop')}><Icon name="monitor" size={15} /> <span>Desktop</span></button>
         <button className={`nav-item ${current === '@assistant' ? 'active' : ''}`} onClick={() => openView('@assistant')}><Icon name="sparkle" size={15} /> <span>Assistant</span></button>
         <button className={`nav-item ${current === '@connections' ? 'active' : ''}`} onClick={() => openView('@connections')}><Icon name="plug" size={15} /> <span>Connections</span></button>
@@ -208,7 +213,7 @@ export function Sidebar(): JSX.Element {
           </>
         )}
         <div className="sidebar-section row between drag">
-          <span>Pages</span>
+          <span className="ellipsis">{data.settings.look.pagesSubtitle?.trim() || 'Pages'}</span>
           <button className="section-btn" title="Filter pages" onClick={() => setFilter(filter === null ? '' : null)}><Icon name={filter === null ? 'filter' : 'x'} size={12} stroke={2} /></button>
         </div>
         {filter !== null && (
@@ -262,7 +267,7 @@ function SpaceSwitcher(): JSX.Element {
     <>
       <button className="space-chip no-drag" onClick={(e) => setEl(e.currentTarget)} title="Switch workspace">
         {active?.icon && <span className="space-icon"><Glyph value={active.icon} size={14} color={active.iconColor} /></span>}
-        <span className="space-name" style={{ color: active?.iconColor }}>{active?.name || 'Workspace'}</span>
+        <span className="space-name">{active?.name || 'Workspace'}</span>
         <Icon name="down" size={13} className="space-caret" />
       </button>
       {el && (

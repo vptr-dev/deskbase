@@ -2491,7 +2491,7 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 /* Workspace chrome shares one edge with the document canvas. */
 .app { padding: 0; gap: 0; }
 .app > .sidebar, .app > .main { border-radius: 0; box-shadow: none; }
-.app > .sidebar { border-width: 0 1px 0 0; }
+.app > .sidebar { border: 0; margin: 0; }
 .app > .main { border: 0; }
 .app .wc { top: 0; right: 0; }
 .sidebar-top { padding: 0 8px; gap: 4px; }
@@ -2525,8 +2525,6 @@ button.tl-name-col:hover { color: var(--accent-ink); }
   .inline-tool-body .cal-cell { min-height: 54px; }
 }
 
-.app > .sidebar { margin: 7px 3px 7px 7px; border: 0; border-radius: var(--radius-panel); }
-.app:has(.sidebar.collapsed) > .sidebar { margin: 0; }
 .page-cover { margin-bottom: 12px; }
 .page-cover:is(:hover, :focus-within, [data-picker-open="true"]) .page-cover-actions { opacity: 1; visibility: visible; }
 .page-cover-actions { visibility: visible; pointer-events: none; }
@@ -2551,3 +2549,51 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 .tabs-tab.active::after { display: none; }
 .tabs-bar { padding-bottom: 8px; }
 .tabs-body { padding: 8px 0 0 10px; }
+
+.sidebar .nav-item svg, .sidebar .tree-icon, .sidebar .tree-chevron, .sidebar .section-btn,
+.sidebar .sidebar-top .icon-btn, .sidebar .space-caret, .sidebar .space-icon, .sidebar .tree-actions { color: var(--sidebar-icon, var(--fg)); }
+.sidebar .sidebar-section { color: var(--sidebar-subtitle, var(--fg)); }
+.sidebar .space-name { color: var(--fg); }
+.app-menu-trigger { background: transparent; }
+.optional-color, .color-choice { display: inline-flex; align-items: center; gap: 8px; }
+.color-choice { color: var(--fg-2); font-size: .9em; cursor: pointer; }
+.color-choice input { width: 28px; height: 24px; padding: 2px; border: 1px solid var(--line); border-radius: 5px; background: var(--card); cursor: pointer; }
+.check.tinted { border-color: var(--c); }
+.check.on { color: var(--check-ink, var(--on-accent)); }
+.task-meta svg { color: var(--task-icon, currentColor); }
+.drawer-head .drawer-title { color: inherit; }
+
+.purchase-list { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.purchase-list:not(.compact) { padding: clamp(12px, 2vw, 24px); border: 1px solid var(--line); border-radius: 12px; }
+.purchase-budget, .purchase-add { display: flex; align-items: end; flex-wrap: wrap; gap: 6px; }
+.purchase-budget label { flex: 1 1 80px; min-width: 0; }
+.purchase-add input:first-child { flex: 2 1 100px; min-width: 0; }
+.purchase-add input[type=number] { flex: 1 1 54px; width: 72px; min-width: 0; }
+.purchase-item { display: flex; align-items: center; gap: 7px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.purchase-item .grow { min-width: 0; overflow-wrap: anywhere; }
+.purchase-list.compact { gap: 8px; }
+
+.fit-panel { min-width: 0; overflow: auto; zoom: calc(var(--w-zoom, 1) * var(--panel-fit, 1)); }
+.w-center .fit-panel { justify-content: safe center; }
+.fit-panel > :not(.w-scroll) { min-width: 0; }
+.dw-root .popover { max-height: calc(100dvh - 16px); max-width: calc(100vw - 16px); overflow: auto; }
+
+.action-fields, .action-fields label, .tracker-widget { display: grid; gap: 7px; min-width: 0; }
+.action-fields { gap: 12px; }
+.tracker-widget input { width: 5em; min-width: 3em; }
+.widget-action { flex-shrink: 0; margin-top: 6px; }
+.panel-button { white-space: normal; overflow-wrap: anywhere; align-self: start; }
+
+.panel-repeat { flex: 0 0 auto; display: grid; gap: 8px; padding: 10px 0; text-align: left; }
+.fit-panel:has(.panel-repeat) > .w-tasks { overflow-y: auto; }
+.fit-panel:has(.panel-repeat) .w-tasks > .w-scroll { flex: none; }
+
+.planner-nav, .planner-tabs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.planner-select { width: auto; max-width: 100%; }
+.planner-tabs [aria-selected=true] { color: var(--accent); background: var(--accent-soft); }
+[data-hide-fields~="date"] [data-field=date], [data-hide-fields~="repeat"] [data-field=repeat],
+[data-hide-fields~="tags"] [data-field=tags], [data-hide-fields~="details"] [data-field=details],
+[data-hide-fields~="priority"] .task-flag { display: none; }
+
+.purchase-date { display: block; font-size: .8em; }
+.action-step + .action-step { padding-top: 8px; border-top: 1px solid var(--line); }

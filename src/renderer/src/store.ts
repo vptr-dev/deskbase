@@ -42,7 +42,7 @@ export const useApp = create<Store>(() => ({
 }))
 
 export const useData = <T,>(sel: (d: AppData) => T): T => useApp((s) => sel(s.data))
-export const getData = (): AppData => useApp.getState().data
+export const getData = (): AppData => actionDraft ?? useApp.getState().data
 
 // ---------- toasts ----------
 export function toast(text: string, opts: Omit<Toast, 'id' | 'text'> = {}): void {
@@ -97,7 +97,18 @@ const undoStack: HistoryEntry[] = []
 const redoStack: HistoryEntry[] = []
 const effects: (() => void)[] = []
 
+let actionDraft: AppData | null = null
+
+/** Commit all synchronous data edits from one button click as one undoable operation. */
+export function batchButtonEdits(run: () => void): void {
+  act(d => {
+    actionDraft = d
+    try { run() } finally { actionDraft = null }
+  })
+}
+
 export function act(recipe: (d: AppData) => void, opts: { key?: string; history?: boolean } = {}): void {
+  if (actionDraft) { recipe(actionDraft); return }
   const prev = getData()
   const [next, patches, inverse] = produceWithPatches(prev, (d: AppData) => {
     recipe(d)

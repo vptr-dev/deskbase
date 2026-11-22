@@ -7,6 +7,7 @@ import { BarChart, Button, ColorDots, ConfirmButton, Empty, IconPickerButton, Mo
 import { Glyph, Icon } from '../components/Icon'
 
 const PRESETS: Partial<Metric>[] = [
+  { name: 'Calories', icon: 'utensils', unit: 'kcal', direction: 'none', goal: null, aggregate: 'sum' },
   { name: 'Water', icon: 'glass-water', unit: 'glasses', goal: 8, direction: 'up', aggregate: 'sum' },
   { name: 'Sleep', icon: 'bed-double', unit: 'hours', goal: 8, direction: 'up', aggregate: 'last' },
   { name: 'Weight', icon: 'scale', unit: 'kg', goal: null, direction: 'down', aggregate: 'last' },
@@ -92,6 +93,17 @@ function MetricEditor({ metric, onClose }: { metric: Metric; onClose: () => void
   )
 }
 
+export function logMetric(id: string, n: number): void {
+  const t = today()
+  if (!Number.isFinite(n)) return
+  act((d) => {
+    const x = d.metrics[id]
+    if (!x || !d.pages[x.pageId] || d.pages[x.pageId].deletedAt) return
+    x.entries.push({ date: t, value: n })
+    emit(d, { on: 'metric', src: `metric:${id}:${t}:${x.entries.length}`, label: `Logged ${x.name}`, scope: id })
+  })
+}
+
 function MetricCard({ m, onEdit }: { m: Metric; onEdit: () => void }): JSX.Element {
   const [val, setVal] = useState('')
   const [open, setOpen] = useState(false)
@@ -105,12 +117,7 @@ function MetricCard({ m, onEdit }: { m: Metric; onEdit: () => void }): JSX.Eleme
   const series = Array.from({ length: 30 }, (_, i) => metricValue(m, addDays(t, i - 29))).filter((x): x is number => x !== null)
   const goalPct = m.goal && v !== null ? (m.direction === 'down' ? (v <= m.goal ? 1 : m.goal / v) : v / m.goal) : 0
   const add = (n: number): void => {
-    if (Number.isNaN(n)) return
-    act((d) => {
-      const x = d.metrics[m.id]
-      x.entries.push({ date: t, value: n })
-      emit(d, { on: 'metric', src: `metric:${m.id}:${t}:${x.entries.length}`, label: `Logged ${x.name}`, scope: m.id })
-    })
+    logMetric(m.id, n)
     setVal('')
   }
   const days = [...new Set(m.entries.map((e) => e.date))].sort().reverse()

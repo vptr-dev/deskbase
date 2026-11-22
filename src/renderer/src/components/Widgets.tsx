@@ -1,3 +1,8 @@
+import { CustomButton, TrackerWidget, WishlistWidget } from './PersonalWidgets'
+import { filterTasks, groupTasks, sortTasks } from '../pages/TasksPage'
+import { defaultAction, runButtonAction } from './ButtonActions'
+import { uid } from '../lib/util'
+import { blockTextColor } from '../lib/look'
 import { SERVICES, isService, serviceIds } from '../../../shared/services'
 import { useEffect, useMemo, useState } from 'react'
 import { openPage, setOverlay, updatePage, useData } from '../store'
@@ -8,6 +13,7 @@ import { DAYS_SHORT, addDays, dayKey, diffDays, friendlyDay, longDate, parseDay,
 import { countRows, datedRows, rowsOf, setRowDone, type DatedRow } from '../lib/db'
 import { BarChart, Checkbox, Progress, Ring, Sparkline, useDoc } from './ui'
 import { Glyph, Icon } from './Icon'
+import { TaskRepeatEditor } from './TaskRepeatEditor'
 import { QuickAdd, TaskRow, useTaskDrawer } from './TaskItems'
 import { adjustValue } from './Values'
 import { logHabit } from '../pages/HabitsPage'
@@ -32,6 +38,9 @@ export type AnyWidget = Pick<Widget, 'id' | 'type' | 'config' | 'title'>
 export type SetConfig = (key: string, value: any) => void
 
 export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: string; w: number; h: number; config?: Record<string, any>; group: 'Work' | 'Plan' | 'Track' | 'More' | 'Connections' }[] = [
+  { type: 'tracker', name: 'Tracker', icon: 'activity', desc: 'Log water, calories or another daily measurement', w: 3, h: 3, group: 'Track' },
+  { type: 'wishlist', name: 'Wishlist', icon: 'shopping-bag', desc: 'Plan purchases and check off what you bought', w: 4, h: 4, group: 'Plan' },
+  { type: 'button', name: 'Custom button', icon: 'mouse-pointer-click', desc: 'Run an action on a page, task or value', w: 3, h: 1, group: 'Work' },
   { type: 'tasks', name: 'Tasks', icon: 'square-check-big', desc: 'What is due today, overdue or next, with quick add', w: 4, h: 4, group: 'Work', config: { filter: 'today', quickAdd: true } },
   { type: 'checklist', name: 'Checklist', icon: 'list-todo', desc: 'Check off the to-dos of any page or section, Notion included', w: 3, h: 4, group: 'Work', config: { hideChecked: true, subpages: false } },
   { type: 'pageview', name: 'Page', icon: 'file-text', desc: 'Keep a page open on screen and work in it', w: 4, h: 5, group: 'Work', config: { hideChecked: false } },
@@ -221,18 +230,25 @@ function TasksWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const pages = useData((d) => d.pages)
   const inDesk = useInDesk()
   const [, setOpen, drawerEl] = useTaskDrawer()
+  const showCompleted = useData(d => d.settings.showCompleted)
+  const saved = pages[cfg.pageId]?.view?.taskViews?.find((v: { id: string }) => v.id === cfg.taskViewId)?.options
   const openTask = (id: string): void => { if (inDesk) { const t = tasks[id]; if (t) openPage(t.pageId) } else setOpen(id) }
   const drawer = inDesk ? null : drawerEl
+  const [repeatId, setRepeatId] = useState<string | null>(null)
   const t = today()
   const list = useMemo(() => {
     const all = Object.values(tasks).filter((x) => !x.archived && pages[x.pageId] && !pages[x.pageId].deletedAt && (!cfg.pageId || x.pageId === cfg.pageId))
+    if (saved) {
+      const items = filterTasks(all, saved.filter ?? 'all', saved.query ?? '', saved.tag ?? null)
+      return sortTasks(items.filter(t => t.done ? saved.filter === 'done' || !(saved.hideDone ?? !showCompleted) : true), saved.sort ?? 'manual')
+    }
     const f = cfg.filter ?? 'today'
     const pick = f === 'overdue' ? all.filter((x) => !x.done && x.due && x.due < t)
       : f === 'upcoming' ? all.filter((x) => !x.done && x.due && x.due > t && x.due <= addDays(t, 7))
       : f === 'all' ? all.filter((x) => !x.done)
       : all.filter((x) => (!x.done && x.due && x.due <= t) || (x.done && x.doneAt && dayKey(new Date(x.doneAt)) === t))
     return pick.sort((a, b) => Number(a.done) - Number(b.done) || (a.due ?? '9').localeCompare(b.due ?? '9') || b.priority - a.priority)
-  }, [tasks, pages, cfg.filter, cfg.pageId, t])
+  }, [tasks, pages, cfg.filter, cfg.pageId, saved, showCompleted, t])
   // Rows of databases with a date and a checkbox or status count as tasks too.
   const rows = useMemo(() => {
     if (cfg.pageId) return []
@@ -244,10 +260,11 @@ function TasksWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   }, [pages, cfg.filter, cfg.pageId, t])
   const listPage = cfg.pageId && pages[cfg.pageId] ? cfg.pageId : Object.values(pages).find((p) => !p.deletedAt && p.type === 'tasks')?.id
   return (
-    <div className="w-tasks">
-      {cfg.quickAdd !== false && listPage && <QuickAdd pageId={listPage} defaults={cfg.filter === 'today' || !cfg.filter ? { due: t } : {}} placeholder="Add a task" />}
+    <div className="w-tasks" data-hide-fields={(saved?.hiddenFields ?? []).join(' ')}>
+      {cfg.quickAdd !== false && listPage && <QuickAdd schedulePicker pageId={listPage} defaults={cfg.filter === 'today' || !cfg.filter ? { due: t } : {}} placeholder="Add a task" />}
       <div className="w-scroll">
-        {list.map((x) => <TaskRow key={x.id} task={x} onOpen={openTask} />)}
+         {groupTasks(list, saved?.group ?? 'none').map(group => <div key={group.key}>{group.label && <div className="section-label">{group.label}</div>}{group.items.map((x) => <div key={x.id}><TaskRow task={x} onOpen={openTask} onRepeat={setRepeatId} />
+          {repeatId === x.id && <div className="panel-repeat"><TaskRepeatEditor task={x} /><button className="btn btn-sm" onClick={() => setRepeatId(null)}>Done</button></div>}</div>)}</div>)}
         {rows.map((r) => <RowTask key={r.id} r={r} />)}
       </div>
       {drawer}
@@ -393,7 +410,7 @@ function QuickAddWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const pages = useData((d) => d.pages)
   const id = cfg.pageId && pages[cfg.pageId] && !pages[cfg.pageId].deletedAt ? cfg.pageId : Object.values(pages).find((p) => !p.deletedAt && p.type === 'tasks')?.id
   if (!id) return <Missing text="Add a To-do list page first." />
-  return <QuickAdd pageId={id} placeholder={`Add to ${pages[id].title || 'list'}`} />
+  return <QuickAdd schedulePicker pageId={id} placeholder={`Add to ${pages[id].title || 'list'}`} />
 }
 
 function GoalsWidget(): JSX.Element {
@@ -430,10 +447,20 @@ function Missing({ text, action, actionLabel }: { text: string; action?: () => v
   return <div className="w-missing"><span>{text}</span>{action && <button className="link small" onClick={action}>{actionLabel}</button>}</div>
 }
 
-export function WidgetBody({ w, setConfig }: { w: AnyWidget; setConfig: SetConfig }): JSX.Element {
+type WidgetBodyProps = { w: AnyWidget; setConfig: SetConfig }
+
+export function WidgetBody(props: WidgetBodyProps): JSX.Element {
+  const button = props.w.config.footerButton
+  return <><WidgetContent {...props} />{button && props.w.type !== 'button' && <div className="widget-action"><CustomButton config={button} /></div>}</>
+}
+
+function WidgetContent({ w, setConfig }: WidgetBodyProps): JSX.Element {
   const c = w.config
   if (isService(w.type)) return <ListPanel cfg={c} kind={w.type} />
   switch (w.type) {
+    case 'button': return <CustomButton config={c} />
+    case 'tracker': return <TrackerWidget key={c.metricId} metricId={c.metricId} step={c.step} />
+    case 'wishlist': return <WishlistWidget pageId={c.pageId} setPage={id => setConfig('pageId', id)} />
     case 'value': return <ValueWidget cfg={c} />
     case 'chart': return <ChartWidget cfg={c} />
     case 'progress': return <ProgressWidget cfg={c} />
@@ -492,6 +519,8 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
     case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': case 'image': case 'text': case 'dashboard': case 'week':
     case 'calendar': case 'weather': case 'daylight': case 'system': case 'timer':
     case 'worldclock': case 'stopwatch': case 'timeleft': case 'moon': case 'search': case 'quote': case 'battery': case 'launcher': case 'network': case 'calculator': return ''
+    case 'button': case 'tracker': return ''
+    case 'wishlist': return d.pages[w.config.pageId]?.title || 'Wishlist'
     case 'sections': return w.config.section || d.pages[w.config.pageId]?.title || 'Progress'
     case 'dbchart': return d.pages[w.config.dbId]?.title || 'Chart'
     case 'activity': return 'Activity'
@@ -623,6 +652,19 @@ function TablePanel({ cfg }: { cfg: Record<string, any> }): JSX.Element {
 function MiniBlock({ b, pageId, n }: { b: Block; pageId: string; n: number }): JSX.Element | null {
   const ind = { paddingLeft: (b.indent ?? 0) * 16 }
   switch (b.type) {
+    case 'button': return <button className={b.style === 'plain' ? 'btn' : 'btn btn-primary'} onClick={e => runButtonAction(b.action ?? defaultAction, e, lines => {
+      updatePage(pageId, p => {
+        const insert = (blocks: Block[]): boolean => {
+          const index = blocks.findIndex(x => x.id === b.id)
+          if (index >= 0) {
+            blocks.splice(index + 1, 0, ...lines.map(text => ({ id: uid(), type: 'todo' as const, text, indent: b.indent })))
+            return true
+          }
+          return blocks.some(x => x.cols?.some(insert))
+        }
+        insert(p.blocks)
+      })
+    })}>{b.text || 'Button'}</button>
     case 'h1': return <div className="mb-h1" style={ind}><Marks text={b.text} /></div>
     case 'h2': return <div className="mb-h2" style={ind}><Marks text={b.text} /></div>
     case 'h3': return <div className="mb-h3" style={ind}><Marks text={b.text} /></div>
@@ -633,7 +675,7 @@ function MiniBlock({ b, pageId, n }: { b: Block; pageId: string; n: number }): J
     )
     case 'todo': return (
       <label className={`mb-todo ${b.checked ? 'done' : ''}`} style={ind}>
-        <Checkbox checked={!!b.checked} size={16} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
+        <Checkbox color={b.iconColor} checked={!!b.checked} size={16} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
         <span><Marks text={b.text} /></span>
       </label>
     )
@@ -714,7 +756,7 @@ function ChecklistWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
       <div className="w-scroll">
         {list.slice(0, 300).map(({ b, pageId }) => (
           <label key={b.id} className={`mb-todo ${b.checked ? 'done' : ''}`}>
-            <Checkbox checked={!!b.checked} size={16} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
+            <Checkbox color={b.iconColor} checked={!!b.checked} size={16} onChange={(v) => setBlock(pageId, b.id, (x) => { x.checked = v })} />
             <span><Marks text={b.text} /></span>
           </label>
         ))}

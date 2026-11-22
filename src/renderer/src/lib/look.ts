@@ -1,6 +1,8 @@
 import type { Look, Settings } from '../types'
 import { DEFAULT_LOOK } from './defaults'
 
+export const blockTextColor = (c?: string): string | undefined => !c ? undefined : c.startsWith('#') ? c : `var(--tc-${c})`
+
 /** A starting point for the whole look. Picking one overwrites these settings; everything stays editable. */
 export interface ThemePreset {
   id: string
@@ -16,17 +18,17 @@ export interface ThemePreset {
 }
 
 export const PRESETS: ThemePreset[] = [
-  { id: 'glass', name: 'Glass', theme: 'system', accent: '#0a84ff', backdrop: 'sky', glassStrength: 55, font: 'system', look: { radius: 16, blur: 28, shine: 70, shadow: 45, saturation: 160, motion: 'normal', sidebar: 'floating', headingWeight: 650 }, swatch: ['#bcdcff', '#e2d6ff', '#0a84ff'] },
-  { id: 'clear', name: 'Clear', theme: 'system', accent: '#0a84ff', backdrop: 'mica', glassStrength: 30, font: 'system', look: { radius: 14, blur: 36, shine: 85, shadow: 25, saturation: 180, sidebar: 'floating' }, swatch: ['#d9dee7', '#f1f3f7', '#0a84ff'] },
+  { id: 'glass', name: 'Glass', theme: 'system', accent: '#0a84ff', backdrop: 'sky', glassStrength: 55, font: 'system', look: { radius: 16, blur: 28, shine: 70, shadow: 45, saturation: 160, motion: 'normal', headingWeight: 650 }, swatch: ['#bcdcff', '#e2d6ff', '#0a84ff'] },
+  { id: 'clear', name: 'Clear', theme: 'system', accent: '#0a84ff', backdrop: 'mica', glassStrength: 30, font: 'system', look: { radius: 14, blur: 36, shine: 85, shadow: 25, saturation: 180 }, swatch: ['#d9dee7', '#f1f3f7', '#0a84ff'] },
   { id: 'ocean', name: 'Ocean', theme: 'light', accent: '#0a7cff', backdrop: 'ocean', glassStrength: 50, font: 'system', look: { radius: 18, blur: 30, shine: 75, shadow: 50, saturation: 170 }, swatch: ['#9fd8ff', '#7ce7ef', '#0a7cff'] },
   { id: 'sunset', name: 'Sunset', theme: 'light', accent: '#ff6b3d', backdrop: 'sunset', glassStrength: 52, font: 'system', look: { radius: 20, blur: 30, shine: 70, shadow: 45, saturation: 170 }, swatch: ['#ffc6a5', '#ffb3c7', '#ff6b3d'] },
   { id: 'rose', name: 'Rose', theme: 'light', accent: '#e84a8a', backdrop: 'rose', glassStrength: 55, font: 'system', look: { radius: 22, blur: 28, shine: 80, shadow: 40, headingWeight: 600 }, swatch: ['#ffd0e2', '#e9d4ff', '#e84a8a'] },
   { id: 'forest', name: 'Forest', theme: 'dark', accent: '#3ddc84', backdrop: 'forest', glassStrength: 50, font: 'system', look: { radius: 14, blur: 30, shine: 45, shadow: 60 }, swatch: ['#123a2c', '#1d5a44', '#3ddc84'] },
   { id: 'midnight', name: 'Midnight', theme: 'dark', accent: '#7a7cff', backdrop: 'midnight', glassStrength: 55, font: 'system', look: { radius: 16, blur: 32, shine: 40, shadow: 70, saturation: 150 }, swatch: ['#1d2a52', '#34204a', '#7a7cff'] },
   { id: 'aurora', name: 'Aurora', theme: 'dark', accent: '#30d1a0', backdrop: 'aurora', glassStrength: 50, font: 'system', look: { radius: 18, blur: 34, shine: 50, shadow: 60, saturation: 190 }, swatch: ['#0f5248', '#2c2470', '#30d1a0'] },
-  { id: 'graphite', name: 'Graphite', theme: 'dark', accent: '#a1a1aa', backdrop: 'graphite', glassStrength: 60, font: 'system', look: { radius: 10, blur: 20, shine: 30, shadow: 55, saturation: 100, sidebar: 'floating', headingWeight: 600 }, swatch: ['#26272b', '#3a3b40', '#a1a1aa'] },
-  { id: 'paper', name: 'Paper', theme: 'light', accent: '#c2410c', backdrop: 'paper', glassStrength: 90, font: 'serif', look: { surface: 'solid', radius: 8, blur: 0, shine: 20, shadow: 20, saturation: 100, sidebar: 'floating', headingWeight: 700, lineHeight: 1.6 }, swatch: ['#f6f1e7', '#ebe3d3', '#c2410c'] },
-  { id: 'mono', name: 'Mono', theme: 'light', accent: '#111111', backdrop: 'paper', glassStrength: 95, font: 'mono', look: { surface: 'solid', radius: 4, blur: 0, shine: 0, shadow: 10, saturation: 100, sidebar: 'floating', headingWeight: 700, motion: 'subtle' }, swatch: ['#ffffff', '#e5e5e5', '#111111'] },
+  { id: 'graphite', name: 'Graphite', theme: 'dark', accent: '#a1a1aa', backdrop: 'graphite', glassStrength: 60, font: 'system', look: { radius: 10, blur: 20, shine: 30, shadow: 55, saturation: 100, headingWeight: 600 }, swatch: ['#26272b', '#3a3b40', '#a1a1aa'] },
+  { id: 'paper', name: 'Paper', theme: 'light', accent: '#c2410c', backdrop: 'paper', glassStrength: 90, font: 'serif', look: { surface: 'solid', radius: 8, blur: 0, shine: 20, shadow: 20, saturation: 100, headingWeight: 700, lineHeight: 1.6 }, swatch: ['#f6f1e7', '#ebe3d3', '#c2410c'] },
+  { id: 'mono', name: 'Mono', theme: 'light', accent: '#111111', backdrop: 'paper', glassStrength: 95, font: 'mono', look: { surface: 'solid', radius: 4, blur: 0, shine: 0, shadow: 10, saturation: 100, headingWeight: 700, motion: 'subtle' }, swatch: ['#ffffff', '#e5e5e5', '#111111'] },
   { id: 'neon', name: 'Neon', theme: 'dark', accent: '#ff2fd6', backdrop: 'custom', glassStrength: 45, font: 'system', look: { radius: 18, blur: 40, shine: 60, shadow: 80, saturation: 220, motion: 'lively', gradient: { a: '#2b0a3d', b: '#0b1e4f', c: '#ff2fd6', angle: 140 } }, swatch: ['#2b0a3d', '#0b1e4f', '#ff2fd6'] }
 ]
 
@@ -73,7 +75,6 @@ export function applyLook(root: HTMLElement, s: Settings, dark: boolean): void {
   root.dataset.backdrop = s.backdrop || 'sky'
   root.dataset.motion = s.reduceMotion ? 'off' : l.motion
   root.dataset.transition = l.pageTransition
-  root.dataset.sidebar = l.sidebar
   root.classList.toggle('reduce-motion', s.reduceMotion || l.motion === 'off')
   set('--accent', s.accent)
   set('--on-accent', readableOn(s.accent))
@@ -116,6 +117,8 @@ export function applyLook(root: HTMLElement, s: Settings, dark: boolean): void {
   set('--backdrop-dim', String(l.backdropDim / 100))
   // Text: a tone (or your own color) and softened letter edges.
   const fg = l.textTone === 'custom' ? (dark ? l.textDark : l.textLight) : (TEXT_TONES[l.textTone] ?? TEXT_TONES.auto)[dark ? 1 : 0]
+  set('--sidebar-icon', l.sidebarIconColor || fg)
+  set('--sidebar-subtitle', l.sidebarSubtitleColor || fg)
   set('--fg', fg)
   set('--fg-2', `color-mix(in srgb, ${fg} 82%, transparent)`)
   set('--glass-text', `linear-gradient(180deg, ${fg} 30%, color-mix(in srgb, ${fg} ${dark ? 66 : 74}%, transparent) 100%)`)

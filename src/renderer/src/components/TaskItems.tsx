@@ -5,9 +5,10 @@ import { TaskRepeatEditor } from './TaskRepeatEditor'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { useMemo, useState } from 'react'
 import { act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
-import type { Task } from '../types'
+import { ScheduleFields, firstScheduledDate } from './ScheduleFields'
+import type { CustomRepeat, Task } from '../types'
 import { formatTime, friendlyDay, snoozeOptions, today, uid } from '../lib/util'
-import { AutoText, Button, Checkbox, ConfirmButton, Menu, type MenuItem, Popover, Segmented, useDoc } from './ui'
+import { AutoText, Button, Checkbox, OptionalColor, ConfirmButton, Menu, type MenuItem, Popover, Segmented, useDoc } from './ui'
 import { Icon } from './Icon'
 
 export const PRIORITY = [
@@ -17,27 +18,30 @@ export const PRIORITY = [
   { v: 3, label: 'High', color: '#ff453a' }
 ] as const
 
-export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', autoFocus, onAdded, onEscape }: { pageId: string; defaults?: Partial<Task>; placeholder?: string; autoFocus?: boolean; onAdded?: (id: string) => void; onEscape?: () => void }): JSX.Element {
+export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', autoFocus, onAdded, onEscape, schedulePicker }: { schedulePicker?: boolean; pageId: string; defaults?: Partial<Task>; placeholder?: string; autoFocus?: boolean; onAdded?: (id: string) => void; onEscape?: () => void }): JSX.Element {
   const [v, setV] = useState('')
   const weekStart = useData(d => d.settings.weekStart)
-  const parsed = useMemo(() => (v.trim() ? parseQuickAdd(v, weekStart, defaults.due) : null), [v, weekStart, defaults.due])
+  const [schedule, setSchedule] = useState<CustomRepeat | null>(null)
+  const first = schedule ? firstScheduledDate(schedule) : null
+  const parsed = useMemo(() => (v.trim() ? parseQuickAdd(v, weekStart, defaults.due, !schedule) : null), [v, weekStart, defaults.due, schedule])
   const submit = (): void => {
-    if (!parsed?.title) return
+    if (!parsed?.title || (schedule && !first)) return
     const id = addTask(pageId, {
       ...defaults,
       title: parsed.title,
-      due: parsed.due ?? defaults.due ?? null,
+      due: first ?? parsed.due ?? defaults.due ?? null,
       time: parsed.time ?? null,
       priority: parsed.priority ?? defaults.priority ?? 0,
       tags: [...(defaults.tags ?? []), ...parsed.tags],
-      repeat: parsed.repeat ?? 'none',
+      repeat: schedule ?? parsed.repeat ?? defaults.repeat ?? 'none',
       difficulty: defaults.difficulty ?? 'easy'
     })
     setV('')
+    setSchedule(null)
     onAdded?.(id)
   }
   return (
-    <div className="quickadd glass">
+    <><div className="quickadd glass">
       <Icon name="plus" size={16} className="muted" />
       <input
         aria-label="Add a task"
@@ -48,11 +52,18 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', au
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { if (!v && onEscape) onEscape(); else setV('') } }}
       />
+      {schedulePicker && <button type="button" className="icon-btn" title="Repeat schedule" aria-label="Repeat schedule" aria-pressed={!!schedule} onClick={() => {
+        const start = defaults.due || today()
+        setSchedule(schedule ? null : { unit: 'week', interval: 1, start, days: [new Date(start + 'T12:00:00').getDay()], weekStart })
+      }}><Icon name="repeat" size={15} /></button>}
     </div>
+    {schedule && <div className="panel-repeat"><ScheduleFields id={'new-' + pageId} draft={schedule} onChange={setSchedule} />
+      <Button small kind="primary" disabled={!first || !parsed?.title} onClick={submit}>Add repeating task</Button></div>}</>
   )
 }
 
-export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDropOn, selected, onSelect }: {
+export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDropOn, selected, onSelect, onRepeat }: {
+  onRepeat?: (id: string) => void
   task: Task; showPage?: boolean; onOpen: (id: string) => void; draggable?: boolean; onDragStart?: () => void; onDropOn?: () => void
   selected?: boolean; onSelect?: (id: string, range: boolean) => void
 }): JSX.Element {
@@ -64,6 +75,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
   const overdue = !task.done && task.due && task.due < today()
   const menuItems: MenuItem[] = [
     { label: 'Open', icon: 'expand', onClick: () => onOpen(task.id) },
+    ...(onRepeat ? [{ label: 'Repeat schedule', icon: 'repeat', onClick: () => onRepeat(task.id) }] : []),
     { label: task.done ? 'Mark not done' : 'Complete', icon: 'check', onClick: () => setTaskDone(task.id, !task.done) },
     { divider: true, label: '' },
     { label: 'Due today', icon: 'calendar', disabled: task.due === today(), onClick: () => updateTask(task.id, (t) => { t.due = today() }) },
@@ -91,21 +103,21 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
       onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }) }}
     >
       {menu && <Popover anchor={menu} onClose={() => setMenu(null)}><div onClick={(e) => e.stopPropagation()}><Menu items={menuItems} onClose={() => setMenu(null)} /></div></Popover>}
-      <Checkbox checked={task.done} onChange={(v) => setTaskDone(task.id, v)} round color={PRIORITY[task.priority].v ? PRIORITY[task.priority].color : undefined} />
+      <Checkbox checked={task.done} onChange={(v) => setTaskDone(task.id, v)} round color={task.iconColor ?? (task.priority ? PRIORITY[task.priority].color : undefined)} />
       <div className="task-main">
-        <div className="task-title">{task.title || <span className="muted">Untitled</span>}</div>
-        <div className="task-meta">
-          {task.due && <span className={`meta ${overdue ? 'danger' : task.due === today() ? 'accent' : ''}`}><Icon name="calendar" size={12} />{friendlyDay(task.due)}{task.time ? ' ' + formatTime(task.time, use24h) : ''}</span>}
-          {task.repeat !== 'none' && <span className="meta" title={repeatLabel(task.repeat)}><Icon name="repeat" size={12} />{repeatLabel(task.repeat)}</span>}
-          {task.subtasks.length > 0 && <span className="meta"><Icon name="check" size={12} />{subDone}/{task.subtasks.length}</span>}
-          {task.notes && <span className="meta"><Icon name="note" size={12} /></span>}
-          {task.estimate ? <span className="meta"><Icon name="clock" size={12} />{task.estimate}m</span> : null}
-          {task.tags.map((t) => <span key={t} className="meta tag">#{t}</span>)}
-          {goalTitle && <span className="meta"><Icon name="flag" size={12} />{goalTitle}</span>}
+        <div className="task-title" style={{ color: task.textColor }}>{task.title || <span className="muted">Untitled</span>}</div>
+        <div className="task-meta" style={{ ['--task-icon' as string]: task.iconColor }}>
+          {task.due && <span data-field="date" className={`meta ${overdue ? 'danger' : task.due === today() ? 'accent' : ''}`}><Icon name="calendar" size={12} />{friendlyDay(task.due)}{task.time ? ' ' + formatTime(task.time, use24h) : ''}</span>}
+          {task.repeat !== 'none' && <span data-field="repeat" className="meta" title={repeatLabel(task.repeat)}><Icon name="repeat" size={12} />{repeatLabel(task.repeat)}</span>}
+          {task.subtasks.length > 0 && <span data-field="details" className="meta"><Icon name="check" size={12} />{subDone}/{task.subtasks.length}</span>}
+          {task.notes && <span data-field="details" className="meta"><Icon name="note" size={12} /></span>}
+          {task.estimate ? <span data-field="details" className="meta"><Icon name="clock" size={12} />{task.estimate}m</span> : null}
+          {task.tags.map((t) => <span data-field="tags" key={t} className="meta tag">#{t}</span>)}
+          {goalTitle && <span data-field="details" className="meta"><Icon name="flag" size={12} />{goalTitle}</span>}
           {showPage && pageTitle && <span className="meta">{pageTitle}</span>}
         </div>
       </div>
-      {task.priority > 0 && <Icon name="flag" size={14} className="task-flag" fill />}
+      {task.priority > 0 && <Icon name="flag" size={14} className="task-flag" color={task.iconColor} fill />}
     </div>
   )
 }
@@ -121,8 +133,8 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
   const listPages = Object.values(pages).filter((p) => !p.deletedAt && ['tasks', 'board', 'project', 'today'].includes(p.type))
   return (
     <div className="drawer glass-strong" onClick={(e) => e.stopPropagation()}>
-      <div className="drawer-head">
-        <Checkbox checked={task.done} onChange={(v) => setTaskDone(id, v)} round size={20} />
+      <div className="drawer-head" style={{ color: task.textColor }}>
+        <Checkbox checked={task.done} onChange={(v) => setTaskDone(id, v)} round size={20} color={task.iconColor ?? (task.priority ? PRIORITY[task.priority].color : undefined)} />
         <AutoText className="drawer-title" value={task.title} placeholder="Task name" onChange={(v) => set((t) => { t.title = v }, 'title:' + id)} />
         <Button kind="ghost" small icon="x" title="Close" onClick={onClose} />
       </div>
@@ -140,6 +152,10 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
           </>}
           <label htmlFor={`repeat-${id}`}>Repeat</label>
           <TaskRepeatEditor key={id} task={task} />
+          <label>Text color</label>
+          <OptionalColor label="Task text color" value={task.textColor} onChange={color => set(t => { t.textColor = color }, 'task-text:' + id)} />
+          <label>Icon color</label>
+          <OptionalColor label="Task icon color" value={task.iconColor} onChange={color => set(t => { t.iconColor = color }, 'task-icon:' + id)} />
           <label>Priority</label>
           <Segmented small value={task.priority} onChange={(v) => set((t) => { t.priority = v as Task['priority'] })} options={PRIORITY.map((p) => ({ value: p.v, label: p.label }))} />
           <label>Estimate</label>

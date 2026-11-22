@@ -13,7 +13,7 @@ const CUSTOM_INTERVAL = new RegExp('\\severy\\s+(?:(\\d+)\\s+|(?=weeks?\\s+on\\s
   '(day|week|month|year)s?\\b(?:\\s+on\\s+(' + weekdayList + ')\\b)?', 'i')
 
 /** Natural-language quick add: "Pay rent tomorrow 5pm !high #home every month" */
-export function parseQuickAdd(input: string, weekStart: 0 | 1 = 1, defaultDue?: string | null): {
+export function parseQuickAdd(input: string, weekStart: 0 | 1 = 1, defaultDue?: string | null, parseRepeat = true): {
   title: string
   due?: string
   time?: string
@@ -39,7 +39,7 @@ export function parseQuickAdd(input: string, weekStart: 0 | 1 = 1, defaultDue?: 
   take(/\s!(med|medium|m|2)\b/i, () => (out.priority = 2))
   take(/\s!(low|l|1)\b/i, () => (out.priority = 1))
   let custom: { unit: CustomRepeat['unit']; interval: number; days?: number[] } | undefined
-  const recurring = s.match(CUSTOM_INTERVAL)
+  const recurring = parseRepeat ? s.match(CUSTOM_INTERVAL) : null
   if (recurring) {
     const unit = recurring[2].toLowerCase() as CustomRepeat['unit']
     const days = recurring[3]?.match(new RegExp(WEEKDAY_RE, 'gi'))?.map(weekdayIndex)
@@ -49,7 +49,7 @@ export function parseQuickAdd(input: string, weekStart: 0 | 1 = 1, defaultDue?: 
       s = s.replace(recurring[0], ' ')
     }
   }
-  if (!custom) {
+  if (parseRepeat && !custom) {
     take(/\s(?:every\s?day|daily)\b/i, () => (out.repeat = 'daily'))
     take(/\s(?:every\s?weekday|weekdays)\b/i, () => (out.repeat = 'weekdays'))
     take(/\s(?:every\s?week|weekly)\b/i, () => (out.repeat = 'weekly'))

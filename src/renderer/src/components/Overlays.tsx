@@ -4,7 +4,7 @@ import { createPage, getData, openPage, openSettings, openView, purgePage, resto
 import { PAGE_TYPES, typeInfo } from '../lib/defaults'
 import { api } from '../lib/api'
 import { exportAll } from '../lib/exporters'
-import { pageFromTemplate } from '../lib/db'
+import { createFromPageLayout, type TemplateMode } from '../lib/layoutTemplates'
 import { timeAgo } from '../lib/util'
 import { Button, ConfirmButton, Empty, Modal } from './ui'
 import { Glyph, Icon } from './Icon'
@@ -45,6 +45,7 @@ export function QuickAddDialog(): JSX.Element {
 export function NewPageDialog(): JSX.Element {
   const arg = useApp((s) => s.overlayArg) as { parentId: string | null } | null
   const [title, setTitle] = useState('')
+  const [mode, setMode] = useState<TemplateMode>('linked')
   const templates = useData((d) => Object.values(d.pages).filter((p) => p.template && !p.rowOf && !p.deletedAt))
   const make = (type: (typeof PAGE_TYPES)[number]['type']): void => {
     const id = createPage(type, arg?.parentId ?? null, title.trim() || undefined)
@@ -52,7 +53,7 @@ export function NewPageDialog(): JSX.Element {
     setOverlay(null)
   }
   const fromTemplate = (tplId: string): void => {
-    const id = pageFromTemplate(tplId, arg?.parentId ?? null, title.trim() || undefined)
+    const id = createFromPageLayout(tplId, arg?.parentId ?? null, title.trim() || undefined, mode)
     openPage(id)
     setOverlay(null)
   }
@@ -72,6 +73,7 @@ export function NewPageDialog(): JSX.Element {
         </div>
         {templates.length > 0 && <>
           <div className="section-label">Templates</div>
+          <label>Template lists<select className="input input-sm" value={mode} onChange={e => setMode(e.target.value as TemplateMode)}><option value="linked">Link to existing lists</option><option value="fresh">Start with fresh lists</option></select></label>
           <div className="type-grid">
             {templates.map((t) => (
               <button key={t.id} className="type-card" onClick={() => fromTemplate(t.id)}>

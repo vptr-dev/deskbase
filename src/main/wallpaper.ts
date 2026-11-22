@@ -68,6 +68,17 @@ function load(): Gdi | null {
 
 let last: Backdrop | null = null
 let busy = false
+const blackSince = new Map<number, number>()
+
+function blackFrame(raw: Buffer, stride: number, crop: { x: number; y: number; width: number; height: number }): boolean {
+  for (let y = 0; y < crop.height; y += Math.max(1, Math.floor(crop.height / 32))) {
+    for (let x = 0; x < crop.width; x += Math.max(1, Math.floor(crop.width / 48))) {
+      const i = ((crop.y + y) * stride + crop.x + x) * 4
+      if (raw[i] > 3 || raw[i + 1] > 3 || raw[i + 2] > 3) return false
+    }
+  }
+  return true
+}
 
 /** A small picture of what is behind each screen's panels; `same` when nothing new was taken. */
 export async function backdrop(stamp?: string): Promise<Backdrop | { same: true } | null> {
@@ -87,10 +98,27 @@ export async function backdrop(stamp?: string): Promise<Backdrop | { same: true 
     for (const d of screen.getAllDisplays()) {
       const p = screen.dipToScreenRect(null, d.bounds)
       const crop = { x: p.x - r.x, y: p.y - r.y, width: p.width, height: p.height }
-      if (crop.x < 0 || crop.y < 0 || crop.x + crop.width > r.w || crop.y + crop.height > r.h) continue
+      const previous = last?.displays.find(display => display.id === d.id)
+      if (crop.x < 0 || crop.y < 0 || crop.x + crop.width > r.w || crop.y + crop.height > r.h) {
+        if (previous) displays.push(previous)
+        continue
+      }
+      // Explorer can return an empty capture during a wallpaper transition.
+      if (blackFrame(raw, r.w, crop)) {
+        const since = blackSince.get(d.id) ?? Date.now()
+        blackSince.set(d.id, since)
+        if (Date.now() - since < 9000) {
+          if (previous) displays.push(previous)
+          continue
+        }
+      } else blackSince.delete(d.id)
       // A quarter of the size is plenty for something that gets blurred.
       const small = full.crop(crop).resize({ width: Math.max(64, Math.round(d.bounds.width / 4)), quality: 'good' })
       displays.push({ id: d.id, url: 'data:image/jpeg;base64,' + small.toJPEG(80).toString('base64') })
+    }
+    if (!displays.length) return { same: true }
+    if (last && last.displays.length === displays.length && displays.every((d, i) => last!.displays[i].id === d.id && last!.displays[i].url === d.url)) {
+      return stamp === last.stamp ? { same: true } : last
     }
     last = { stamp: String(Date.now()), displays }
     return last

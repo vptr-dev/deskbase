@@ -300,6 +300,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('app:setMaterial', (_e, material: Material) => {
+    if (readPrefs().material === material) return true
     writePrefs({ material })
     if (micaSupported && mainWindow) {
       mainWindow.setBackgroundMaterial(material)
