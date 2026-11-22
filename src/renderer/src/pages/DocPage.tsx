@@ -1,3 +1,4 @@
+import { EmbeddedWidget } from '../components/EmbeddedWidget'
 import { blockTextColor } from '../lib/look'
 import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -50,6 +51,7 @@ const SLASH: SlashItem[] = [
   { type: 'link', label: 'Link to page', icon: 'pageLink', hint: '' },
   { type: 'bookmark', label: 'Bookmark', icon: 'bookmark', hint: '' },
   { type: 'image', label: 'Image', icon: 'image', hint: '' },
+  { type: 'widget', label: 'Linked widget', icon: 'layout', hint: 'Embed a desktop or dashboard widget', keywords: 'panel embed widget' },
   { type: 'embed', label: 'Embed', icon: 'embed', hint: '' },
   { type: 'equation', label: 'Equation', icon: 'sigma', hint: '$$' },
   { type: 'button', label: 'Button', icon: 'pointer', hint: '' }
@@ -529,7 +531,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
       {!col && !locked && <div className="insert-block-row">
         <button className="page-add" aria-haspopup="menu" onClick={e => setInsertMenu(e.currentTarget)}><Icon name="plus" size={14} />Insert block</button>
         {insertMenu && <Popover anchor={insertMenu} onClose={() => setInsertMenu(null)} width={242}>
-          <Menu onClose={() => setInsertMenu(null)} items={SLASH.filter(item => ['tool', 'tabs', 'columns', 'database', 'button'].includes(item.type)).map(item => ({
+          <Menu onClose={() => setInsertMenu(null)} items={SLASH.filter(item => ['tool', 'tabs', 'columns', 'database', 'button', 'widget'].includes(item.type)).map(item => ({
             label: item.label, icon: item.icon, onClick: () => {
               const tail = current().at(-1)
               const id = tail?.type === 'p' && !tail.text ? tail.id : insertAfter(tail?.id ?? '')
@@ -565,6 +567,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           case 'toc': content = <TocBlock pageId={pageId} />; break
           case 'bookmark': content = <BookmarkBlock block={b} locked={locked} set={set} />; break
           case 'image': content = <ImageBlock block={b} locked={locked} set={set} />; break
+          case 'widget': content = <EmbeddedWidget block={b} locked={locked} select={source => set(x => { x.widgetSource = source })} />; break
           case 'embed': content = <EmbedBlock block={b} locked={locked} set={set} />; break
           case 'equation': content = <EquationBlock block={b} locked={locked} set={set} />; break
           case 'button': content = <ButtonBlock block={b} locked={locked} set={set} addTodos={(lines) => { let after = b.id; for (const t of lines) after = insertAfter(after, { type: 'todo', text: t, indent: b.indent }) }} />; break

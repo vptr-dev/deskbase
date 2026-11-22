@@ -1,9 +1,10 @@
+import { WidgetActionHost } from '../components/WidgetActionHost'
 import { PanelBody } from '../components/PanelBody'
 import { createRoot, type Root } from 'react-dom/client'
 import { create } from 'zustand'
 import { act, getData, openView, toast, useApp, useData } from '../store'
 import type { DeskWidget, WidgetStyle, WidgetType } from '../types'
-import { api, type DeskMenuItem, type DeskSpec, type Backdrop, type DisplayInfo, isDesktop } from './api'
+import { api, type DeskSpec, type Backdrop, type DisplayInfo, isDesktop } from './api'
 import { useEffect, useState } from 'react'
 import { uid } from './util'
 import { refreshFromNotion } from './importer'
@@ -215,51 +216,6 @@ export async function addDesktopWidget(type: WidgetType, init: Partial<DeskWidge
 }
 
 // ---------- context menu ----------
-async function showMenu(id: string, editable: boolean): Promise<void> {
-  const w = findDesk(id)
-  if (!w || w.locked) return
-  const editing = useDesk.getState().editing
-  const d = getData()
-  const page = typeof w.config.pageId === 'string' ? d.pages[w.config.pageId] : undefined
-  const st = fullStyle(d.desktop.style, w.style)
-  const touching = touchingPanels(w).length > 1
-  const items: DeskMenuItem[] = [
-    ...(editable ? [
-      { id: 'cut', label: 'Cut', role: 'cut' },
-      { id: 'copy', label: 'Copy', role: 'copy' },
-      { id: 'paste', label: 'Paste', role: 'paste' },
-      { id: 'sep0', label: '', type: 'separator' }
-    ] as DeskMenuItem[] : []),
-    { id: 'lock', label: 'Lock panel' },
-    { id: 'edit', label: 'Edit panel…' },
-    { id: 'look', label: 'Look', submenu: [
-      { id: 'look:shared', label: 'Shared style', checked: Object.keys(w.style).length === 0 },
-      ...DESK_LOOKS.map((l) => ({ id: 'look:' + l.id, label: l.name, checked: Object.keys(w.style).length > 0 && Object.entries(l.style).every(([k, v]) => (st as any)[k] === v) }))
-    ] },
-    ...(page?.source?.kind === 'notion' ? [{ id: 'refresh', label: 'Refresh from Notion' }] : []),
-    ...(w.type === 'timer' ? [
-      { id: 'timer-reset', label: 'Reset timer' },
-      { id: 'timer-len', label: 'Length', submenu: [1, 2, 5, 10, 15, 20, 25, 30, 45, 60, 90].map((n) => ({ id: 'timer:' + n, label: n + ' min', checked: Number(w.config.minutes || 5) === n })) }
-    ] as DeskMenuItem[] : []),
-    { id: 'sep1', label: '', type: 'separator' },
-    ...(w.group ? [{ id: 'ungroup', label: 'Separate from group' }] : touching ? [{ id: 'group', label: 'Combine with touching panels' }] : []),
-    ...(widgetTitle(w, d) ? [{ id: 'header', label: 'Show title', checked: st.header }] : []),
-    { id: 'click', label: 'Click-through', checked: !!(w.config.clickThrough) },
-    { id: 'sep2', label: '', type: 'separator' },
-    { id: 'arrange', label: editing ? 'Done arranging' : 'Arrange panels' },
-    { id: 'lock-all', label: 'Lock all panels' },
-    { id: 'sep3', label: '', type: 'separator' },
-    { id: 'duplicate', label: 'Duplicate' },
-    { id: 'hide', label: 'Hide' },
-    { id: 'remove', label: 'Remove' },
-    { id: 'sep4', label: '', type: 'separator' },
-    { id: 'add', label: 'Add panel…' },
-    { id: 'open', label: 'Open app' }
-  ]
-  const cmd = await api.desk.menu(id, items)
-  if (cmd) runCommand(id, cmd)
-}
-
 export function runCommand(id: string, cmd: string): void {
   const w = id ? findDesk(id) : undefined
   if (cmd === 'toggle') { act((d) => { d.desktop.enabled = !d.desktop.enabled }); return }
@@ -403,11 +359,17 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
   return (
     <DocContext.Provider value={doc}>
       <Frost doc={doc} w={w} material={st.material} radius={st.radius} amount={st.blur} />
-      <div
+      <WidgetActionHost widget={w} name={widgetDef(w.type).name} source={{page:null,id}} desktopId={id}
+        resetTimer={() => runCommand(id,'timer-reset')}
+        globalActions={[
+          { label: w.locked ? 'Position locked' : 'Lock panel', icon: 'lock', disabled: !!w.locked, onClick: () => runCommand(id,'lock') },
+          { label: 'Lock all panels', icon: 'lock', disabled: activePanels().every(x => x.locked), onClick: () => runCommand(id,'lock-all') },
+          { label: 'Duplicate panel', icon: 'copy', onClick: () => runCommand(id,'duplicate') },
+          { label: 'Hide panel', icon: 'eyeOff', onClick: () => runCommand(id,'hide') }
+        ]}
         className={`dw wt-${w.type} ${widgetClass(st)} ${editing && movable ? 'editing' : ''} ${selected && editing ? 'selected' : ''} ${w.locked ? 'locked' : ''}`}
         data-theme={st.theme === 'auto' ? undefined : st.theme}
         style={widgetVars(st)}
-        onContextMenu={(e) => { if (w.locked || e.defaultPrevented) return; e.preventDefault(); void showMenu(id, !!(e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) }}
         onPointerDown={(e) => {
           if (editing) useDesk.setState({ selected: id })
           // Panels don't take focus on a click; a text field asks for it so you can type.
@@ -431,7 +393,7 @@ function DeskWidgetView({ id, doc }: { id: string; doc: Document }): JSX.Element
           </div>
         )}
         {movable && <div className="dw-resize" title="Resize" onPointerDown={(e) => drag(e, 'resize')}><Icon name="resize" size={11} /></div>}
-      </div>
+      </WidgetActionHost>
     </DocContext.Provider>
   )
 }

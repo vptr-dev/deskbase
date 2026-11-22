@@ -27,7 +27,7 @@ function NoConnection({ kind }: { kind: ConnectionKind }): JSX.Element {
 export function EventRow({ e, showDay }: { e: CalEvent; showDay?: boolean }): JSX.Element {
   const d = parseDay(e.start)
   return (
-    <button className="event-row" onClick={() => open(e.url)} disabled={!e.url} title={[e.title, e.location].filter(Boolean).join(' · ')}>
+    <button data-widget-item={e.title} data-item-url={e.url} data-item-summary={[e.start,e.time,e.location].filter(Boolean).join(" ")} className="event-row" onClick={() => open(e.url)} aria-disabled={!e.url} title={[e.title, e.location].filter(Boolean).join(' · ')}>
       <span className="event-bar" style={{ background: e.color }} />
       <span className="event-time">{e.allDay ? 'All day' : e.time}{!e.allDay && e.endTime ? <span className="muted"> – {e.endTime}</span> : null}</span>
       <span className="min0 grow">
@@ -68,12 +68,13 @@ export function EventsWidget({ cfg }: { cfg: Cfg }): JSX.Element {
 
 // ---------- news feed ----------
 export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summary?: boolean; kind: ConnectionKind; connId?: string }): JSX.Element {
-  if (isService(kind) && item.resumeCommand) return <button className="feed-row" title={'Copy ' + item.resumeCommand} onClick={() => {
+  const meta = { 'data-widget-item': item.title, 'data-item-url': item.url, 'data-item-summary': item.summary }
+  if (isService(kind) && item.resumeCommand) return <button {...meta} data-item-action="Copy resume command" className="feed-row" title={'Copy ' + item.resumeCommand} onClick={() => {
     void navigator.clipboard.writeText(item.resumeCommand!).then(() => toast('Resume command copied')).catch(() => toast('Clipboard unavailable', { kind: 'error' }))
   }}><span className="ellipsis grow">{item.title}</span><Icon name="copy" size={13} /></button>
   if (kind === 'mail') {
     return (
-      <button className={`feed-row mail ${item.unread ? 'unread' : ''}`} onClick={() => open(item.url)} title={item.title}>
+      <button {...meta} className={`feed-row mail ${item.unread ? 'unread' : ''}`} onClick={() => open(item.url)} title={item.title}>
         <span className="mail-dot" />
         <span className="min0 grow">
           <span className="row gap-sm"><span className="ellipsis grow mail-from">{item.author ?? ''}</span><span className="muted small nowrap">{item.date ? timeAgo(item.date) : ''}</span></span>
@@ -85,8 +86,8 @@ export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summa
   if (kind === 'todoist') {
     const late = item.due && item.due < today()
     return (
-      <div className={`feed-row task p${item.priority ?? 1}`}>
-        <button className="todo-ring" title="Complete" disabled={!connId} onClick={() => { if (connId) void closeTodoist(connId, item.id) }}><Icon name="check" size={11} /></button>
+      <div {...meta} className={`feed-row task p${item.priority ?? 1}`}>
+        <button data-item-action="Complete in Todoist" className="todo-ring" title="Complete" disabled={!connId} onClick={() => { if (connId) void closeTodoist(connId, item.id) }}><Icon name="check" size={11} /></button>
         <button className="min0 grow text-left" onClick={() => open(item.url)} title={item.title}>
           <span className="ellipsis d-block">{item.title}</span>
           {(item.due || item.project) && <span className={`small ellipsis d-block ${late ? 'danger' : 'muted'}`}>{item.due ? friendlyDay(item.due) + (item.dueTime ? ' ' + item.dueTime : '') : ''}{item.due && item.project ? ' · ' : ''}{item.project ?? ''}</span>}
@@ -97,7 +98,7 @@ export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summa
   if (kind === 'github') {
     const icon = item.kind === 'pr' ? (item.state === 'merged' ? 'merged' : item.state === 'draft' ? 'prDraft' : 'pr') : 'issue'
     return (
-      <button className="feed-row gh" onClick={() => open(item.url)} title={item.title}>
+      <button {...meta} className="feed-row gh" onClick={() => open(item.url)} title={item.title}>
         <Icon name={icon} size={14} className={`gh-state ${item.state ?? 'open'}`} />
         <span className="min0 grow">
           <span className="ellipsis d-block">{item.title}</span>
@@ -108,7 +109,7 @@ export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summa
     )
   }
   return (
-    <button className="feed-row" onClick={() => open(item.url)} title={item.title}>
+    <button {...meta} className="feed-row" onClick={() => open(item.url)} title={item.title}>
       <span className="min0 grow">
         <span className={`d-block ${summary ? 'strong-ish' : 'ellipsis'}`}>{item.title}</span>
         {summary && item.summary && <span className="muted small feed-summary">{item.summary}</span>}
@@ -169,9 +170,9 @@ export function MediaWidget({ cfg }: { cfg: Cfg }): JSX.Element {
         <div className="media-artist muted ellipsis">{[m.artist, cfg.app !== false ? appName(m.app) : ''].filter(Boolean).join(' · ')}</div>
         {cfg.progress !== false && !!m.dur && <div className="media-bar"><span style={{ width: `${(pos / m.dur) * 100}%` }} /><em>{mmss(pos)}</em><em>{mmss(m.dur)}</em></div>}
         <div className="media-ctl">
-          <button title="Previous" disabled={m.canPrev === false} onClick={() => api.media.control('prev')}><Icon name="skipBack" size={16} /></button>
-          <button className="main" title={m.playing ? 'Pause' : 'Play'} onClick={() => api.media.control('toggle')}><Icon name={m.playing ? 'pause' : 'play'} size={18} /></button>
-          <button title="Next" disabled={m.canNext === false} onClick={() => api.media.control('next')}><Icon name="skip" size={16} /></button>
+          <button data-widget-action="Previous track" title="Previous" disabled={m.canPrev === false} onClick={() => api.media.control('prev')}><Icon name="skipBack" size={16} /></button>
+          <button data-widget-action={m.playing ? 'Pause playback' : 'Play'} className="main" title={m.playing ? 'Pause' : 'Play'} onClick={() => api.media.control('toggle')}><Icon name={m.playing ? 'pause' : 'play'} size={18} /></button>
+          <button data-widget-action="Next track" title="Next" disabled={m.canNext === false} onClick={() => api.media.control('next')}><Icon name="skip" size={16} /></button>
         </div>
       </div>
     </div>

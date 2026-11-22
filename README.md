@@ -6,7 +6,7 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.20.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.20.1.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
 
 ## What's inside
 
@@ -18,6 +18,7 @@ Download `Deskbase-Setup-0.20.0.exe` from the [latest release](https://github.co
 - **Wishlist and purchases**. Add a Wishlist page, insert one into a document or select it in a desktop or dashboard widget. Enter prices, track a budget and move items between Wishlist and Purchased.
 - **Tracker panels**. Pick a tracker such as water or calories and log directly to the same history as the tracker page.
 - **Custom buttons**. Insert a button on a page, add a button panel or enable **Custom button** in another widget. Buttons can reveal a toggle, change or set a value, add to-dos, create a task, or open a page or link.
+- **Widget actions**. Right-click a panel for actions on the selected item, followed by widget actions and desktop controls. Locked panels still support task entry, timer controls and connection actions. Save a feed item to a page, turn it into a task or embed a live widget with **Embed widget in page**. Type `/linked widget` in a document to choose an existing widget.
 - **Panel locking**. Lock a panel from its right-click menu. Its content stays interactive. Open **Desktop** to unlock panels.
 - **Workspaces**, each with its own panel layout.
 - **Appearance**: glass, blur, frosted or solid, light and dark, borders, fonts, text tone and colors, with its own section for the desktop panels.

@@ -377,14 +377,14 @@ export function TimerWidget({ cfg, setConfig }: { cfg: Cfg; setConfig: SetConfig
   const text = active ? (finished ? 'Done' : `${Math.floor(secs / 60)}:${pad(secs % 60)}`) : `${minutes} min`
   if (cfg.look === 'bar' || cfg.look === 'minimal') {
     return (
-      <button className={`pk pk-timer-${cfg.look} ${state}`} onClick={click} title={tip}>
+      <button className={`pk pk-timer-${cfg.look} ${state}`} data-widget-action={tip + ' timer'} onClick={click} title={tip}>
         <span className="pk-tb-top"><span className="pk-tb-time">{text}</span>{cfg.label && <span className="pk-timer-label">{cfg.label}</span>}</span>
         {cfg.look === 'bar' && <span className="pk-tb-track"><span style={{ width: `${frac * 100}%` }} /></span>}
       </button>
     )
   }
   return (
-    <button className={`pk pk-timer ${state}`} onClick={click} title={tip}>
+    <button className={`pk pk-timer ${state}`} data-widget-action={tip + ' timer'} onClick={click} title={tip}>
       <svg className="pk-timer-dial" viewBox="0 0 100 100" aria-hidden>
         {Array.from({ length: 60 }, (_, i) => {
           const a = (i * 6 * Math.PI) / 180

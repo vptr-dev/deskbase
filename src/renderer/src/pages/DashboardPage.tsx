@@ -1,3 +1,4 @@
+import { WidgetActionHost } from '../components/WidgetActionHost'
 import { PanelBody } from '../components/PanelBody'
 import { useEffect, useRef, useState } from 'react'
 import { act, toast, updatePage, useData } from '../store'
@@ -218,7 +219,13 @@ export function DashboardGrid({ pageId, bare }: { pageId: string; bare?: boolean
             const title = widgetTitle(w, d)
             const st = fullStyle(DASH_STYLE, w.style, auto)
             return (
-              <div key={w.id} className={`widget wt-${w.type} ${widgetClass(st)} ${drag?.id === w.id ? 'dragging' : ''}`} style={{ ...widgetVars(st), gridColumn: `${g.x + 1} / span ${g.w}`, gridRow: `${g.y + 1} / span ${g.h}` }}>
+              <WidgetActionHost key={w.id} widget={w} name={widgetDef(w.type).name} source={{page:pageId,id:w.id}}
+                resetTimer={() => patchWidget(pageId,w.id,x => { x.config.endsAt = null; x.config.left = null })}
+                globalActions={[{ label: 'Duplicate widget', icon: 'copy', onClick: () => updatePage(pageId,p => {
+                  const copy = structuredClone(w)
+                  copy.id = uid(); copy.y = Math.max(0,...(p.widgets ?? []).map(v => v.y + v.h)); (p.widgets ??= []).push(copy)
+                }) }]}
+                className={`widget wt-${w.type} ${widgetClass(st)} ${drag?.id === w.id ? 'dragging' : ''}`} style={{ ...widgetVars(st), gridColumn: `${g.x + 1} / span ${g.w}`, gridRow: `${g.y + 1} / span ${g.h}` }}>
                 {((title && st.header) || editing) && (
                   <div className="widget-head" onPointerDown={editing ? (e) => startDrag(e, w, 'move') : undefined}>
                     {editing && <Icon name="grip" size={14} className="muted" />}
@@ -230,7 +237,7 @@ export function DashboardGrid({ pageId, bare }: { pageId: string; bare?: boolean
                 )}
                 <PanelBody><WidgetBody w={w} setConfig={(k, v) => patchWidget(pageId, w.id, (x) => { x.config[k] = v }, 'wcfg:' + w.id + k)} /></PanelBody>
                 {editing && <span className="widget-resize" title="Resize" onPointerDown={(e) => startDrag(e, w, 'resize')}><Icon name="resize" size={12} /></span>}
-              </div>
+              </WidgetActionHost>
             )
           })}
         </div>

@@ -1,7 +1,7 @@
 {
   "name": "deskbase",
   "productName": "Deskbase",
-  "version": "0.20.0",
+  "version": "0.20.1",
   "description": "Deskbase",
   "main": "./out/main/index.js",
   "author": "vptr-dev",
@@ -16,6 +16,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "test:widgets": "node scripts/test-widget-menus.cjs",
     "test:connections": "node scripts/test-connections.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "dist": "electron-vite build && electron-builder --win --publish never",

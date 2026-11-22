@@ -10,7 +10,7 @@ import type { ButtonAction } from '../types'
 
 export interface PanelButton { label?: string; action?: ButtonAction }
 export function CustomButton({ config }: { config: PanelButton }): JSX.Element {
-  return <button type="button" className="btn btn-primary panel-button" onClick={e => runButtonAction(config.action ?? defaultAction, e)}>{config.label?.trim() || 'Button'}</button>
+  return <button type="button" data-widget-action={config.label?.trim() || 'Run button'} className="btn btn-primary panel-button" onClick={e => runButtonAction(config.action ?? defaultAction, e)}>{config.label?.trim() || 'Button'}</button>
 }
 
 export function WishlistWidget({ pageId, setPage }: { pageId?: string; setPage: (id: string) => void }): JSX.Element {
@@ -35,8 +35,8 @@ export function TrackerWidget({ metricId, step = 1 }: { metricId?: string; step?
     <div><strong className="big">{value ?? 0}</strong> {metric.unit}</div>
     {metric.goal !== null && <div><Progress value={value === null || !metric.goal ? 0 : metric.direction === 'down' ? (value <= metric.goal ? 1 : metric.goal / value) : value / metric.goal} color={metric.color} /><span className="muted small">Daily goal {metric.goal} {metric.unit}</span></div>}
     <form className="row wrap gap-xs" onSubmit={e => { e.preventDefault(); if (entry.trim() && Number.isFinite(Number(entry))) { logMetric(metric.id, Number(entry)); setEntry('') } }}>
-      {metric.aggregate === 'sum' && <button type="button" className="btn btn-sm" onClick={() => logMetric(metric.id, step)}>+{step}</button>}
-      <input aria-label={'Log ' + metric.name} type="number" step="any" className="input input-sm grow" value={entry} placeholder={metric.unit || 'Amount'} onChange={e => setEntry(e.target.value)} />
+      {metric.aggregate === 'sum' && <button type="button" data-widget-action={'Log ' + step + ' ' + metric.unit} className="btn btn-sm" onClick={() => logMetric(metric.id, step)}>+{step}</button>}
+      <input data-widget-action="Log an amount" aria-label={'Log ' + metric.name} type="number" step="any" className="input input-sm grow" value={entry} placeholder={metric.unit || 'Amount'} onChange={e => setEntry(e.target.value)} />
       <button className="btn btn-primary btn-sm" disabled={!entry.trim()}>Log</button></form>
   </div>
 }

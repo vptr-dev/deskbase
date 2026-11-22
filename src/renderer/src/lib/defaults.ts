@@ -245,6 +245,7 @@ function normBlocks(list: any[]): Block[] {
     const out: Block = { ...b, id: typeof b.id === 'string' && b.id ? b.id : uid(), type: typeof b.type === 'string' ? b.type : 'p', text: typeof b.text === 'string' ? b.text : '' }
     if (out.iconColor !== undefined && !optionalColor(out.iconColor)) delete out.iconColor
     if (out.type === 'tool' && typeof out.ref !== 'string') delete out.ref
+    if (out.type === 'widget' && (!out.widgetSource || typeof out.widgetSource.id !== 'string' || (out.widgetSource.page !== null && typeof out.widgetSource.page !== 'string'))) delete out.widgetSource
     if (out.type === 'columns' || out.type === 'tabs') {
       const min = out.type === 'columns' ? 2 : 1
       const cols = Array.isArray(b.cols) ? b.cols.filter(Array.isArray).map((c: any[]) => normBlocks(c)) : []

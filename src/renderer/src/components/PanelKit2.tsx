@@ -483,9 +483,9 @@ export function StopwatchWidget({ cfg, setConfig }: { cfg: Cfg; setConfig: SetCo
     <div className={`pk pk-sw ${running ? 'running' : ''}`}>
       <button className="pk-sw-time" onClick={toggle} title={running ? 'Pause' : 'Start'}>{swText(elapsed, cfg.hundredths !== false)}</button>
       <div className="pk-sw-actions">
-        <button className="pk-sw-btn" onClick={toggle}>{running ? 'Pause' : elapsed ? 'Resume' : 'Start'}</button>
-        {cfg.laps !== false && <button className="pk-sw-btn" disabled={!running} onClick={() => setConfig('laps', [elapsed, ...laps].slice(0, 20))}>Lap</button>}
-        <button className="pk-sw-btn" disabled={!elapsed} onClick={() => { setConfig('startedAt', null); setConfig('elapsed', 0); setConfig('laps', []) }}>Reset</button>
+        <button data-widget-action={running ? 'Pause stopwatch' : 'Start stopwatch'} className="pk-sw-btn" onClick={toggle}>{running ? 'Pause' : elapsed ? 'Resume' : 'Start'}</button>
+        {cfg.laps !== false && <button data-widget-action="Record lap" className="pk-sw-btn" disabled={!running} onClick={() => setConfig('laps', [elapsed, ...laps].slice(0, 20))}>Lap</button>}
+        <button data-widget-action="Reset stopwatch" className="pk-sw-btn" disabled={!elapsed} onClick={() => { setConfig('startedAt', null); setConfig('elapsed', 0); setConfig('laps', []) }}>Reset</button>
       </div>
       {laps.length > 0 && cfg.showLaps !== false && (
         <div className="pk-sw-laps">{laps.map((l, i) => <div key={i}><span>Lap {laps.length - i}</span><span>{swText(l - (laps[i + 1] ?? 0), true)}</span></div>)}</div>
@@ -585,7 +585,7 @@ export function LauncherWidget({ cfg }: { cfg: Cfg }): JSX.Element {
   return (
     <div className={`pk pk-launch ${cfg.look ?? 'grid'} ${cfg.labels === false ? 'nolabel' : ''}`}>
       {items.map((it, i) => (
-        <button key={i} className="pk-launch-item" title={it.target} onClick={() => open(it.target)}>
+        <button key={i} data-widget-item={it.label || it.target} data-item-action="Launch shortcut" className="pk-launch-item" title={it.target} onClick={() => open(it.target)}>
           <span className="pk-launch-icon" style={it.icon ? undefined : { background: `hsl(${tileHue(it.label || it.target)} 55% 55% / 0.85)` }}>
             {it.icon ? <Icon name={it.icon} size={18} /> : (it.label || it.target).replace(/^https?:\/\/(www\.)?/, '').slice(0, 1).toUpperCase()}
           </span>
@@ -611,7 +611,7 @@ export function SearchWidget({ cfg }: { cfg: Cfg }): JSX.Element {
   return (
     <div className="pk pk-search">
       <Icon name="search" size={16} />
-      <input className="pk-search-input" value={q} placeholder={`Search ${engine.name}`} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') go() }} />
+      <input data-widget-action="Enter a search" className="pk-search-input" value={q} placeholder={`Search ${engine.name}`} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') go() }} />
     </div>
   )
 }
@@ -642,7 +642,7 @@ export function QuoteWidget({ cfg, setConfig }: { cfg: Cfg; setConfig: SetConfig
   const step = cfg.every === 'hour' ? Math.floor(now / 3600e3) : Math.floor((now - new Date().getTimezoneOffset() * 60e3) / 864e5)
   const idx = ((step + (Number(cfg.shift) || 0)) % list.length + list.length) % list.length
   return (
-    <button className={`pk pk-quote ${cfg.look ?? 'plain'}`} onClick={() => setConfig('shift', (Number(cfg.shift) || 0) + 1)} title="Next">
+    <button data-widget-action="Next quote" className={`pk pk-quote ${cfg.look ?? 'plain'}`} onClick={() => setConfig('shift', (Number(cfg.shift) || 0) + 1)} title="Next">
       {cfg.look === 'mark' && <Icon name="quote" size={22} className="pk-quote-mark" />}
       <span className="pk-quote-text">{list[idx]}</span>
     </button>

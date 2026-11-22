@@ -189,7 +189,7 @@ export function CalculatorWidget({ cfg, setConfig }: { cfg: Cfg; setConfig: (k: 
           <button key={i} className="pk-calc-line" title="Use this answer" onClick={() => setText(h.a.replace(/,/g, ''))}><span>{h.q}</span><b>{h.a}</b></button>
         ))}
       </div>
-      <input ref={input} className="pk-calc-input" value={text} placeholder="0" spellCheck={false}
+      <input data-widget-action="Enter calculation" ref={input} className="pk-calc-input" value={text} placeholder="0" spellCheck={false}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); done() } if (e.key === 'Escape') setText('') }} />
       <div className="pk-calc-answer">{text && value !== null && String(value) !== text ? '= ' + show(value) : ' '}</div>
@@ -197,9 +197,9 @@ export function CalculatorWidget({ cfg, setConfig }: { cfg: Cfg; setConfig: (k: 
         <div className="pk-calc-keys">
           {KEYS.map((k) => <button key={k} className={/[÷×−+%]/.test(k) ? 'op' : ''} onClick={() => press(k === '−' ? '-' : k)}>{k}</button>)}
           <button onClick={() => setText((t) => t.slice(0, -1))} title="Delete"><Icon name="left" size={14} /></button>
-          <button onClick={() => setText('')}>C</button>
+          <button data-widget-action="Clear calculation" onClick={() => setText('')}>C</button>
           <button onClick={() => press('(')}>(</button>
-          <button className="eq" onClick={done}>=</button>
+          <button data-widget-action="Evaluate calculation" className="eq" onClick={done}>=</button>
         </div>
       )}
     </div>
@@ -216,7 +216,7 @@ export function RecentWidget({ cfg }: { cfg: Cfg }): JSX.Element {
   const [, tick] = useState(0)
   useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 60000); return () => clearInterval(t) }, [])
   const row = (p: (typeof list)[number], star = false): JSX.Element => (
-    <button key={p.id} className="pk-recent-row" onClick={() => openPage(p.id)}>
+    <button data-widget-item={p.title} data-item-action="Go to page" key={p.id} className="pk-recent-row" onClick={() => openPage(p.id)}>
       <Glyph value={p.icon || typeInfo(p.type).icon} size={15} color={p.iconColor || undefined} />
       <span className="ellipsis">{p.title || 'Untitled'}</span>
       {star && <Icon name="star" size={12} className="pk-recent-star" />}

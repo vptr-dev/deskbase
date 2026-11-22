@@ -22,7 +22,7 @@ export interface DeskSpec {
   /** panels with the same group move together */
   group?: string | null
 }
-interface Entry { win: BrowserWindow; spec: DeskSpec; drag?: { mode: 'move' | 'resize'; sx: number; sy: number; start: Electron.Rectangle; mates: { e: Entry; start: Electron.Rectangle }[] } }
+interface Entry { interacting?: boolean; win: BrowserWindow; spec: DeskSpec; drag?: { mode: 'move' | 'resize'; sx: number; sy: number; start: Electron.Rectangle; mates: { e: Entry; start: Electron.Rectangle }[] } }
 
 const pending = new Map<string, DeskSpec>()
 const wins = new Map<string, Entry>()
@@ -145,7 +145,7 @@ function setFocus(win: BrowserWindow, on: boolean): void {
 
 function sendToBack(e: Entry): void {
   // While its menu is open a panel stays where it is, so the menu shows above other windows.
-  if (editing || menuOpen || e.win.isDestroyed()) return
+  if (editing || menuOpen || e.interacting || e.win.isDestroyed()) return
   try { nat()?.setWindowPos(hwnd(e.win), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOSIZE_NOMOVE_NOACTIVATE) } catch { /* ignore */ }
 }
 
@@ -332,6 +332,7 @@ function register(win: BrowserWindow, spec: DeskSpec): void {
   // Text fields and the right-click menu ask for focus (deskFocus) and give it back on blur.
   win.on('focus', () => setTimeout(() => sendToBack(e), 0))
   win.on('blur', () => {
+    e.interacting = false
     if (win.isDestroyed()) return
     if (!editing && !menuOpen) setFocus(win, false)
     sendToBack(e)
@@ -474,6 +475,7 @@ export function deskBounds(id: string): Electron.Rectangle | null {
 export function deskFocus(id: string): void {
   const e = wins.get(id)
   if (!e || e.win.isDestroyed()) return
+  e.interacting = true
   setFocus(e.win, true)
   e.win.focus()
   if (!e.win.isFocused()) {

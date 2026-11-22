@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { TaskReminder, TaskSnooze } from './TaskTiming'
 import { TaskRepeatEditor } from './TaskRepeatEditor'
 import { parseQuickAdd } from '../lib/quickAdd'
-import { useMemo, useState } from 'react'
+import { WidgetItemMenu } from './widgetActionContext'
+import { useContext, useId, useMemo, useState } from 'react'
 import { act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
 import { ScheduleFields, firstScheduledDate } from './ScheduleFields'
 import type { CustomRepeat, Task } from '../types'
@@ -18,15 +19,16 @@ export const PRIORITY = [
   { v: 3, label: 'High', color: '#ff453a' }
 ] as const
 
-export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', autoFocus, onAdded, onEscape, schedulePicker }: { schedulePicker?: boolean; pageId: string; defaults?: Partial<Task>; placeholder?: string; autoFocus?: boolean; onAdded?: (id: string) => void; onEscape?: () => void }): JSX.Element {
-  const [v, setV] = useState('')
+export function QuickAdd({ pageId, initialTitle, submitButton, resolvePage, defaults = {}, placeholder = 'Add a task', autoFocus, onAdded, onEscape, schedulePicker }: { initialTitle?: string; submitButton?: boolean; resolvePage?: () => string; schedulePicker?: boolean; pageId: string; defaults?: Partial<Task>; placeholder?: string; autoFocus?: boolean; onAdded?: (id: string) => void; onEscape?: () => void }): JSX.Element {
+  const scheduleId = useId()
+  const [v, setV] = useState(initialTitle ?? '')
   const weekStart = useData(d => d.settings.weekStart)
   const [schedule, setSchedule] = useState<CustomRepeat | null>(null)
   const first = schedule ? firstScheduledDate(schedule) : null
   const parsed = useMemo(() => (v.trim() ? parseQuickAdd(v, weekStart, defaults.due, !schedule) : null), [v, weekStart, defaults.due, schedule])
   const submit = (): void => {
     if (!parsed?.title || (schedule && !first)) return
-    const id = addTask(pageId, {
+    const id = addTask(resolvePage?.() ?? pageId, {
       ...defaults,
       title: parsed.title,
       due: first ?? parsed.due ?? defaults.due ?? null,
@@ -52,12 +54,13 @@ export function QuickAdd({ pageId, defaults = {}, placeholder = 'Add a task', au
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { if (!v && onEscape) onEscape(); else setV('') } }}
       />
+      {submitButton && <button type="button" className="btn btn-primary btn-sm" disabled={!parsed?.title || (!!schedule && !first)} onClick={submit}>Add</button>}
       {schedulePicker && <button type="button" className="icon-btn" title="Repeat schedule" aria-label="Repeat schedule" aria-pressed={!!schedule} onClick={() => {
         const start = defaults.due || today()
         setSchedule(schedule ? null : { unit: 'week', interval: 1, start, days: [new Date(start + 'T12:00:00').getDay()], weekStart })
       }}><Icon name="repeat" size={15} /></button>}
     </div>
-    {schedule && <div className="panel-repeat"><ScheduleFields id={'new-' + pageId} draft={schedule} onChange={setSchedule} />
+    {schedule && <div className="panel-repeat"><ScheduleFields id={scheduleId} draft={schedule} onChange={setSchedule} />
       <Button small kind="primary" disabled={!first || !parsed?.title} onClick={submit}>Add repeating task</Button></div>}</>
   )
 }
@@ -67,6 +70,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
   task: Task; showPage?: boolean; onOpen: (id: string) => void; draggable?: boolean; onDragStart?: () => void; onDropOn?: () => void
   selected?: boolean; onSelect?: (id: string, range: boolean) => void
 }): JSX.Element {
+  const widgetMenu = useContext(WidgetItemMenu)
   const pageTitle = useData((d) => (showPage ? d.pages[task.pageId]?.title : ''))
   const goalTitle = useData((d) => (task.goalId ? d.goals[task.goalId]?.title : ''))
   const use24h = useData((d) => d.settings.use24h)
@@ -100,7 +104,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
       onDragOver={(e) => { if (onDropOn) { e.preventDefault(); setOver(true) } }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); onDropOn?.() }}
-      onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }) }}
+      onContextMenu={(e) => { if (widgetMenu) { widgetMenu(e, task.title, menuItems); return }; e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY }) }}
     >
       {menu && <Popover anchor={menu} onClose={() => setMenu(null)}><div onClick={(e) => e.stopPropagation()}><Menu items={menuItems} onClose={() => setMenu(null)} /></div></Popover>}
       <Checkbox checked={task.done} onChange={(v) => setTaskDone(task.id, v)} round color={task.iconColor ?? (task.priority ? PRIORITY[task.priority].color : undefined)} />

@@ -20,8 +20,8 @@ export function Button({ children, onClick, kind = 'default', icon, title, disab
 }
 
 /** Floating popover anchored to an element or a point. Closes on outside click / Esc. */
-export function Popover({ anchor, onClose, children, align = 'start', width }: {
-  anchor: Element | { x: number; y: number } | null; onClose: () => void; children: ReactNode; align?: 'start' | 'end'; width?: number
+export function Popover({ anchor, onClose, children, align = 'start', width, className, style, theme }: {
+  anchor: Element | { x: number; y: number } | null; onClose: () => void; children: ReactNode; align?: 'start' | 'end'; width?: number; className?: string; style?: React.CSSProperties; theme?: string
 }): JSX.Element | null {
   const ref = useRef<HTMLDivElement>(null)
   const doc = useDoc()
@@ -56,7 +56,7 @@ export function Popover({ anchor, onClose, children, align = 'start', width }: {
   }, [onClose, doc])
   if (!anchor) return null
   return createPortal(
-    <div ref={ref} className="popover glass" style={{ left: pos.left, top: pos.top, width, transformOrigin: pos.origin }} onMouseDown={(e) => e.stopPropagation()}>
+    <div ref={ref} className={["popover glass", className].filter(Boolean).join(" ")} data-theme={theme} style={{ ...style, left: pos.left, top: pos.top, width, transformOrigin: pos.origin }} onMouseDown={(e) => e.stopPropagation()}>
       {children}
     </div>,
     doc.body

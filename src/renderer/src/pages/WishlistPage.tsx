@@ -40,11 +40,11 @@ export function WishlistPage({ page, compact = false }: { page: Page; compact?: 
       <span>{bought ? 'Spent' : 'Planned'} <b className="fg">{money(visible.reduce((n, item) => n + (item.cost ?? 0), 0))}</b></span>
       {list.budget !== null && <span>Remaining <b className="fg">{money(list.budget - spent)}</b></span>}</div>}
     <form className="purchase-add" onSubmit={add}>
-      <input aria-label="Item name" className="input input-sm" placeholder="Item name" value={name} onChange={e => setName(e.target.value)} />
+      <input data-widget-action={bought ? 'Add purchase' : 'Add wishlist item'} aria-label="Item name" className="input input-sm" placeholder="Item name" value={name} onChange={e => setName(e.target.value)} />
       <input aria-label="Price" className="input input-sm" type="number" min="0" step="any" placeholder="Price" value={cost} onChange={e => setCost(e.target.value)} />
       <button type="submit" className="btn btn-primary btn-sm" disabled={!name.trim()}>Add</button></form>
-    <div className="purchase-items">{visible.map(item => <div key={item.id} className="purchase-item">
-      <button className="icon-btn" title={bought ? 'Move to wishlist' : 'Mark purchased'} aria-label={(bought ? 'Move to wishlist: ' : 'Mark purchased: ') + item.name} onClick={() => change(data => {
+    <div className="purchase-items">{visible.map(item => <div key={item.id} data-widget-item={item.name} className="purchase-item">
+      <button data-item-action={bought ? 'Move to wishlist' : 'Mark purchased'} className="icon-btn" title={bought ? 'Move to wishlist' : 'Mark purchased'} aria-label={(bought ? 'Move to wishlist: ' : 'Mark purchased: ') + item.name} onClick={() => change(data => {
         const row = data.items.find(x => x.id === item.id); if (row) { row.purchased = !row.purchased; row.purchasedOn = row.purchased ? today() : undefined }
       })}><Icon name={bought ? 'square-check-big' : 'square'} size={16} /></button>
       <span className="grow">{item.name}{bought && item.purchasedOn && <small className="purchase-date muted">{item.purchasedOn}</small>}</span>{item.cost !== null && <span className="small">{money(item.cost)}</span>}

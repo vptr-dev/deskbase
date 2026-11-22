@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.20.1 - 2026-11-22
+
+- Replaced the native panel menu with a scrollable, themed action menu for desktop panels, dashboard cards and live widget embeds.
+- Locked panels keep item actions, task entry and timer controls. The task form can create the first planner when needed.
+- Added connection refresh, item-to-task capture, saved bookmarks and linked widget blocks in documents.
+
 ## 0.20.0 - 2026-11-22
 
 - Added named task planners, saved views with panel support, linked or fresh layout templates, and multi-step buttons with grouped undo.

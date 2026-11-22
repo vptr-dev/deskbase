@@ -44,11 +44,13 @@ export type BlockType =
   | 'tabs'
   | 'database'
   | 'tool'
+  | 'widget'
 
 export interface Block {
   id: string
   type: BlockType
   text: string
+  widgetSource?: { page: string | null; id: string }
   checked?: boolean
   open?: boolean
   body?: string
