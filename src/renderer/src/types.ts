@@ -11,6 +11,7 @@ export type PageType =
   | 'focus'
   | 'tracker'
   | 'wishlist'
+  | 'list' | 'study' | 'reading' | 'workout'
   | 'review'
   | 'database'
   | 'dashboard'
@@ -93,10 +94,17 @@ export interface ButtonAction {
   title?: string
 }
 
-export interface WishItem { id: string; name: string; cost: number | null; purchased: boolean; purchasedOn?: string }
+export interface WishItem { id: string; name: string; cost: number | null; purchased: boolean; purchasedOn?: string; category?: string; priority?: 'high' | 'medium' | 'low'; url?: string; image?: string }
 export interface PurchaseList { items: WishItem[]; budget: number | null; currency: string }
 
+export interface ListEntry { id: string; name: string; done: number; target: number; unit: string }
+export interface WorkoutSet { id:string; date:string; exercise:string; sets:number; reps:number; weight:number; unit:string }
+export interface StudyCard { id: string; question: string; answer: string; due: string; interval: number }
 export interface Page {
+  accent?: string
+  workouts?: WorkoutSet[]
+  entries?: ListEntry[]
+  cards?: StudyCard[]
   wishlist?: PurchaseList
   id: string
   title: string
@@ -186,7 +194,7 @@ export type WidgetType =
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
   | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
   | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'launcher' | 'search' | 'quote' | 'battery'
-  | 'tracker' | 'wishlist' | 'button'
+  | 'tracker' | 'wishlist' | 'button' | 'list' | 'study' | 'reading' | 'workout'
   | 'network' | 'calculator' | 'recent' | 'dbchart' | 'activity' | 'deadlines' | 'events' | 'feed' | 'github' | 'mail' | 'todoist' | 'media'
 export interface Widget {
   id: string
@@ -261,6 +269,7 @@ export interface DeskWidget {
 }
 /** A workspace: its own set of panels on the screen. Pages are shared by all workspaces. */
 export interface DeskSpace {
+  switchAt?: string
   iconColor?: string
   id: string
   name: string
@@ -385,6 +394,7 @@ export type StatKey = 'str' | 'int' | 'wis' | 'cha' | 'vit' | 'cre'
 export interface Subtask { id: string; title: string; done: boolean }
 
 export interface Task {
+  blockedBy?: string
   textColor?: string
   iconColor?: string
   id: string
@@ -502,6 +512,8 @@ export interface FocusSession {
 /** A place for weather and daylight. */
 export interface Place { name: string; lat: number; lon: number }
 export interface Settings {
+  searchKey?: string
+  quickAddKey?: string
   theme: 'system' | 'light' | 'dark'
   /** where weather and daylight panels look, unless a panel picks its own place */
   place: Place | null

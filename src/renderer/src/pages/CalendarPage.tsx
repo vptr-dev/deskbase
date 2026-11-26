@@ -1,5 +1,5 @@
 import { calendarOptions, CalendarPreferences, type CalendarOptions } from './CalendarPreferences'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Glyph, Icon } from '../components/Icon'
 import { useData, getData, updateTask, updatePage } from '../store'
 import type { Task } from '../types'
@@ -53,7 +53,8 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
   const saveOptions = (calendar: CalendarOptions): void => updatePage(pageId, p => {
     p.view = { ...p.view, calendar }
   })
-  const [cursor, setCursor] = useState(today())
+  const initial=useData(d=>d.pages[pageId]?.view?.calendarDay) as string|undefined
+  const [cursor, setCursor] = useState(initial||today())
   const mode: 'month' | 'week' | 'agenda' = useData((d) => d.pages[pageId]?.view?.mode ?? 'month')
   const setMode = (m: 'month' | 'week' | 'agenda'): void => updatePage(pageId, (p) => { p.view = { ...(p.view ?? {}), mode: m } })
   const [dropOn, setDropOn] = useState<string | null>(null)
@@ -67,13 +68,16 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
       if (id && getData().tasks[id]) { updateTask(id, (t) => { t.due = k }); setSelected(k) }
     }
   })
-  const [picked, setSelected] = useState(today())
+  const [picked, setSelected] = useState(initial||today())
+  useEffect(()=>{if(initial){setCursor(initial);setSelected(initial)}},[initial])
   const selected = addDays(picked, Math.min(...options.weekdays.map(day => (day - parseDay(picked).getDay() + 7) % 7)))
   const events = useCalendarEvents()
+  const countdowns=useData(d=>d.countdowns)
   const evBy = useMemo(() => {
-    if (!options.events) return {}
-    return Object.fromEntries(Object.entries(eventsByDay(events)).filter(([day]) => options.weekdays.includes(parseDay(day).getDay())))
-  }, [events, options])
+    const years=[Number(cursor.slice(0,4))-1,Number(cursor.slice(0,4)),Number(cursor.slice(0,4))+1]
+    const local:CalEvent[]=countdowns.flatMap(c=>(c.yearly?years.map(y=>y+c.date.slice(4)):[c.date]).filter(Boolean).map(date=>({id:c.id,title:c.title,start:date,color:c.color,conn:'countdown',connName:'Countdown',allDay:true,at:parseDay(date).getTime()})))
+    return Object.fromEntries(Object.entries(eventsByDay([...(options.events?events:[]),...local])).filter(([day]) => options.weekdays.includes(parseDay(day).getDay())))
+  }, [events, options,countdowns,cursor])
   const [, openTask, drawer] = useTaskDrawer()
 
   const byDay = useMemo(() => {

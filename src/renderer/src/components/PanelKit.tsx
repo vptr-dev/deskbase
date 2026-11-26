@@ -1,3 +1,4 @@
+import { useWidgetData } from '../lib/widgetScope'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { openPage, setSettings, updatePage, useData } from '../store'
 import type { Block, Place } from '../types'
@@ -527,10 +528,10 @@ export function TableWidget({ cfg, block }: { cfg: Cfg; block: Block | undefined
 
 // ---------- month with today's list ----------
 export function MonthWidget({ cfg }: { cfg: Cfg }): JSX.Element {
-  const weekStart = useData((d) => d.settings.weekStart)
-  const tasks = useData((d) => d.tasks)
-  const pages = useData((d) => d.pages)
-  const use24h = useData((d) => d.settings.use24h)
+  const weekStart = useWidgetData((d) => d.settings.weekStart)
+  const tasks = useWidgetData((d) => d.tasks)
+  const pages = useWidgetData((d) => d.pages)
+  const use24h = useWidgetData((d) => d.settings.use24h)
   const t = today()
   const ym = t.slice(0, 7)
   const start = weekStartOf(`${ym}-01`, weekStart)

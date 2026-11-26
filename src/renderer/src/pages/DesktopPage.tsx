@@ -1,3 +1,4 @@
+import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../../../shared/panelBounds'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PanelTemplates } from '../components/PanelTemplates'
 import { act, getData, useData } from '../store'
@@ -67,7 +68,7 @@ function ScreenMap({ widgets, displays, selected, onSelect }: { widgets: DeskWid
       const dy = Math.round((ev.clientY - sy) / k / 8) * 8
       patchDesk(w.id, (x) => {
         if (mode === 'move') { x.x = start.x + dx; x.y = start.y + dy; x.w = start.width; x.h = start.height }
-        else { x.x = start.x; x.y = start.y; x.w = Math.max(120, start.width + dx); x.h = Math.max(64, start.height + dy) }
+        else { x.x = start.x; x.y = start.y; x.w = Math.max(MIN_PANEL_WIDTH, start.width + dx); x.h = Math.max(MIN_PANEL_HEIGHT, start.height + dy) }
       }, 'deskmap:' + w.id)
     }
     const up = (): void => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up) }
@@ -122,6 +123,7 @@ function Preview({ w, st, patch, max = 300 }: { w: DeskWidget; st: WidgetStyle; 
 function ContentFields({ w, patch }: { w: DeskWidget; patch: Patch }): JSX.Element {
   return <>
     <TitleField w={w} setTitle={(t) => patch((x) => { x.title = t }, 'dtitle:' + w.id)} />
+    <Field label="Show in every workspace"><Toggle checked={!!w.config.pinnedEverywhere} onChange={v=>patch(x=>{x.config.pinnedEverywhere=v})}/></Field>
     <WidgetConfigFields w={w} set={(k, v) => patch((x) => { x.config[k] = v }, 'dcfg:' + w.id + k)} patch={(fn) => patch(fn as (x: DeskWidget) => void)} />
   </>
 }
@@ -146,7 +148,7 @@ function PlaceFields({ w, displays }: { w: DeskWidget; displays: DisplayInfo[] }
   const set = (k: string, v: any): void => patchDesk(w.id, (x) => { x.config[k] = v }, 'dcfg:' + w.id + k)
   const num = (k: 'x' | 'y' | 'w' | 'h', v: number): void => patchDesk(w.id, (x) => {
     if (x.w <= 0 || x.h <= 0) { x.x = r.x; x.y = r.y; x.w = r.width; x.h = r.height }
-    x[k] = k === 'w' ? Math.max(120, v) : k === 'h' ? Math.max(64, v) : v
+    x[k] = k === 'w' ? Math.max(MIN_PANEL_WIDTH, v) : k === 'h' ? Math.max(MIN_PANEL_HEIGHT, v) : v
   }, 'dnum:' + w.id + k)
   return (
     <div className="form-grid">
@@ -345,7 +347,7 @@ export function DesktopPage(): JSX.Element {
   const displays = useDisplays()
   const adding = useDesk((s) => !!s.adding)
   const setAdding = (v: boolean): void => useDesk.setState({ adding: v })
-  const panels = desk.widgets.filter((w) => w.space === desk.active)
+  const panels = desk.widgets.filter((w) => (w.space === desk.active || w.config.pinnedEverywhere))
   useEffect(() => {
     const key = (e: KeyboardEvent): void => {
       const t = e.target as HTMLElement
@@ -367,7 +369,7 @@ export function DesktopPage(): JSX.Element {
           <button key={s.id} className={`space-tab ${s.id === desk.active ? 'active' : ''}`} onClick={() => switchSpace(s.id)}>
             {s.icon && <Glyph value={s.icon} color={s.iconColor} size={14} />}
             <span>{s.name}</span>
-            <span className="space-tab-count">{desk.widgets.filter((w) => w.space === s.id && !w.hidden).length}</span>
+            <span className="space-tab-count">{desk.widgets.filter((w) => (w.space === s.id || w.config.pinnedEverywhere) && !w.hidden).length}</span>
           </button>
         ))}
         <button className="space-tab add" title="New workspace" onClick={() => addSpace(false)}><Icon name="plus" size={14} /></button>
@@ -375,8 +377,9 @@ export function DesktopPage(): JSX.Element {
       <div className="desk-toolbar">
         <Button kind="primary" small icon="plus" onClick={() => setAdding(true)}>Add panel</Button>
         <PanelTemplates />
+        <label className="row small gap-xs">Switch here daily at <input className="input input-sm" type="time" value={desk.spaces.find(s=>s.id===desk.active)?.switchAt??''} onChange={e=>act(d=>{const s=d.desktop.spaces.find(x=>x.id===d.desktop.active);if(s)s.switchAt=e.target.value||undefined})}/></label>
         {panels.some(w => w.locked) && <Button small icon="unlock" onClick={() => act(d => {
-          for (const panel of d.desktop.widgets) if (panel.space === d.desktop.active) panel.locked = false
+          for (const panel of d.desktop.widgets) if (panel.space === d.desktop.active || panel.config.pinnedEverywhere) panel.locked = false
         })}>Unlock panels</Button>}
         {isDesktop && <Button small kind={editing ? 'primary' : 'default'} icon={editing ? 'check' : 'move'} onClick={() => setDeskEditing(!editing)}>{editing ? 'Done arranging' : 'Arrange on desktop'}</Button>}
         <div className="spacer" />

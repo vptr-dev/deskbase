@@ -11,11 +11,13 @@ if (!process.versions.electron) {
   try {
     const env = { ...process.env, DESKBASE_WIDGET_QA: profile, APPDATA: profile, LOCALAPPDATA: profile }
     delete env.ELECTRON_RUN_AS_NODE
-    const result = spawnSync(require('electron'), [__filename, '--hidden', '--disable-gpu', '--user-data-dir=' + profile], {
-      env, stdio: 'inherit', windowsHide: true, timeout: 105000
-    })
-    if (result.error) throw result.error
-    assert.equal(result.status, 0, 'Electron widget checks failed')
+    for (const phase of ['create','restore']) {
+      const result = spawnSync(require('electron'), [__filename,'--hidden','--disable-gpu','--user-data-dir='+profile], {
+        env:{...env,DESKBASE_QA_PHASE:phase}, stdio:'inherit',windowsHide:true,timeout:105000
+      })
+      if(result.error)throw result.error
+      assert.equal(result.status,0,'Electron checks failed during '+phase)
+    }
   } finally {
     fs.rmSync(profile, { recursive: true, force: true, maxRetries: 4, retryDelay: 150 })
   }
@@ -51,14 +53,20 @@ if (!process.versions.electron) {
   }
   async function choose(win, label) {
     const code = '[...document.querySelectorAll(".widget-action-popover button")].find(b => b.innerText.trim() === ' + JSON.stringify(label) + ').click()'
-    await evaluate(win, code)
+    try {await evaluate(win,code)} catch(error) {
+      console.error('Available actions:',await evaluate(win,'[...document.querySelectorAll(".widget-action-popover button")].map(b=>b.textContent)'));throw error
+    }
   }
   async function createPanel(main, type, config) {
     const before = new Set(BrowserWindow.getAllWindows().map(w => w.id))
     const id = await evaluate(main, '__desk.addDesktopWidget(' + JSON.stringify(type) + ',' + JSON.stringify({
       config, x: 32, y: 32, w: 300, h: 220
     }) + ')')
-    const win = await waitFor(type + ' window', () => BrowserWindow.getAllWindows().find(w => !before.has(w.id)))
+    const win = await waitFor(type + ' window', async () => {
+      for(const candidate of BrowserWindow.getAllWindows().filter(w=>!before.has(w.id))){
+        if(await evaluate(candidate,'!!document.querySelector(".dw.wt-'+type+'")'))return candidate
+      }
+    })
     await waitFor(type + ' window to be visible', () => win.isVisible())
     await waitFor(type + ' content', () => evaluate(win, '!!document.querySelector(".dw")'))
     return { id, win }
@@ -69,6 +77,16 @@ if (!process.versions.electron) {
     await waitFor('app startup', () => evaluate(main, '!!window.__desk'))
     assert.equal(path.dirname(app.getPath('userData')), path.join(profile, 'appData'))
 
+    const expected={x:52,y:70,width:103,height:83}
+    if(process.env.DESKBASE_QA_PHASE==='restore'){
+      const restored=await waitFor('saved size probe',()=>evaluate(main,'__desk.getData().desktop.widgets.find(w=>w.title==="Size probe")'))
+      assert.deepEqual({x:restored.x,y:restored.y,width:restored.w,height:restored.h},expected)
+      await waitFor('actual bounds after restart',async()=>{
+        const b=await evaluate(main,'__desk.api.desk.bounds('+JSON.stringify(restored.id)+')')
+        return b&&Object.keys(expected).every(k=>b[k]===expected[k])
+      })
+      console.log('Saved and native bounds match after a second Electron launch.');return
+    }
     const tasks = await createPanel(main, 'tasks', { filter: 'all', quickAdd: false })
     await rightClick(tasks.win, '.dw')
     await choose(tasks.win, 'Lock panel')
@@ -102,6 +120,12 @@ if (!process.versions.electron) {
     await choose(timer.win, 'Reset timer')
     await waitFor('reset timer', () => evaluate(main, '__desk.getData().desktop.widgets.find(w => w.id === ' + JSON.stringify(timer.id) + ').config.endsAt === null'))
     console.log('Locked timer reset passed.')
+    const probe=await evaluate(main,'__desk.addDesktopWidget("note",{title:"Size probe",x:52,y:70,w:103,h:83})')
+    await waitFor('actual bounds before restart',async()=>{
+      const b=await evaluate(main,'__desk.api.desk.bounds('+JSON.stringify(probe)+')')
+      return b&&Object.keys(expected).every(k=>b[k]===expected[k])
+    })
+    await evaluate(main,'__desk.api.save(__desk.getData())')
   }
   test().then(() => app.exit(0)).catch(error => {
     console.error(error)

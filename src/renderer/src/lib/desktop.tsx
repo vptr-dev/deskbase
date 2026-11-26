@@ -91,7 +91,7 @@ export function setDeskEditing(on: boolean): void {
 export const findDesk = (id: string): DeskWidget | undefined => getData().desktop.widgets.find((w) => w.id === id)
 
 /** Panels of the workspace on screen. */
-export const activePanels = (d = getData().desktop): DeskWidget[] => d.widgets.filter((w) => w.space === d.active)
+export const activePanels = (d = getData().desktop): DeskWidget[] => d.widgets.filter((w) => (w.space === d.active || w.config.pinnedEverywhere))
 
 export function switchSpace(id: string): void {
   const d = getData().desktop
@@ -106,7 +106,7 @@ export function addSpace(copyCurrent = false): string {
     const n = x.desktop.spaces.length + 1
     x.desktop.spaces.push({ id, name: `Workspace ${n}`, icon: 'layout' })
     if (copyCurrent) {
-      for (const w of x.desktop.widgets.filter((w) => w.space === x.desktop.active)) {
+      for (const w of x.desktop.widgets.filter((w) => w.space === x.desktop.active && !w.config.pinnedEverywhere)) {
         x.desktop.widgets.push({ ...JSON.parse(JSON.stringify(w)), id: uid(), space: id, createdAt: Date.now() })
       }
     }
@@ -121,6 +121,7 @@ export function removeSpace(id: string): void {
   const name = d.spaces.find((s) => s.id === id)?.name ?? 'Workspace'
   act((x) => {
     x.desktop.spaces = x.desktop.spaces.filter((s) => s.id !== id)
+    for(const w of x.desktop.widgets)if(w.space===id&&w.config.pinnedEverywhere)w.space=x.desktop.spaces[0].id
     x.desktop.widgets = x.desktop.widgets.filter((w) => w.space !== id)
     if (x.desktop.active === id) x.desktop.active = x.desktop.spaces[0].id
   })
@@ -533,6 +534,17 @@ async function reconcile(): Promise<void> {
 /** Starts the desktop widgets for this session. Call once after the data has loaded. */
 export function startDesktop(): () => void {
   if (!isDesktop) return () => {}
+  let lastSlot=''
+  const schedule=():void=>{
+    const now=new Date(), time=[now.getHours(),now.getMinutes()].map(n=>String(n).padStart(2,'0')).join(':')
+    const slot=now.toDateString()+time
+    if(slot===lastSlot)return
+    lastSlot=slot
+    const dest=getData().desktop.spaces.find(s=>s.switchAt===time)
+    if(dest)switchSpace(dest.id)
+  }
+  schedule()
+  const scheduleTimer=setInterval(schedule,15000)
   watchHost()
   reconcile()
   let wallTimer: ReturnType<typeof setInterval> | null = null
@@ -567,7 +579,7 @@ export function startDesktop(): () => void {
   const offCmd = api.desk.onCommand((id, cmd) => runCommand(id, cmd))
   const onUnload = (): void => { for (const id of [...open.keys()]) closeWidget(id) }
   window.addEventListener('beforeunload', onUnload)
-  return () => { unsub(); offClosed(); offCmd(); offWall(); if (wallTimer) clearInterval(wallTimer); window.removeEventListener('beforeunload', onUnload) }
+  return () => { clearInterval(scheduleTimer); unsub(); offClosed(); offCmd(); offWall(); if (wallTimer) clearInterval(wallTimer); window.removeEventListener('beforeunload', onUnload) }
 }
 
 /** Current on-screen bounds of a widget (after the user moved it). */

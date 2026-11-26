@@ -1,3 +1,4 @@
+import { useWidgetData } from '../lib/widgetScope'
 // Panels: a chart of a database, an activity heatmap, and upcoming deadlines.
 import { openPage, useData } from '../store'
 import type { AppData } from '../types'
@@ -36,8 +37,8 @@ function activity(d: AppData, source: string): Map<string, number> {
 }
 
 export function ActivityWidget({ cfg }: { cfg: Cfg }): JSX.Element {
-  const d = useData((x) => x)
-  const weekStart = useData((x) => x.settings.weekStart)
+  const d = useWidgetData((x) => x)
+  const weekStart = useWidgetData((x) => x.settings.weekStart)
   const weeks = Number(cfg.weeks) || 20
   const source = cfg.source ?? 'all'
   const m = activity(d, source)
@@ -78,7 +79,7 @@ export function ActivityWidget({ cfg }: { cfg: Cfg }): JSX.Element {
 interface Due { key: string; title: string; date: string; kind: 'task' | 'row' | 'countdown'; open?: () => void }
 
 export function DeadlinesWidget({ cfg }: { cfg: Cfg }): JSX.Element {
-  const d = useData((x) => x)
+  const d = useWidgetData((x) => x)
   const t = today()
   const within = Number(cfg.days) || 60
   const limit = addDays(t, within)

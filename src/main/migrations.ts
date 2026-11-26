@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 21
+export const CURRENT_SCHEMA = 22
 
 type Raw = Record<string, any>
 
@@ -244,6 +244,9 @@ migrations[19] = d => d
 
 // 20 -> 21: optional appearance colors, wishlist pages and additional panel/button actions.
 migrations[20] = d => d
+
+// Named tracker sources and optional page tools are initialized by the renderer.
+migrations[21] = d => d
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

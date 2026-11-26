@@ -5,6 +5,8 @@ const api = {
   load: () => ipcRenderer.invoke('data:load'),
   save: (data: unknown) => ipcRenderer.invoke('data:save', data),
   saveSync: (data: unknown) => ipcRenderer.sendSync('data:saveSync', data),
+  vaultStatus:()=>ipcRenderer.invoke('vault:status'),
+  vaultChange:(p:string,a:string)=>ipcRenderer.invoke('vault:change',p,a),
   exportFile: (text: string, name: string) => ipcRenderer.invoke('data:export', text, name),
   importFile: () => ipcRenderer.invoke('data:import'),
   listBackups: () => ipcRenderer.invoke('backups:list'),
@@ -67,7 +69,7 @@ const api = {
       return () => ipcRenderer.removeListener('desk:command', fn)
     }
   },
-  setShell: (p: { closeToTray?: boolean; quickAddHotkey?: boolean }) => ipcRenderer.invoke('app:setShell', p),
+  setShell: (p: { closeToTray?: boolean; quickAddHotkey?: boolean; quickAddKey?:string }) => ipcRenderer.invoke('app:setShell', p),
   quickAddDone: (added: boolean) => ipcRenderer.invoke('app:quickAddDone', added),
   onQuickAdd: (cb: () => void) => {
     const fn = (): void => cb()

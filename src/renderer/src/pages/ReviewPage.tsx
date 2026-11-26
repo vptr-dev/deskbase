@@ -5,6 +5,7 @@ import { DAYS_SHORT, addDays, dayKey, formatMinutes, friendlyDay, parseDay, toda
 import { AutoText, BarChart, Stat } from '../components/ui'
 import { Glyph, Icon } from '../components/Icon'
 import { MOOD_NAMES } from './JournalPage'
+import { api } from '../lib/api'
 import { formatValue } from '../lib/values'
 
 const shortDate = (k: string): string => parseDay(k).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
@@ -56,20 +57,27 @@ export function ReviewPage({ pageId }: { pageId: string }): JSX.Element {
     }
   }, [d, from])
 
+  const previous=Object.values(d.tasks).filter(t=>t.done&&inRange(t.doneAt,addDays(from,-7),from)).length
+  const year=from.slice(0,4)
+  const annual=Object.values(d.tasks).filter(t=>t.done&&inRange(t.doneAt,year+'-01-01',(Number(year)+1)+'-01-01')).length
+  const yearFocus=d.focus.filter(f=>f.kind==='focus'&&inRange(f.start,year+'-01-01',(Number(year)+1)+'-01-01')).reduce((sum,f)=>sum+f.minutes,0)
+  const report=['# Weekly review '+from,'','Tasks completed: '+s.done.length+' (previous week: '+previous+')','Focus: '+formatMinutes(s.focus),'Journal entries: '+s.entries,'',...s.done.map(t=>'- [x] '+t.title),'',notes[from]??''].join('\n')
   return (
     <div className="review-page">
       <div className="toolbar">
         <button className="icon-btn" title="Previous week" onClick={() => setFrom(addDays(from, -7))}><Icon name="left" size={15} /></button>
         <span className="strong">{shortDate(from)} – {shortDate(addDays(to, -1))}</span>
         <button className="icon-btn" title="Next week" disabled={isCurrent} onClick={() => setFrom(addDays(from, 7))}><Icon name="right" size={15} /></button>
+        <button className="link small" onClick={()=>api.exportFile(report,"Review-"+from+".md")}>Export week</button>
         {!isCurrent && <button className="link small" onClick={() => setFrom(weekStartOf(today(), weekStart))}>This week</button>}
       </div>
       <div className="stat-row">
-        <Stat label="Tasks done" value={s.done.length} />
+        <Stat label="Tasks done" value={s.done.length} sub={previous+" last week"} />
         <Stat label="Habits" value={s.habitRate === null ? '–' : `${Math.round(s.habitRate * 100)}%`} />
         <Stat label="Focus" value={s.focus ? formatMinutes(Math.round(s.focus)) : '0m'} />
         <Stat label="Journal" value={s.entries} sub={s.mood ? `mood: ${(MOOD_NAMES[Math.round(s.mood)] ?? '').toLowerCase()}` : undefined} />
       </div>
+      <details className="panel glass"><summary>{year} in review</summary><p>{annual} completed tasks · {formatMinutes(yearFocus)} focused</p></details>
       <div className="review-grid">
         <section className="panel glass">
           <div className="panel-head"><h3>Completed per day</h3></div>

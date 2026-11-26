@@ -3,6 +3,7 @@ import { act, boot, createPage, duplicatePage, flushSave, toast, getData, isView
 import { api } from './lib/api'
 import { COVERS, coverStyle, typeInfo } from './lib/defaults'
 import { pickImageData } from './lib/image'
+import { WorkspacePassword } from './components/WorkspacePassword'
 import { exportPageMarkdown } from './lib/exporters'
 import { MovePageDialog } from './components/MovePage'
 import { habitWeek } from './lib/habits'
@@ -161,7 +162,7 @@ function PageView({ id }: { id: string }): JSX.Element | null {
   const info = typeInfo(page.type)
   const showNotes = page.type !== 'doc' && page.view?.notes
   return (
-    <div className={`page ${page.fullWidth || ['calendar', 'board', 'project', 'database', 'dashboard'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
+    <div style={page.accent ? { "--accent":page.accent, "--accent-ink":page.accent } as React.CSSProperties : undefined} className={`page ${page.fullWidth || ['calendar', 'board', 'project', 'database', 'dashboard'].includes(page.type) ? 'full' : ''} page-${page.type} ${page.cover ? 'page-has-cover' : ''}`}>
       <PageCover page={page} />
       <div className="page-top">
       <PageAdds page={page} />
@@ -251,7 +252,7 @@ function useAppearance(): void {
     return () => mq.removeEventListener('change', fn)
   }, [])
   useEffect(() => { api.setTheme(s.theme) }, [s.theme])
-  useEffect(() => { api.setShell({ closeToTray: s.closeToTray, quickAddHotkey: s.quickAddHotkey }).catch(() => {}) }, [s.closeToTray, s.quickAddHotkey])
+  useEffect(() => { api.setShell({ closeToTray: s.closeToTray, quickAddHotkey: s.quickAddHotkey, quickAddKey:s.quickAddKey }).catch(() => {}) }, [s.closeToTray, s.quickAddHotkey,s.quickAddKey])
   useEffect(() => api.onQuickAdd(() => setOverlay('quickAdd')), [])
   useEffect(() => { api.info().then((i) => { if (i.micaSupported && i.material !== s.material) api.setMaterial(s.material) }) }, [])
   useEffect(() => api.onOpenPage((id) => openPage(id)), [])
@@ -302,7 +303,7 @@ function useShortcuts(): void {
       const mod = e.ctrlKey || e.metaKey
       const typing = (e.target as HTMLElement)?.closest?.('input, textarea, [contenteditable]')
       const k = e.key.toLowerCase()
-      if (mod && k === 'k') { e.preventDefault(); setOverlay(useApp.getState().overlay === 'search' ? null : 'search') }
+      if (mod && k === (getData().settings.searchKey||'k')) { e.preventDefault(); setOverlay(useApp.getState().overlay === 'search' ? null : 'search') }
       else if (mod && k === 'n') { e.preventDefault(); setOverlay('newPage', { parentId: null }) }
       else if (mod && k === ',') { e.preventDefault(); openSettings() }
       else if (mod && k === '/') { e.preventDefault(); setOverlay('shortcuts') }
@@ -392,7 +393,9 @@ function MainApp(): JSX.Element {
   const canRedo = useApp((s) => s.canRedo)
   const assistantOpen = useAssistant((s) => s.open)
   const assistantVisible = assistantOpen && current !== '@assistant'
-  useEffect(() => { boot() }, [])
+  const [locked,setLocked]=useState(false),[bootError,setBootError]=useState('')
+  const load=():void=>{setBootError('');api.vaultStatus().then(async v=>{setLocked(v.locked);if(!v.locked)await boot()}).catch(e=>setBootError(e.message))}
+  useEffect(load, [])
   useEffect(() => { if (ready) restoreTabs() }, [ready])
   const tabCount = useTabs((s) => s.tabs.length)
   useAppearance()
@@ -401,7 +404,7 @@ function MainApp(): JSX.Element {
   useNotionSync()
   useConnections()
   useDesktopWidgets()
-  if (!ready) return <div className="boot" />
+  if (!ready) return <main className="boot">{locked?<section className="panel glass"><h2>Unlock Deskbase</h2><WorkspacePassword mode="unlock" onDone={load}/></section>:bootError?<section role="alert">{bootError}<button className="btn" onClick={load}>Retry</button></section>:null}</main>
   const view = isView(current) ? current : null
 
   return (
@@ -435,6 +438,9 @@ function MainApp(): JSX.Element {
                 { label: 'Add subpage', icon: 'plus', onClick: () => setOverlay('newPage', { parentId: page.id }) },
                 { label: 'Duplicate', icon: 'copy', onClick: () => duplicatePage(page.id) },
                 { label: 'Move to…', icon: 'folder', onClick: () => setOverlay('movePage', { pageId: page.id }) },
+                { label: 'Page accent', icon: 'palette', onClick: () => {const input=document.createElement('input'); input.type='color'; input.value=page.accent||'#6488cc'; input.onchange=()=>updatePage(page.id,p=>{p.accent=input.value}); input.click()} },
+                ...(page.accent?[{ label:'Reset page accent',onClick:()=>updatePage(page.id,p=>{delete p.accent}) }]:[]),
+                { label: 'Print or save PDF', icon: 'download', onClick: () => window.print() },
                 { label: 'Export as Markdown', icon: 'download', onClick: () => exportPageMarkdown(page.id) },
                 { label: 'Page history', icon: 'history', onClick: () => setOverlay('history', { pageId: page.id }) },
                 ...(page.source?.kind === 'notion' ? [{ label: 'Refresh from Notion', icon: 'refresh', onClick: () => { refreshFromNotion([page.id]) } }] : []),

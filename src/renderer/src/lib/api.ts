@@ -26,6 +26,8 @@ export interface Bridge {
   load(): Promise<{ data: any; migratedFrom: number | null; path: string; error?: string }>
   save(data: unknown): Promise<boolean>
   saveSync(data: unknown): boolean
+  vaultStatus():Promise<{enabled:boolean;locked:boolean}>
+  vaultChange(password:string,action:'enable'|'disable'|'unlock'):Promise<void>
   exportFile(text: string, name: string): Promise<string | null>
   importFile(): Promise<any>
   listBackups(): Promise<{ name: string; date: string; size: number; mtime: number }[]>
@@ -38,7 +40,7 @@ export interface Bridge {
   notify(title: string, body: string): Promise<void>
   alwaysOnTop(on: boolean): Promise<boolean>
   loginItem(on?: boolean): Promise<boolean>
-  setShell(p: { closeToTray?: boolean; quickAddHotkey?: boolean }): Promise<{ closeToTray: boolean; hotkey: boolean }>
+  setShell(p: { closeToTray?: boolean; quickAddHotkey?: boolean; quickAddKey?:string }): Promise<{ closeToTray: boolean; hotkey: boolean }>
   quickAddDone(added: boolean): Promise<void>
   onQuickAdd(cb: () => void): () => void
   openExternal(url: string): Promise<void>
@@ -240,6 +242,8 @@ const browserBridge: Bridge = {
     try { localStorage.setItem(KEY, JSON.stringify(d)) } catch { /* ignore */ }
     return true
   },
+  vaultStatus:async()=>({enabled:false,locked:false}),
+  vaultChange:async()=>{},
   exportFile: async (text, name) => { download(name, text); return name },
   importFile: () =>
     new Promise((resolve) => {

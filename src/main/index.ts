@@ -4,6 +4,7 @@ import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage,
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
+import {protectedData,lockedData,setProtection} from './vault'
 import { createBackup, dataDir, listBackups, loadData, parseImport, readBackup, saveData } from './storage'
 import { checkForUpdates, getStatus, initUpdater, installUpdate } from './updater'
 import { linkInfo } from './linkinfo'
@@ -24,9 +25,17 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 /** Workspaces, as last reported by the window (for the tray menu). */
 let deskSpaces: { id: string; name: string }[] = []
+let trayTasks:{title:string;pageId:string;due:string}[]=[]
+function updateTrayTasks(data:any):void {
+  const day=new Date();day.setMinutes(day.getMinutes()-day.getTimezoneOffset())
+  const today=day.toISOString().slice(0,10)
+  const next=Object.values<any>(data?.tasks??{}).filter(t=>!t.done&&!t.archived&&t.due===today&&data.pages?.[t.pageId]&&!data.pages[t.pageId].deletedAt).map(t=>({title:t.title,pageId:t.pageId,due:t.due}))
+  if(JSON.stringify(next)!==JSON.stringify(trayTasks)){trayTasks=next;void applyTray()}
+}
 let activeSpace = ''
 let quitting = false
 let hiddenBeforeQuickAdd = false
+let registeredQuickKey=''
 const QUICK_ADD_KEY = 'CommandOrControl+Shift+Space'
 /** Started by Windows at sign-in: stay in the tray and only show the desktop widgets. */
 const startHidden = process.argv.includes('--hidden')
@@ -86,7 +95,7 @@ function saveWinState(w: BrowserWindow): void {
 
 // ---------- preferences needed before the renderer loads ----------
 const prefsFile = (): string => path.join(app.getPath('userData'), 'shell-prefs.json')
-interface ShellPrefs { material: Material; theme: 'system' | 'light' | 'dark'; closeToTray: boolean; quickAddHotkey: boolean; desktop: boolean; autostartSet: boolean }
+interface ShellPrefs { material: Material; theme: 'system' | 'light' | 'dark'; closeToTray: boolean; quickAddHotkey: boolean; quickAddKey?:string; desktop: boolean; autostartSet: boolean }
 const DEFAULT_PREFS: ShellPrefs = { material: 'mica', theme: 'system', closeToTray: false, quickAddHotkey: true, desktop: false, autostartSet: false }
 
 /** Panels belong on the desktop from sign-in: start with Windows (in the tray) unless turned off once. */
@@ -226,6 +235,7 @@ async function applyTray(): Promise<void> {
     tray = new Tray(await trayIcon())
     tray.setToolTip('Deskbase')
     tray.on('click', showWindow)
+    tray.on('double-click',()=>mainWindow?.webContents.send('desk:command','','next-space'))
   } else if (!want && tray) {
     tray.destroy()
     tray = null
@@ -243,9 +253,10 @@ async function applyTray(): Promise<void> {
       { label: 'Quit', click: () => { quitting = true; app.quit() } }
     ]))
   }
-  globalShortcut.unregister(QUICK_ADD_KEY)
+  if(registeredQuickKey)globalShortcut.unregister(registeredQuickKey)
+  registeredQuickKey=p.quickAddKey||QUICK_ADD_KEY
   if (p.quickAddHotkey) {
-    try { globalShortcut.register(QUICK_ADD_KEY, openQuickAdd) } catch { /* taken by another app */ }
+    try { globalShortcut.register(registeredQuickKey, openQuickAdd) } catch { /* taken by another app */ }
   }
 }
 
@@ -260,8 +271,10 @@ function registerIpc(): void {
     packaged: app.isPackaged
   }))
 
-  ipcMain.handle('data:load', () => loadData())
-  ipcMain.handle('data:save', (_e, data) => { saveData(data); return true })
+  ipcMain.handle('vault:status',()=>({enabled:protectedData(dataDir()),locked:lockedData(dataDir())}))
+  ipcMain.handle('vault:change',(_e,password:string,action:'enable'|'disable'|'unlock')=>setProtection(dataDir(),password,action))
+  ipcMain.handle('data:load', () => {const result=loadData();updateTrayTasks(result.data);return result})
+  ipcMain.handle('data:save', (_e, data) => { saveData(data); updateTrayTasks(data); return true })
   ipcMain.on('data:saveSync', (e, data) => {
     try { saveData(data); e.returnValue = true } catch { e.returnValue = false }
   })
@@ -326,13 +339,14 @@ function registerIpc(): void {
   ipcMain.handle('sys:net', () => netStats())
   ipcMain.handle('net:places', (_e, q: string) => findPlace(String(q ?? '')))
   ipcMain.handle('net:weather', (_e, lat: number, lon: number, f: boolean) => weather(Number(lat), Number(lon), !!f))
-  ipcMain.handle('app:setShell', async (_e, p: { closeToTray?: boolean; quickAddHotkey?: boolean }) => {
+  ipcMain.handle('app:setShell', async (_e, p: { closeToTray?: boolean; quickAddHotkey?: boolean; quickAddKey?:string }) => {
     const next: Partial<ShellPrefs> = {}
     if (typeof p.closeToTray === 'boolean') next.closeToTray = p.closeToTray
+    if(p.quickAddKey&&[QUICK_ADD_KEY,'CommandOrControl+Alt+Q','Alt+Shift+Q'].includes(p.quickAddKey))next.quickAddKey=p.quickAddKey
     if (typeof p.quickAddHotkey === 'boolean') next.quickAddHotkey = p.quickAddHotkey
     writePrefs(next)
     await applyTray()
-    return { closeToTray: Boolean(tray), hotkey: globalShortcut.isRegistered(QUICK_ADD_KEY) }
+    return { closeToTray: Boolean(tray), hotkey: globalShortcut.isRegistered(registeredQuickKey||QUICK_ADD_KEY) }
   })
   ipcMain.handle('app:quickAddDone', (_e, added: boolean) => {
     if (hiddenBeforeQuickAdd && added && tray) mainWindow?.hide()

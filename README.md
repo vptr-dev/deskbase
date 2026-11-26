@@ -6,11 +6,19 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.20.1.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.21.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+
+## Study and tracking
+
+Create a Study deck for each subject. Paste two columns of questions and answers, then review cards as they come due. List trackers support quantity targets, reading lists remember your page, and workout logs can repeat a previous session. Panels can share a named source or point to separate ones. Wishlist and Purchased use the same items, with category, priority, pictures, links and spending totals.
+
+Under Settings → Data & backups you can import Markdown files, rename tags and enable a workspace password. Keep the password somewhere safe. JSON exports remain readable outside Deskbase.
 
 ## What's inside
 
 - **Desktop panels** that live on the desktop like Rainmeter skins (no taskbar buttons, not in Alt+Tab): tasks, pages (or just today's part), clocks in many styles, world clock, timers, stopwatch, sunrise and sunset, weather, moon, system use, network speed, battery, calculator, recent pages, database charts, activity heatmap, deadlines, launcher, web search, study progress, table totals, month and more. Each has its own styles and parts to show or hide; set one up with a live preview before adding it. Move, resize, lock and group them.
+- **Named lists and study decks**. Create a List tracker for quantities or reading progress, or a Study deck for question-and-answer cards. Review due cards by subject, reveal an answer and schedule another review. Pages, inline tools and widgets share the same records.
+- **Wishlist galleries and purchases**. Filter wish cards by category, attach a picture or product link, and set priority and price. Purchased items share the same records and appear on a board with category totals.
 - **Named planners and saved views**. Open To-do and choose **New planner** for a separate Work or Home list. Choose **Add view** to keep filters, sorting, grouping and visible fields in a named tab. Task panels can follow a saved view.
 - **Reusable layouts**. Mark a page with **Use as a template**, then pick it in **New page**. For desktop panels, use **Desktop > Layout templates**. Choose linked lists to share updates or fresh lists to start independently.
 - **Multi-step buttons**. Choose **Add step** in a button's settings. A purchase button can mark an item bought, deduct its price from a value and write a dated expense to a page. Undo reverses the data changes together.

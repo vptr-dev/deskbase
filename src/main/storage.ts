@@ -1,5 +1,7 @@
 import { app } from 'electron'
 import fs from 'fs'
+import { createHash } from 'node:crypto'
+import { lockedData, readStored, writeStored } from './vault'
 import path from 'path'
 import { CURRENT_SCHEMA, migrate } from './migrations'
 
@@ -38,11 +40,25 @@ function stamp(): string {
 }
 
 function writeAtomic(file: string, text: string): void {
-  const tmp = `${file}.tmp`
-  fs.writeFileSync(tmp, text, 'utf8')
-  fs.renameSync(tmp, file)
+  writeStored(dataDir(),file,text)
 }
 
+const imageDir=():string=>path.join(dataDir(),'images')
+function saveImage(_field:string,value:unknown):unknown{
+  if(typeof value!=='string'||value.length<64*1024||!/^data:image\/(jpeg|png|webp|gif);base64,/i.test(value))return value
+  const hash=createHash('sha256').update(value).digest('hex')
+  fs.mkdirSync(imageDir(),{recursive:true})
+  const file=path.join(imageDir(),hash)
+  if(!fs.existsSync(file))writeStored(dataDir(),file,value)
+  return {deskbaseImage:hash}
+}
+function loadFile(file:string):any{
+  return JSON.parse(readStored(dataDir(),file),(_field,v)=>{
+    if(v&&typeof v==='object'&&Object.keys(v).length===1&&typeof v.deskbaseImage==='string'&&/^[a-f0-9]{64}$/.test(v.deskbaseImage))
+      return readStored(dataDir(),path.join(imageDir(),v.deskbaseImage))
+    return v
+  })
+}
 export interface LoadResult {
   data: Record<string, any> | null
   migratedFrom: number | null
@@ -51,6 +67,7 @@ export interface LoadResult {
 }
 
 export function loadData(): LoadResult {
+  if(lockedData(dataDir()))throw Error("Workspace is locked")
   const file = dataFile()
   if (!fs.existsSync(file)) {
     // Recover from an interrupted write.
@@ -58,7 +75,7 @@ export function loadData(): LoadResult {
     else return { data: null, migratedFrom: null, path: file }
   }
   try {
-    const raw = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const raw = loadFile(file)
     if (typeof raw.schema === 'number' && raw.schema > CURRENT_SCHEMA) {
       // Data from a newer version: keep a copy so nothing is lost.
       createBackup(`newer-schema-${raw.schema}`)
@@ -77,7 +94,7 @@ export function loadData(): LoadResult {
     try { fs.copyFileSync(file, bad) } catch { /* ignore */ }
     const latest = listBackups()[0]
     if (latest) {
-      const restored = JSON.parse(fs.readFileSync(path.join(backupDir(), latest.name), 'utf8'))
+      const restored = loadFile(path.join(backupDir(), latest.name))
       const { data } = migrate(restored)
       writeAtomic(file, JSON.stringify(data))
       return { data, migratedFrom: null, path: file, error: `Your data file was damaged. Restored the backup from ${latest.date}.` }
@@ -89,14 +106,15 @@ export function loadData(): LoadResult {
 export function saveData(data: unknown): void {
   const obj = data as Record<string, any>
   obj.schema = CURRENT_SCHEMA
-  writeAtomic(dataFile(), JSON.stringify(obj))
+  writeAtomic(dataFile(), JSON.stringify(obj,saveImage))
 }
 
 export function createBackup(label = 'manual'): string | null {
   const file = dataFile()
   if (!fs.existsSync(file)) return null
   const name = `deskbase-${stamp()}-${label}.json`
-  fs.copyFileSync(file, path.join(backupDir(), name))
+  // Portable snapshots carry their images even when the live file references the image store.
+  writeStored(dataDir(),path.join(backupDir(),name),JSON.stringify(loadFile(file)))
   pruneBackups()
   return name
 }
@@ -127,7 +145,7 @@ export function listBackups(): { name: string; date: string; size: number; mtime
 
 export function readBackup(name: string): Record<string, any> {
   const safe = path.basename(name)
-  const raw = JSON.parse(fs.readFileSync(path.join(backupDir(), safe), 'utf8'))
+  const raw = loadFile(path.join(backupDir(),safe))
   return migrate(raw).data
 }
 

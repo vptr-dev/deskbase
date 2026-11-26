@@ -33,8 +33,7 @@ let watching = false
 let menuOpen = false
 
 const HWND_BOTTOM = 1
-const MIN_W = 96
-const MIN_H = 64
+import { MIN_PANEL_WIDTH as MIN_W, MIN_PANEL_HEIGHT as MIN_H } from '../shared/panelBounds'
 
 // ---------- native helpers (Windows) ----------
 type Native = {
@@ -391,7 +390,13 @@ export function deskShow(id: string): void {
   applyEffects(e)
   applyLayer(e)
   applyMouse(e)
-  if (!e.win.isVisible()) e.win.showInactive()
+  if (!e.win.isVisible()) {
+    // Windows can apply the startup monitor's DPI during the first native show.
+    placeWindow(e.win,visibleBounds(e.spec))
+    e.win.showInactive()
+    placeWindow(e.win,visibleBounds(e.spec))
+    applyShape(e)
+  }
   asSkin(e.win)
   sendToBack(e)
 }

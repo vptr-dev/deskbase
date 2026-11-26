@@ -5,7 +5,7 @@ import { TaskRepeatEditor } from './TaskRepeatEditor'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { WidgetItemMenu } from './widgetActionContext'
 import { useContext, useId, useMemo, useState } from 'react'
-import { act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
+import { wouldCycle, act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
 import { ScheduleFields, firstScheduledDate } from './ScheduleFields'
 import type { CustomRepeat, Task } from '../types'
 import { formatTime, friendlyDay, snoozeOptions, today, uid } from '../lib/util'
@@ -93,6 +93,19 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
   const subDone = task.subtasks.filter((s) => s.done).length
   return (
     <div
+      tabIndex={0} aria-label={task.title}
+      onKeyDown={e=>{
+        if(e.target!==e.currentTarget||e.ctrlKey||e.metaKey||e.altKey)return
+        const key=e.key.toLowerCase()
+        if(!['j','k','x',' ','enter'].includes(key))return
+        e.preventDefault();e.stopPropagation()
+        if(key==='j'||key==='k'){
+          const rows=Array.from((e.currentTarget.closest('.tasks-page')??e.currentTarget.parentElement)?.querySelectorAll<HTMLElement>('.task-row')??[])
+          rows[rows.indexOf(e.currentTarget)+(key==='j'?1:-1)]?.focus()
+        }else if(key==='x')setTaskDone(task.id,!task.done)
+        else if(key===' '&&onSelect)onSelect(task.id,false)
+        else onOpen(task.id)
+      }}
       className={`task-row ${task.done ? 'done' : ''} ${over ? 'drag-over' : ''} ${selected ? 'selected' : ''}`}
       onClick={(e) => {
         if (onSelect && (e.ctrlKey || e.metaKey || e.shiftKey)) { e.preventDefault(); onSelect(task.id, e.shiftKey) }
@@ -114,6 +127,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
           {task.due && <span data-field="date" className={`meta ${overdue ? 'danger' : task.due === today() ? 'accent' : ''}`}><Icon name="calendar" size={12} />{friendlyDay(task.due)}{task.time ? ' ' + formatTime(task.time, use24h) : ''}</span>}
           {task.repeat !== 'none' && <span data-field="repeat" className="meta" title={repeatLabel(task.repeat)}><Icon name="repeat" size={12} />{repeatLabel(task.repeat)}</span>}
           {task.subtasks.length > 0 && <span data-field="details" className="meta"><Icon name="check" size={12} />{subDone}/{task.subtasks.length}</span>}
+          {task.blockedBy && <BlockerLabel id={task.blockedBy}/>}
           {task.notes && <span data-field="details" className="meta"><Icon name="note" size={12} /></span>}
           {task.estimate ? <span data-field="details" className="meta"><Icon name="clock" size={12} />{task.estimate}m</span> : null}
           {task.tags.map((t) => <span data-field="tags" key={t} className="meta tag">#{t}</span>)}
@@ -130,6 +144,7 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
   const task = useData((d) => d.tasks[id])
   const pages = useData((d) => d.pages)
   const goals = useData((d) => d.goals)
+  const tasks=useData(d=>d.tasks)
   const [tagInput, setTagInput] = useState('')
   const [subInput, setSubInput] = useState('')
   if (!task) return null
@@ -162,6 +177,9 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
           <OptionalColor label="Task icon color" value={task.iconColor} onChange={color => set(t => { t.iconColor = color }, 'task-icon:' + id)} />
           <label>Priority</label>
           <Segmented small value={task.priority} onChange={(v) => set((t) => { t.priority = v as Task['priority'] })} options={PRIORITY.map((p) => ({ value: p.v, label: p.label }))} />
+          <label htmlFor={'blocked-'+id}>Blocked by</label>
+          <select id={'blocked-'+id} className="input input-sm" value={task.blockedBy??''} onChange={e=>set(t=>{t.blockedBy=e.target.value||undefined})}>
+            <option value="">None</option>{Object.values(tasks).filter(t=>!pages[t.pageId]?.deletedAt&&!t.archived&&(!t.done||t.id===task.blockedBy)&&!wouldCycle(tasks,id,t.id)).map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select>
           <label>Estimate</label>
           <div className="row gap-sm">
             <input id={`est-${id}`} type="number" min={0} step={5} className="input input-sm w-80" value={task.estimate ?? ''} onChange={(e) => set((t) => { t.estimate = e.target.value ? Number(e.target.value) : null })} />
@@ -234,4 +252,8 @@ export function useTaskDrawer(): [string | null, (id: string | null) => void, JS
     </div>, doc.body
   ) : null
   return [open, setOpen, el]
+}
+
+function BlockerLabel({id}:{id:string}):JSX.Element|null {
+ const t=useData(d=>d.tasks[id]);return t&&!t.done&&!t.archived?<span className="meta">Blocked by {t.title}</span>:null
 }

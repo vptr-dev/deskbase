@@ -1,3 +1,4 @@
+import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../../../shared/panelBounds'
 import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, Connection, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
 import { serviceIds } from '../../../shared/services'
@@ -6,7 +7,7 @@ import { normalizeRepeat } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 21
+export const SCHEMA = 22
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -19,6 +20,10 @@ export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: str
   { type: 'habits', name: 'Habits', icon: 'repeat', desc: 'Daily habits and streaks' },
   { type: 'journal', name: 'Journal', icon: 'notebook-pen', desc: 'Daily entries and mood' },
   { type: 'goals', name: 'Goals', icon: 'target', desc: 'Goals and milestones' },
+  { type: 'list', name: 'List tracker', icon: 'list-checks', desc: 'Track items, quantities and progress in a named list' },
+  { type:'reading',name:'Reading list',icon:'book-open',desc:'Track books and pages read' },
+  { type:'workout',name:'Workout log',icon:'activity',desc:'Record sets, reps and weight by exercise' },
+  { type: 'study', name: 'Study deck', icon: 'graduation-cap', desc: 'Review flashcards by subject' },
   { type: 'wishlist', name: 'Wishlist', icon: 'shopping-bag', desc: 'Plan purchases and track your budget' },
   { type: 'tracker', name: 'Tracker', icon: 'chart-line', desc: 'Weight, sleep, water, anything' },
   { type: 'focus', name: 'Focus', icon: 'timer', desc: 'Pomodoro timer' },
@@ -334,11 +339,23 @@ export function normalize(raw: any): AppData {
   for (const p of Object.values(d.pages)) {
     p.icon = p.icon ? emojiToIcon(p.icon, typeInfo(p.type).icon) : ''
     p.children = Array.isArray(p.children) ? [...new Set(p.children.filter((c: unknown) => typeof c === 'string'))] : []
+    if(p.type==='workout')p.workouts=(Array.isArray(p.workouts)?p.workouts:[]).filter(w=>w&&typeof w.exercise==='string'&&Number.isFinite(w.reps)&&Number.isFinite(w.sets)&&Number.isFinite(w.weight))
+    if (p.type === 'list'||p.type==='reading') p.entries = (Array.isArray(p.entries) ? p.entries : []).filter(e => e && typeof e.name === 'string').map(e => {
+      const target = Number.isFinite(e.target) ? Math.max(1,e.target) : 1
+      return { id: e.id || uid(), name: e.name, target, done: Number.isFinite(e.done) ? Math.max(0,Math.min(target,e.done)) : 0, unit: typeof e.unit === 'string' ? e.unit : '' }
+    })
+    if (p.type === 'study') p.cards = (Array.isArray(p.cards) ? p.cards : []).filter(c => c && typeof c.question === 'string' && typeof c.answer === 'string').map(c => ({
+      id: c.id || uid(), question: c.question, answer: c.answer, due: typeof c.due === 'string' ? c.due : '', interval: Math.max(0,Number(c.interval) || 0)
+    }))
     if (p.type === 'wishlist') {
       const list = p.wishlist
       p.wishlist = {
         items: Array.isArray(list?.items) ? list.items.filter(item => item && typeof item.name === 'string').map(item => ({
           id: typeof item.id === 'string' && item.id ? item.id : uid(), name: item.name,
+          category: typeof item.category === 'string' ? item.category : undefined,
+          priority: item.priority === 'high' || item.priority === 'medium' || item.priority === 'low' ? item.priority : undefined,
+          url: typeof item.url === 'string' && /^https?:\/\//i.test(item.url) ? item.url : undefined,
+          image: typeof item.image === 'string' && /^(data:image\/|https?:\/\/)/i.test(item.image) ? item.image : undefined,
           cost: typeof item.cost === 'number' && Number.isFinite(item.cost) && item.cost >= 0 ? item.cost : null, purchased: item.purchased === true, purchasedOn: typeof item.purchasedOn === 'string' ? item.purchasedOn : undefined
         })) : [],
         currency: ['GBP','USD','EUR','CAD','AUD','JPY','INR'].includes(list?.currency ?? '') ? list!.currency : 'GBP',
@@ -542,7 +559,7 @@ function normalizeDesktop(raw: any): Desktop {
   const r = obj(raw)
   const spaces: Desktop['spaces'] = (Array.isArray(r.spaces) ? r.spaces : [])
     .filter((s: any) => s && typeof s.id === 'string' && s.id)
-    .map((s: any) => ({ id: s.id, name: typeof s.name === 'string' && s.name.trim() ? s.name : 'Workspace', icon: s.icon === '' ? '' : emojiToIcon(s.icon, 'monitor'), iconColor: typeof s.iconColor === 'string' ? s.iconColor : undefined }))
+    .map((s: any) => ({ id: s.id, switchAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.switchAt)?s.switchAt:undefined, name: typeof s.name === 'string' && s.name.trim() ? s.name : 'Workspace', icon: s.icon === '' ? '' : emojiToIcon(s.icon, 'monitor'), iconColor: typeof s.iconColor === 'string' ? s.iconColor : undefined }))
   if (!spaces.length) spaces.push({ ...MAIN_SPACE })
   const active = spaces.some((s: any) => s.id === r.active) ? r.active : spaces[0].id
   const known = new Set(spaces.map((s: any) => s.id))
@@ -566,8 +583,8 @@ function normalizeDesktop(raw: any): Desktop {
         x: num(w.x, -100000, 100000, 0),
         y: num(w.y, -100000, 100000, 0),
         // Panels are always a set size now (no full-screen panels).
-        w: Number(w.w) > 0 ? num(w.w, 120, 20000, 300) : 900,
-        h: Number(w.h) > 0 ? num(w.h, 64, 20000, 200) : 600,
+        w: Number(w.w) > 0 ? num(w.w, MIN_PANEL_WIDTH, 20000, 300) : 900,
+        h: Number(w.h) > 0 ? num(w.h, MIN_PANEL_HEIGHT, 20000, 200) : 600,
         style: normalizeStyle(w.style, true),
         layer: 'desktop',
         locked: Boolean(w.locked),

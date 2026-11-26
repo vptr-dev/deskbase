@@ -22,20 +22,21 @@ function layoutCopier(snapshot: AppData, d: AppData, mode: TemplateMode) {
     a.then?.forEach(step => action(step, parent))
   }
   function config(c: PanelConfig, parent: string | null, type: DeskWidget['type']): void {
-    if (mode === 'fresh' && !c.pageId && ['tasks','quickadd','wishlist'].includes(type)) {
-      const kind = type === 'wishlist' ? 'wishlist' : 'tasks'
+    if(Array.isArray(c.extraPages))c.extraPages=c.extraPages.map((id:string)=>source(id,parent))
+    if (mode === 'fresh' && !c.pageId && ['tasks','quickadd','wishlist','list','study','reading','workout'].includes(type)) {
+      const kind = type === 'reading' || type === 'workout' || type === 'study' || type === 'list' || type === 'wishlist' ? type : 'tasks'
       const original = Object.values(snapshot.pages).find(p => p.type === kind && !p.deletedAt)
       if (original) c.pageId = original.id
       else {
         if (!defaults.has(kind)) {
-          const p = newPage(kind, kind === 'tasks' ? 'Tasks' : 'Wishlist', parent)
+          const p = newPage(kind, undefined, parent)
           d.pages[p.id] = p; (parent ? d.pages[parent].children : d.rootOrder).push(p.id); defaults.set(kind, p.id)
         }
         c.pageId = defaults.get(kind)
       }
     }
     if (mode === 'fresh' && type === 'tracker' && !c.metricId) c.metricId = Object.values(snapshot.metrics).find(m => snapshot.pages[m.pageId] && !snapshot.pages[m.pageId].deletedAt)?.id
-    for (const key of ['pageId', 'dbId']) if (c[key]) c[key] = source(c[key], parent)
+    for (const key of ['pageId', 'dbId', 'sourcePageId']) if (c[key]) c[key] = source(c[key], parent)
     if (mode === 'fresh' && snapshot.metrics[c.metricId]) {
       source(snapshot.metrics[c.metricId].pageId, parent)
       c.metricId = metrics.get(c.metricId) ?? c.metricId
@@ -55,6 +56,9 @@ function layoutCopier(snapshot: AppData, d: AppData, mode: TemplateMode) {
     // Block ids are scoped to a page. Keeping them preserves references to the copied toggles.
     if (mode === 'fresh') {
       if (p.wishlist) p.wishlist.items = []
+      if(p.workouts)p.workouts=[]
+      if (p.entries) p.entries = p.entries.map(e=>({...e,done:0}))
+      if (p.cards) p.cards = p.cards.map(c=>({...c,interval:0,due:''}))
       for (const m of Object.values(snapshot.metrics).filter(m => m.pageId === id)) {
         const mid = uid(); metrics.set(m.id, mid)
         d.metrics[mid] = { ...structuredClone(m), id: mid, pageId: newId, entries: [] }

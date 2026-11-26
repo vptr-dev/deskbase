@@ -381,7 +381,14 @@ export function updateTask(id: string, fn: (t: Task) => void, key?: string): voi
   act((d) => { if (d.tasks[id]) fn(d.tasks[id]) }, { key })
 }
 
+export function wouldCycle(tasks:AppData['tasks'], id:string, parent:string):boolean {
+  const seen=new Set([id])
+  for(let next:string|undefined=parent;next;next=tasks[next]?.blockedBy){if(seen.has(next))return true;seen.add(next)}
+  return false
+}
 export function setTaskDone(id: string, done: boolean): void {
+  const data=getData(), parent=data.tasks[data.tasks[id]?.blockedBy??'']
+  if(done&&parent&&!parent.done&&!parent.archived&&!data.pages[parent.pageId]?.deletedAt){toast('Complete '+parent.title+' first');return}
   act((d) => {
     const t = d.tasks[id]
     if (!t || t.done === done) return

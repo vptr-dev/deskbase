@@ -240,6 +240,7 @@ export function Sidebar(): JSX.Element {
           <span className="tree-title">Add a page</span>
         </button>
         <RootDrop />
+        <details className="side-calendar"><summary>Calendar</summary><MiniCalendar/></details>
         <div className="sidebar-fill drag" />
       </div>
 
@@ -294,4 +295,17 @@ function SpaceSwitcher(): JSX.Element {
       )}
     </>
   )
+}
+
+function MiniCalendar():JSX.Element {
+ const [month,setMonth]=useState(()=>new Date(new Date().getFullYear(),new Date().getMonth(),1))
+ const start=useData(d=>d.settings.weekStart),pages=useData(d=>d.pages)
+ const offset=(month.getDay()-start+7)%7, count=new Date(month.getFullYear(),month.getMonth()+1,0).getDate()
+ const move=(n:number):void=>setMonth(new Date(month.getFullYear(),month.getMonth()+n,1))
+ return <><div className="row between"><button className="icon-btn" aria-label="Previous month" onClick={()=>move(-1)}>‹</button>{month.toLocaleDateString(undefined,{month:'short',year:'numeric'})}<button className="icon-btn" aria-label="Next month" onClick={()=>move(1)}>›</button></div>
+ <div className="mini-days">{Array.from({length:7},(_,i)=><small key={'w'+i}>{['S','M','T','W','T','F','S'][(i+start)%7]}</small>)}{Array.from({length:offset},(_,i)=><span key={'s'+i}/>)}{Array.from({length:count},(_,i)=><button key={i} onClick={()=>{
+ const date=[month.getFullYear(),String(month.getMonth()+1).padStart(2,'0'),String(i+1).padStart(2,'0')].join('-')
+ const id=Object.values(pages).find(p=>p.type==='calendar'&&!p.deletedAt)?.id??createPage('calendar')
+ updatePage(id,p=>{p.view={...p.view,calendarDay:date,mode:'month'}});openPage(id)
+ }}>{i+1}</button>)}</div></>
 }

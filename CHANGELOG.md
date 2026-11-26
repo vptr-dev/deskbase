@@ -2,7 +2,17 @@
 
 ## Unreleased
 
-## 0.20.1 - 2026-11-22
+## 0.21.0 - 2026-11-26
+
+- Added named list and study pages with live widgets, quantity targets, flashcards and scheduled reviews.
+- Added category galleries, picture and product-link fields, priority and a purchased board to wishlists.
+- Added named sources for list-based widgets and stable table selection. Desktop action menus survive transient focus changes.
+
+- Added reading and workout logs, spreadsheet flashcard import, task dependencies, keyboard navigation, calendar countdowns, a sidebar calendar, and weekly comparisons and Markdown export.
+- Added workspace scheduling, shared panels, page tabs in panels, page accents, print, Markdown import, tag editing, and configurable shortcuts.
+- Added optional password protection for workspace data, history, images and backups. Large pictures are stored separately from the live document.
+
+### Panel menu changes included from the previous release candidate
 
 - Replaced the native panel menu with a scrollable, themed action menu for desktop panels, dashboard cards and live widget embeds.
 - Locked panels keep item actions, task entry and timer controls. The task form can create the first planner when needed.

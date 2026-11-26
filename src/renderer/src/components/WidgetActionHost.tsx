@@ -52,7 +52,7 @@ export function WidgetActionHost({ widget: w, source, name, globalActions = [], 
   const close = (): void => { setMenu(null); setTask(null); setInsert(null) }
   const focus = (): Promise<unknown> => desktopId ? api.desk.focus(desktopId).catch(() => {}) : Promise.resolve()
   const openTask = (title = '', notes = ''): void => {
-    setDestination(w.config.pageId || ''); setTask({ title, notes })
+    setDestination(w.config.pageId || w.config.sourcePageId || ''); setTask({ title, notes })
   }
   const choosePage = (label: string, block: () => Block): void => {
     setQuery(''); setNewName(''); setInsert({ label, block })
@@ -122,21 +122,20 @@ export function WidgetActionHost({ widget: w, source, name, globalActions = [], 
     }
     actions.push({ label: 'Embed widget in page', form: true, icon: 'embed', onClick: () => choosePage('Embed widget in page', () => ({ id: uid(), type: 'widget', text: name, widgetSource: source })) })
     setTask(null); setInsert(null)
+    window.dispatchEvent(new Event('desk:widget-menu-opening'))
     setMenu({ anchor: { x: e.clientX, y: e.clientY }, title: title || itemTitle, item: rows, widget: actions })
   }
   useEffect(() => {
     if (!menu) return
     let live = true
-    let ready = false
-    const win = doc.defaultView
-    const blur = (): void => { if (ready && !doc.hasFocus()) close() }
     void focus().then(() => {
       if (!live) return
       body.current?.querySelector<HTMLElement>(task ? '.quickadd-input' : insert ? 'input' : '[role=menuitem]:not(:disabled)')?.focus({preventScroll:true})
-      ready = true
     })
-    win?.addEventListener('blur', blur)
-    return () => { live = false; win?.removeEventListener('blur', blur) }
+    // Windows sends transient blur events between desktop skins while acquiring focus.
+    // Close on an explicit dismissal (outside click, Escape, or opening another menu).
+    window.addEventListener('desk:widget-menu-opening', close)
+    return () => { live = false; window.removeEventListener('desk:widget-menu-opening', close) }
   }, [menu, task, insert, desktopId, doc])
   const planners = Object.values(pages).filter(p => !p.deletedAt && ['tasks','board','project'].includes(p.type))
   return <div {...host} ref={root} data-widget-host="" onContextMenu={e => show(e)}>

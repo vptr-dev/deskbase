@@ -1,8 +1,10 @@
+import { NamedSourceFields } from './NamedSources'
 import { ButtonActionFields, defaultAction } from './ButtonActions'
 import type { PanelButton } from './PersonalWidgets'
 import { isService, type ServiceId } from '../../../shared/services'
 import type { ReactNode } from 'react'
-import { openView, setSettings, useData } from '../store'
+import { findBlock } from './Blocks'
+import { updatePage, openView, setSettings, useData } from '../store'
 import type { Place } from '../types'
 
 const setSettingsPlace = (p: Place): void => setSettings((s) => { s.place = p })
@@ -64,7 +66,8 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   const page = c.pageId ? d.pages[c.pageId] : undefined
   const headings = page ? sectionNames(page.blocks) : []
   const tables = page ? flatBlocks(page.blocks).filter((b) => b.type === 'table' && b.rows?.length) : []
-  const table = tables[Number(c.table) || 0]
+  const tableIndex = c.tableId ? tables.findIndex(t=>t.id===c.tableId) : Number(c.table) || 0
+  const table = tables[tableIndex]
   const placeField = (
     <Field label="Place" sub={c.place ? '' : d.settings.place ? `Same as other panels: ${d.settings.place.name}` : ''}>
       {c.place && <span className="chip">{c.place.name}</span>}
@@ -119,6 +122,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   </>
   return (
     <div className="form-grid">
+      <NamedSourceFields key={w.id+w.type} w={w} patch={patch} />
       {w.type === 'button' && editButton(c, changes => patch(widget => { Object.assign(widget.config, changes) }))}
       {w.type === 'wishlist' && <Field label="Wishlist"><PagePicker value={c.pageId ?? ''} pages={live.filter(p => p.type === 'wishlist')} empty="First wishlist" onChange={v => set('pageId', v)} /></Field>}
       {w.type === 'tracker' && <>
@@ -189,6 +193,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         )}
       </>}
       {(w.type === 'pageview' || w.type === 'checklist') && <>
+        {w.type==='pageview'&&<Field label="Additional page tabs"><select multiple aria-label="Additional page tabs" className="input" value={c.extraPages??[]} onChange={e=>set('extraPages',Array.from(e.target.selectedOptions,o=>o.value))}>{docs.filter(p=>p.type==='doc'&&p.id!==c.pageId).map(p=><option key={p.id} value={p.id}>{p.title||'Untitled'}</option>)}</select></Field>}
         <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs.filter((p) => p.type === 'doc')} onChange={(v) => patch((x) => { x.config.pageId = v; x.config.section = null })} /></Field>
         {sectionPicker}
         <Field label="Only today" sub="The part that starts with today's weekday"><Toggle checked={!!c.today} onChange={(v) => set('today', v)} /></Field>
@@ -367,7 +372,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         </div>
       </>}
       {(w.type === 'sections' || w.type === 'table') && (
-        <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs.filter((p) => p.type === 'doc' && !p.rowOf && (w.type === 'sections' || flatBlocks(p.blocks).some((b) => b.type === 'table')))} onChange={(v) => patch((x) => { x.config.pageId = v; x.config.section = null; x.config.table = 0; x.config.sumCol = -1; x.config.dayCol = -1 })} /></Field>
+        <Field label="Page"><PagePicker value={c.pageId ?? ''} pages={docs.filter((p) => p.type === 'doc' && !p.rowOf && (w.type === 'sections' || flatBlocks(p.blocks).some((b) => b.type === 'table')))} onChange={(v) => patch((x) => { x.config.pageId = v; x.config.section = null; x.config.table = 0; delete x.config.tableId; x.config.sumCol = -1; x.config.dayCol = -1 })} /></Field>
       )}
       {w.type === 'sections' && <>
         {sectionPicker}
@@ -377,12 +382,13 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
       {w.type === 'table' && page && <>
         {tables.length > 1 && (
           <Field label="Table">
-            <select className="input input-sm grow" value={Number(c.table) || 0} onChange={(e) => patch((x) => { x.config.table = Number(e.target.value); x.config.sumCol = -1; x.config.dayCol = -1 })}>
-              {tables.map((t, i) => <option key={t.id} value={i}>{(t.rows?.[0] ?? []).filter(Boolean).join(', ') || `Table ${i + 1}`}</option>)}
+            <select className="input input-sm grow" value={tableIndex} onChange={(e) => patch((x) => { x.config.table = Number(e.target.value); x.config.tableId = tables[x.config.table]?.id; x.config.sumCol = -1; x.config.dayCol = -1 })}>
+              {tables.map((t, i) => <option key={t.id} value={i}>{t.text || (t.rows?.[0] ?? []).filter(Boolean).join(', ') || `Table ${i + 1}`}</option>)}
             </select>
           </Field>
         )}
         {table && <>
+          <Field label="Table name"><input className="input input-sm" aria-label="Table name" value={table.text} onChange={e=>updatePage(page.id,p=>{const b=findBlock(p.blocks,table.id);if(b)b.text=e.target.value})}/></Field>
           <Field label="Total of">
             <select className="input input-sm" value={c.sumCol ?? -1} onChange={(e) => set('sumCol', Number(e.target.value))}>
               <option value={-1}>No total</option>

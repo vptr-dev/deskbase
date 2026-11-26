@@ -5,6 +5,7 @@ import { JournalPage } from './JournalPage'
 import { GoalsPage } from './GoalsPage'
 import { CalendarPage } from './CalendarPage'
 import { FocusPage } from './FocusPage'
+import { ListTracker, StudyDeck, WorkoutLog } from './ListsAndStudy'
 import { WishlistPage } from './WishlistPage'
 import { TrackerPage } from './TrackerPage'
 import { TodayPage } from './TodayPage'
@@ -24,6 +25,9 @@ export function ToolBody({ page, embedded = false }: { page: Page; embedded?: bo
     case 'journal': return <JournalPage pageId={page.id} />
     case 'goals': return <GoalsPage pageId={page.id} />
     case 'focus': return <FocusPage />
+    case 'workout': return <WorkoutLog key={page.id} page={page}/>
+    case 'reading': case 'list': return <ListTracker key={page.id} page={page} />
+    case 'study': return <StudyDeck key={page.id} page={page} />
     case 'wishlist': return <WishlistPage key={page.id} page={page} />
     case 'tracker': return <TrackerPage pageId={page.id} />
     case 'review': return <ReviewPage pageId={page.id} />

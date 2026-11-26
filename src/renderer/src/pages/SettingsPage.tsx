@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { openView, flushSave, replaceData, setOverlay, setSettings, toast, useApp, useData, act } from '../store'
-import { DEFAULT_PRESETS } from '../lib/defaults'
+import { WorkspacePassword } from '../components/WorkspacePassword'
+import { markdownToBlocks } from '../../../shared/markdown'
+import { newPage, DEFAULT_PRESETS } from '../lib/defaults'
 import type { AssistantPreset, AssistantSettings as AssistantSettingsT } from '../types'
 import { api, isDesktop, type AppInfo, type UpdateStatus } from '../lib/api'
 import { exportAll, tasksToCsv } from '../lib/exporters'
@@ -40,6 +42,8 @@ function StartWithWindows({ sub }: { sub?: string }): JSX.Element {
 export function SettingsPage(): JSX.Element {
   const s = useData((d) => d.settings)
   const pages = useData((d) => d.pages)
+  const [protectedFiles,setProtectedFiles]=useState(false)
+  useEffect(()=>{if(isDesktop)void api.vaultStatus().then(s=>setProtectedFiles(s.enabled))},[])
   const target = useApp((st) => st.settingsTarget)
   const SECTIONS = [
     { id: 'general', label: 'General', icon: 'settings' },
@@ -99,13 +103,22 @@ export function SettingsPage(): JSX.Element {
             <Row label="Sounds"><Toggle checked={s.sounds} onChange={(v) => set((x) => { x.sounds = v })} /></Row>
             {isDesktop && <StartWithWindows />}
             {isDesktop && <Row label="Close to tray" sub="Closing the window keeps it running in the tray"><Toggle checked={s.closeToTray} onChange={(v) => set((x) => { x.closeToTray = v })} /></Row>}
-            {isDesktop && <Row label="Quick add hotkey" sub="Ctrl Shift Space adds a task from anywhere"><Toggle checked={s.quickAddHotkey} onChange={(v) => set((x) => { x.quickAddHotkey = v })} /></Row>}
+            <Row label="Search shortcut"><select className="input" value={s.searchKey||'k'} onChange={e=>set(x=>{x.searchKey=e.target.value})}>{['k','p','f'].map(k=><option key={k} value={k}>Ctrl + {k.toUpperCase()}</option>)}</select></Row>
+            {isDesktop&&s.quickAddHotkey&&<Row label="Quick add shortcut"><select className="input" value={s.quickAddKey||'CommandOrControl+Shift+Space'} onChange={e=>set(x=>{x.quickAddKey=e.target.value})}>{['CommandOrControl+Shift+Space','CommandOrControl+Alt+Q','Alt+Shift+Q'].map(k=><option key={k} value={k}>{k.replace('CommandOrControl','Ctrl')}</option>)}</select></Row>}
+            {isDesktop && <Row label="Quick add hotkey" sub="Add a task from anywhere"><Toggle checked={s.quickAddHotkey} onChange={(v) => set((x) => { x.quickAddHotkey = v })} /></Row>}
           </section>
           {isDesktop && <section className="set-section glass" data-section="widget"><DesktopSettings /></section>}
           <section className="set-section glass" data-section="assistant"><AssistantSettings /></section>
           <section className="set-section glass" data-section="data">
+            <TagManager/>
+            {isDesktop&&<details><summary>Workspace password</summary><p className="small muted">Protects local pages, images, history and backups. Keep your password safe. Exported files are readable without it.</p><WorkspacePassword mode={protectedFiles?'disable':'enable'} onDone={()=>setProtectedFiles(!protectedFiles)}/></details>}
             <h3>Data & backups</h3>
             <p className="muted small">Everything is stored on this computer{info?.dataPath ? <> in <code>{info.dataPath}</code></> : null}. Updates never touch your data, and a backup is made every day.</p>
+            <Row label="Import Markdown pages"><label className="btn btn-sm">Choose files<input type="file" accept=".md,.markdown" multiple hidden onChange={async e=>{
+              const files=Array.from(e.target.files??[]);e.target.value=''
+              try {const pages=await Promise.all(files.map(async f=>{const p=newPage('doc',f.name.replace(/\.(md|markdown)$/i,''));p.blocks=markdownToBlocks(await f.text());return p}))
+              act(d=>{for(const p of pages){d.pages[p.id]=p;d.rootOrder.push(p.id)}});if(pages.length)toast('Imported '+pages.length+' pages')}catch{toast('Could not read Markdown',{kind:'error'})}
+            }}/></label></Row>
             <Row label="Import from Notion" sub="From the Notion app on this computer, or an export"><Button small icon="upload" onClick={() => setOverlay('notionImport')}>Import</Button></Row>
             {isDesktop && <Row label="Keep Notion pages updated" sub="Pages imported from the Notion app refresh on start and every 30 minutes"><Toggle checked={s.notionSync} onChange={(v) => set((x) => { x.notionSync = v })} /></Row>}
             <Row label="Export everything" sub="A single JSON file you can import later"><Button small icon="download" onClick={() => exportAll()}>Export</Button></Row>
@@ -263,4 +276,18 @@ function updText(u: UpdateStatus): string {
     case 'dev': return 'Updates are off in development builds'
     default: return 'Checks automatically on start'
   }
+}
+
+function TagManager():JSX.Element {
+ const d=useData(x=>x), names=[...new Set([...Object.keys(d.tags),...Object.values(d.tasks).flatMap(t=>t.tags),...Object.values(d.journal).flatMap(j=>j.tags)])].sort()
+ const [selected,setSelected]=useState(''),[name,setName]=useState(''),[color,setColor]=useState('#5279c5')
+ return <details><summary>Manage tags</summary><form className="row gap-sm wrap" onSubmit={e=>{e.preventDefault();const next=name.trim().replace(/^#+/,'');if(!next||Object.hasOwn(Object.prototype,next))return
+ act(data=>{if(selected&&next!==selected){
+ for(const record of [...Object.values(data.tasks),...Object.values(data.journal)]) record.tags=[...new Set(record.tags.map(t=>t===selected?next:t))]
+ for(const rule of data.rules)if(rule.tag===selected)rule.tag=next
+ for(const page of Object.values(data.pages)){if(page.view?.tag===selected)page.view.tag=next;for(const view of page.view?.taskViews??[])if(view.options?.tag===selected)view.options.tag=next}
+ delete data.tags[selected]
+ };data.tags[next]=color});setSelected(next);setName(next)
+ }}><label>Tag<select className="input" value={selected} onChange={e=>{const tag=e.target.value;setSelected(tag);setName(tag);setColor(d.tags[tag]||'#5279c5')}}><option value="">New tag</option>{names.map(t=><option key={t}>{t}</option>)}</select></label>
+ <label>Name<input required className="input" value={name} onChange={e=>setName(e.target.value)}/></label><label>Color<input type="color" value={color} onChange={e=>setColor(e.target.value)}/></label><button className="btn btn-sm">Save tag</button></form></details>
 }

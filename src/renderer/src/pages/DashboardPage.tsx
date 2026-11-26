@@ -69,7 +69,7 @@ export function initialConfig(type: WidgetType, d: import('../types').AppData, e
   const def = widgetDef(type)
   const config: Record<string, any> = { ...(def.config ?? {}) }
   const live = Object.values(d.pages).filter((x) => !x.deletedAt && !x.rowOf && x.id !== exclude)
-  if (type === 'wishlist') config.pageId = live.find(p => p.type === 'wishlist')?.id
+  if (type === 'reading' || type === 'workout' || type === 'wishlist' || type === 'study' || type === 'list') config.pageId = live.find(p => p.type === type)?.id
   if (type === 'tracker') config.metricId = Object.values(d.metrics).find(m => live.some(p => p.id === m.pageId))?.id
   if (type === 'value' || type === 'progress') config.valueId = Object.values(d.values).sort((a, b) => a.order - b.order)[0]?.id ?? null
   if (type === 'database') config.dbId = live.find((x) => x.type === 'database')?.id ?? null
@@ -82,7 +82,7 @@ export function initialConfig(type: WidgetType, d: import('../types').AppData, e
   return config
 }
 
-export const NEEDS_SETUP: WidgetType[] = ['tracker', 'wishlist', 'button', 'value', 'progress', 'database', 'countdown', 'page', 'text', 'image']
+export const NEEDS_SETUP: WidgetType[] = ['reading','workout','list', 'study', 'tracker', 'wishlist', 'button', 'value', 'progress', 'database', 'countdown', 'page', 'text', 'image']
 
 function AddWidgetDialog({ pageId, onClose }: { pageId: string; onClose: () => void }): JSX.Element {
   const cols = useData((d) => d.pages[pageId]?.view?.cols ?? 12)

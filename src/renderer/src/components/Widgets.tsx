@@ -2,6 +2,8 @@ import { CustomButton, TrackerWidget, WishlistWidget } from './PersonalWidgets'
 import { filterTasks, groupTasks, sortTasks } from '../pages/TasksPage'
 import { defaultAction, runButtonAction } from './ButtonActions'
 import { uid } from '../lib/util'
+import { WidgetScope, scopedData, useWidgetData } from '../lib/widgetScope'
+import { aggregateWidgets, NamedToolWidget } from './NamedSources'
 import { ensureTaskPlanner } from '../lib/widgetSources'
 import { blockTextColor } from '../lib/look'
 import { SERVICES, isService, serviceIds } from '../../../shared/services'
@@ -39,6 +41,10 @@ export type AnyWidget = Pick<Widget, 'id' | 'type' | 'config' | 'title'>
 export type SetConfig = (key: string, value: any) => void
 
 export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: string; w: number; h: number; config?: Record<string, any>; group: 'Work' | 'Plan' | 'Track' | 'More' | 'Connections' }[] = [
+  { type: 'list', name:'List tracker', icon:'list-checks', desc:'Track a named list and its quantities', w:4,h:4,group:'Track' },
+  {type:'reading',name:'Reading list',icon:'book-open',desc:'Books and reading progress',w:4,h:4,group:'Plan'},
+  {type:'workout',name:'Workout log',icon:'activity',desc:'Exercise sessions and sets',w:4,h:4,group:'Plan'},
+  { type: 'study', name:'Study deck', icon:'graduation-cap', desc:'Review flashcards from one subject', w:4,h:4,group:'Plan' },
   { type: 'tracker', name: 'Tracker', icon: 'activity', desc: 'Log water, calories or another daily measurement', w: 3, h: 3, group: 'Track' },
   { type: 'wishlist', name: 'Wishlist', icon: 'shopping-bag', desc: 'Plan purchases and check off what you bought', w: 4, h: 4, group: 'Plan' },
   { type: 'button', name: 'Custom button', icon: 'mouse-pointer-click', desc: 'Run an action on a page, task or value', w: 3, h: 1, group: 'Work' },
@@ -169,7 +175,7 @@ function ValueWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
 }
 
 function ChartWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
-  const d = useData((x) => x)
+  const d = useWidgetData((x) => x)
   const data = series(d, cfg)
   const color = cfg.source === 'value' ? d.values[cfg.valueId]?.color : cfg.source === 'metric' ? d.metrics[cfg.metricId]?.color : undefined
   const total = data.reduce((a, x) => a + x.value, 0)
@@ -215,7 +221,7 @@ function ProgressWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
 }
 
 function StatWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
-  const d = useData((x) => x)
+  const d = useWidgetData((x) => x)
   const s = STATS.find((x) => x.id === cfg.stat) ?? STATS[0]
   const n = s.get(d, cfg)
   return (
@@ -274,11 +280,11 @@ function TasksWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   )
 }
 
-function HabitsWidget(): JSX.Element {
+function HabitsWidget({id}:{id?:string}): JSX.Element {
   const habits = useData((d) => d.habits)
   const pages = useData((d) => d.pages)
   const t = today()
-  const list = Object.values(habits).filter((h) => !h.archived && pages[h.pageId] && !pages[h.pageId].deletedAt && habitDueToday(h, t))
+  const list = Object.values(habits).filter((h) => (!id || h.pageId===id) && !h.archived && pages[h.pageId] && !pages[h.pageId].deletedAt && habitDueToday(h, t))
   if (!list.length) return <Missing text="No habits for today." />
   return (
     <div className="w-scroll">
@@ -415,11 +421,11 @@ function QuickAddWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
 
 }
 
-function GoalsWidget(): JSX.Element {
+function GoalsWidget({id}:{id?:string}): JSX.Element {
   const goals = useData((d) => d.goals)
   const tasks = useData((d) => d.tasks)
   const pages = useData((d) => d.pages)
-  const list = Object.values(goals).filter((g) => !g.done && pages[g.pageId] && !pages[g.pageId].deletedAt)
+  const list = Object.values(goals).filter((g) => (!id || g.pageId===id) && !g.done && pages[g.pageId] && !pages[g.pageId].deletedAt)
   if (!list.length) return <Missing text="No active goals." />
   return (
     <div className="w-scroll">
@@ -455,9 +461,12 @@ const RenderingWidgets = createContext<string[]>([])
 
 export function WidgetBody(props: WidgetBodyProps): JSX.Element {
   const ancestors = useContext(RenderingWidgets)
+  const data=useData(d=>d)
+  const id=props.w.config.sourcePageId
+  const scope=useMemo(()=>id && aggregateWidgets.has(props.w.type) ? scopedData(data,id) : null,[id,data,props.w.type])
   if (ancestors.includes(props.w.id)) return <div className="small muted">This widget is already displayed above.</div>
   const button = props.w.config.footerButton
-  return <RenderingWidgets.Provider value={[...ancestors,props.w.id]}><WidgetContent {...props} />{button && props.w.type !== 'button' && <div className="widget-action"><CustomButton config={button} /></div>}</RenderingWidgets.Provider>
+  return <RenderingWidgets.Provider value={[...ancestors,props.w.id]}><WidgetScope.Provider value={scope}><WidgetContent {...props} /></WidgetScope.Provider>{button && props.w.type !== 'button' && <div className="widget-action"><CustomButton config={button} /></div>}</RenderingWidgets.Provider>
 }
 
 function WidgetContent({ w, setConfig }: WidgetBodyProps): JSX.Element {
@@ -466,13 +475,14 @@ function WidgetContent({ w, setConfig }: WidgetBodyProps): JSX.Element {
   switch (w.type) {
     case 'button': return <CustomButton config={c} />
     case 'tracker': return <TrackerWidget key={c.metricId} metricId={c.metricId} step={c.step} />
+    case 'reading': case 'workout': case 'list': case 'study': return <NamedToolWidget type={w.type} id={c.pageId} setId={id=>setConfig('pageId',id)} />
     case 'wishlist': return <WishlistWidget pageId={c.pageId} setPage={id => setConfig('pageId', id)} />
     case 'value': return <ValueWidget cfg={c} />
     case 'chart': return <ChartWidget cfg={c} />
     case 'progress': return <ProgressWidget cfg={c} />
     case 'stat': return <StatWidget cfg={c} />
     case 'tasks': return <TasksWidget cfg={c} />
-    case 'habits': return <HabitsWidget />
+    case 'habits': return <HabitsWidget id={c.pageId} />
     case 'database': return c.dbId ? <div className="w-scroll"><DatabaseView dbId={c.dbId} viewId={c.viewId || undefined} embedded /></div> : <Missing text="Choose a database in the panel settings." />
     case 'calendar': return <MonthWidget cfg={c} />
     case 'clock': return c.style === 'ring' ? <RingClock cfg={c} /> : !c.style || c.style === 'digital' || c.style === 'big' ? <ClockWidget cfg={c} /> : <ClockStyles cfg={c} />
@@ -506,7 +516,7 @@ function WidgetContent({ w, setConfig }: WidgetBodyProps): JSX.Element {
     case 'countdown': return <CountdownWidget cfg={c} />
     case 'focus': return <FocusWidget />
     case 'quickadd': return <QuickAddWidget cfg={c} />
-    case 'goals': return <GoalsWidget />
+    case 'goals': return <GoalsWidget id={c.pageId} />
     case 'page': return <PageWidget cfg={c} />
     case 'pageview': return <PageViewWidget cfg={c} />
     case 'checklist': return <ChecklistWidget cfg={c} />
@@ -521,6 +531,8 @@ function WidgetContent({ w, setConfig }: WidgetBodyProps): JSX.Element {
 /** Title shown in the widget header (empty = no header). */
 export function widgetTitle(w: AnyWidget, d: AppData): string {
   if (w.title !== undefined && w.title !== null) return w.title
+  const sourceName=d.pages[w.config.sourcePageId ?? w.config.pageId]?.title
+  if(sourceName && (aggregateWidgets.has(w.type) || ['tasks','list','study','reading','workout','habits','goals','table','wishlist','tracker'].includes(w.type)))return sourceName
   switch (w.type) {
     case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': case 'image': case 'text': case 'dashboard': case 'week':
     case 'calendar': case 'weather': case 'daylight': case 'system': case 'timer':
@@ -651,7 +663,8 @@ function SectionsPanel({ cfg }: { cfg: Record<string, any> }): JSX.Element {
 function TablePanel({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const page = useData((d) => (cfg.pageId ? d.pages[cfg.pageId] : undefined))
   if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
-  return <TableWidget cfg={cfg} block={flatBlocks(page.blocks).filter((b) => b.type === 'table')[Number(cfg.table) || 0]} />
+  const tables=flatBlocks(page.blocks).filter(b=>b.type==='table')
+  return <TableWidget cfg={cfg} block={cfg.tableId ? tables.find(b=>b.id===cfg.tableId) : tables[Number(cfg.table)||0]} />
 }
 
 
@@ -724,6 +737,13 @@ function visibleBlocks(blocks: Block[]): Block[] {
 }
 
 function PageViewWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
+  const [active,setActive]=useState('')
+  const pages=useData(d=>d.pages)
+  const ids:string[]=[...new Set<string>([cfg.pageId,...(Array.isArray(cfg.extraPages)?cfg.extraPages:[])])].filter(id=>pages[id]&&!pages[id].deletedAt)
+  const id=ids.includes(active)?active:ids[0]
+  return <div className="w-pageview">{ids.length>1&&<div className="row wrap gap-xs" role="tablist">{ids.map(key=><button role="tab" aria-selected={key===id} className={'chip-btn '+(key===id?'active':'')} key={key} onClick={()=>setActive(key)}>{pages[key].title}</button>)}</div>}<PageTabContent cfg={{...cfg,pageId:id}}/></div>
+}
+function PageTabContent({ cfg }: { cfg: Record<string, any> }): JSX.Element {
   const page = useData((d) => (cfg.pageId ? d.pages[cfg.pageId] : undefined))
   if (!page || page.deletedAt) return <Missing text="Choose a page in the panel settings." />
   let blocks = visibleBlocks(scoped(page, cfg))
@@ -810,9 +830,9 @@ function RowTask({ r }: { r: DatedRow }): JSX.Element {
 }
 
 function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
-  const tasks = useData((d) => d.tasks)
-  const pages = useData((d) => d.pages)
-  const use24h = useData((d) => d.settings.use24h)
+  const tasks = useWidgetData((d) => d.tasks)
+  const pages = useWidgetData((d) => d.pages)
+  const use24h = useWidgetData((d) => d.settings.use24h)
   const t = today()
   const days = Math.max(1, Math.min(14, Number(cfg.days) || 5))
   const live = (x: Task): boolean => !x.archived && !x.done && !!pages[x.pageId] && !pages[x.pageId].deletedAt
@@ -860,9 +880,9 @@ function AgendaWidget({ cfg }: { cfg: Record<string, any> }): JSX.Element {
 }
 
 function WeekWidget(): JSX.Element {
-  const tasks = useData((d) => d.tasks)
-  const habits = useData((d) => d.habits)
-  const weekStart = useData((d) => d.settings.weekStart)
+  const tasks = useWidgetData((d) => d.tasks)
+  const habits = useWidgetData((d) => d.habits)
+  const weekStart = useWidgetData((d) => d.settings.weekStart)
   const t = today()
   const start = weekStartOf(t, weekStart)
   const keys = Array.from({ length: 7 }, (_, i) => addDays(start, i))
