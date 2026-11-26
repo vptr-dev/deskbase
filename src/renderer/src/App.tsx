@@ -404,7 +404,7 @@ function MainApp(): JSX.Element {
   useNotionSync()
   useConnections()
   useDesktopWidgets()
-  if (!ready) return <main className="boot">{locked?<section className="panel glass"><h2>Unlock Deskbase</h2><WorkspacePassword mode="unlock" onDone={load}/></section>:bootError?<section role="alert">{bootError}<button className="btn" onClick={load}>Retry</button></section>:null}</main>
+  if (!ready) return <main className="boot">{locked?<section className="panel glass"><h2>Unlock Deskbase</h2><WorkspacePassword mode="unlock" onDone={load}/></section>:bootError?<section role="alert">{bootError}{isDesktop&&<button className="btn" onClick={()=>api.openDataFolder()}>Open data folder</button>}<button className="btn" onClick={load}>Retry</button></section>:null}</main>
   const view = isView(current) ? current : null
 
   return (

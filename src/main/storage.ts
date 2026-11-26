@@ -70,41 +70,39 @@ export function loadData(): LoadResult {
   if(lockedData(dataDir()))throw Error("Workspace is locked")
   const file = dataFile()
   if (!fs.existsSync(file)) {
-    // Recover from an interrupted write.
-    if (fs.existsSync(`${file}.tmp`)) fs.renameSync(`${file}.tmp`, file)
-    else return { data: null, migratedFrom: null, path: file }
+    const interrupted = [file+'.writing',file+'.tmp'].find(f=>fs.existsSync(f))
+    if(interrupted)fs.renameSync(interrupted,file)
+    else if(!listBackups().length)return {data:null,migratedFrom:null,path:file}
   }
+  let raw:Record<string,any>, recovered:string|undefined
   try {
-    const raw = loadFile(file)
-    if (typeof raw.schema === 'number' && raw.schema > CURRENT_SCHEMA) {
-      // Data from a newer version: keep a copy so nothing is lost.
-      createBackup(`newer-schema-${raw.schema}`)
-      return { data: raw, migratedFrom: null, path: file }
+    raw=loadFile(file)
+    if(!raw||typeof raw!=='object'||Array.isArray(raw)||(Number(raw.schema)>=6&&(!raw.pages||typeof raw.pages!=='object')))throw Error('Workspace pages are missing')
+  } catch {
+    if(fs.existsSync(file))fs.copyFileSync(file,path.join(dataDir(),'deskbase-corrupt-'+Date.now()+'.json'))
+    let candidate:Record<string,any>|undefined
+    for(const backup of listBackups()){
+      try {
+        const content=loadFile(path.join(backupDir(),backup.name))
+        if(!content?.pages||typeof content.pages!=='object')continue
+        candidate=content;recovered='Restored the backup from '+backup.date;break
+      } catch { /* Continue to the next older snapshot. */ }
     }
-    const { data, from, changed } = migrate(raw)
-    if (changed) {
-      createBackup(`before-migration-v${from}`)
-      writeAtomic(file, JSON.stringify(data))
-    }
-    autoBackup()
-    return { data, migratedFrom: changed ? from : null, path: file }
-  } catch (e: any) {
-    // Corrupt file: move it aside and try the newest backup.
-    const bad = path.join(dataDir(), `deskbase-corrupt-${stamp()}.json`)
-    try { fs.copyFileSync(file, bad) } catch { /* ignore */ }
-    const latest = listBackups()[0]
-    if (latest) {
-      const restored = loadFile(path.join(backupDir(), latest.name))
-      const { data } = migrate(restored)
-      writeAtomic(file, JSON.stringify(data))
-      return { data, migratedFrom: null, path: file, error: `Your data file was damaged. Restored the backup from ${latest.date}.` }
-    }
-    return { data: null, migratedFrom: null, path: file, error: `Your data file could not be read (${e?.message}). A copy was kept at ${bad}.` }
+    if(!candidate)throw Error('Deskbase could not read the workspace or any backup. Your existing files have been kept.')
+    raw=candidate
   }
+  if(typeof raw.schema==='number'&&raw.schema>CURRENT_SCHEMA)throw Error('This workspace was saved by a newer Deskbase version. Update Deskbase to open it.')
+  const { data,from,changed }=migrate(raw)
+  if(changed&&!recovered)createBackup('before-migration-v'+from)
+  if(changed||recovered)writeAtomic(file,JSON.stringify(data,saveImage))
+  autoBackup()
+  return {data,migratedFrom:changed?from:null,path:file,error:recovered}
 }
 
 export function saveData(data: unknown): void {
+  if(lockedData(dataDir()))throw Error("Workspace is locked")
   const obj = data as Record<string, any>
+  if(!obj?.pages || typeof obj.pages!=='object'||Number(obj.schema)>CURRENT_SCHEMA)throw Error('Unsupported workspace data')
   obj.schema = CURRENT_SCHEMA
   writeAtomic(dataFile(), JSON.stringify(obj,saveImage))
 }
@@ -146,11 +144,13 @@ export function listBackups(): { name: string; date: string; size: number; mtime
 export function readBackup(name: string): Record<string, any> {
   const safe = path.basename(name)
   const raw = loadFile(path.join(backupDir(),safe))
+  if(Number(raw.schema)>CURRENT_SCHEMA)throw Error('Update Deskbase before importing this workspace')
   return migrate(raw).data
 }
 
 export function parseImport(text: string): Record<string, any> {
   const raw = JSON.parse(text)
   if (!raw || typeof raw !== 'object' || !raw.pages) throw new Error('This file is not a backup or export from this app.')
+  if(Number(raw.schema)>CURRENT_SCHEMA)throw Error('Update Deskbase before importing this workspace')
   return migrate(raw).data
 }

@@ -70,6 +70,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
   task: Task; showPage?: boolean; onOpen: (id: string) => void; draggable?: boolean; onDragStart?: () => void; onDropOn?: () => void
   selected?: boolean; onSelect?: (id: string, range: boolean) => void
 }): JSX.Element {
+  const tagColors=useData(d=>d.tags)
   const widgetMenu = useContext(WidgetItemMenu)
   const pageTitle = useData((d) => (showPage ? d.pages[task.pageId]?.title : ''))
   const goalTitle = useData((d) => (task.goalId ? d.goals[task.goalId]?.title : ''))
@@ -130,7 +131,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
           {task.blockedBy && <BlockerLabel id={task.blockedBy}/>}
           {task.notes && <span data-field="details" className="meta"><Icon name="note" size={12} /></span>}
           {task.estimate ? <span data-field="details" className="meta"><Icon name="clock" size={12} />{task.estimate}m</span> : null}
-          {task.tags.map((t) => <span data-field="tags" key={t} className="meta tag">#{t}</span>)}
+          {task.tags.map((t) => <span data-field="tags" key={t} className="meta tag" style={{color:tagColors[t]}}>#{t}</span>)}
           {goalTitle && <span data-field="details" className="meta"><Icon name="flag" size={12} />{goalTitle}</span>}
           {showPage && pageTitle && <span className="meta">{pageTitle}</span>}
         </div>

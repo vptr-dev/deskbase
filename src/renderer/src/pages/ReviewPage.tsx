@@ -86,7 +86,7 @@ export function ReviewPage({ pageId }: { pageId: string }): JSX.Element {
         <section className="panel glass">
           <div className="panel-head"><h3>Highlights</h3></div>
           <div className="review-list">
-            {s.tags.length > 0 && <div className="row gap-xs wrap">{s.tags.map(([t, n]) => <span key={t} className="chip">#{t} · {n}</span>)}</div>}
+            {s.tags.length > 0 && <div className="row gap-xs wrap">{s.tags.map(([t, n]) => <span key={t} className="chip" style={{color:d.tags[t]}}>#{t} · {n}</span>)}</div>}
             {s.valueChanges.map(({ v, delta }) => <div key={v.id} className="row between small"><span className="row gap-xs"><Glyph value={v.icon} fallback="gem" size={13} color={v.color} /> {v.name}</span><span className="muted">{delta > 0 ? '+' : ''}{formatValue(v, delta)}</span></div>)}
             {s.done.slice().sort((a, b) => b.priority - a.priority).slice(0, 5).map((t) => <div key={t.id} className="row gap-xs small"><Icon name="check" size={12} className="accent" /><span className="ellipsis">{t.title}</span></div>)}
             {!s.done.length && !s.valueChanges.length && <div className="muted small">Nothing logged this week.</div>}

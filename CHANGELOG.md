@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.21.1 - 2026-11-26
+
+- Recovery checks older backups when a newer snapshot is damaged. Unreadable workspaces and files saved by a newer version are preserved on disk.
+- Restart tests verify that compact desktop panels reopen at the exact saved size and position.
+
 ## 0.21.0 - 2026-11-26
 
 - Added named list and study pages with live widgets, quantity targets, flashcards and scheduled reviews.
