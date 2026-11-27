@@ -1,10 +1,10 @@
 import { isService, type ServiceId } from '../../../shared/services'
 // Panels from connections: calendar events, a news feed and GitHub issues and pull requests.
-import { openView, toast, useData } from '../store'
+import { getData, openView, toast, useData } from '../store'
 import type { ConnectionKind } from '../types'
 import type { FeedItem } from '../../../shared/feeds'
 import { api } from '../lib/api'
-import { type CalEvent, CONN_INFO, closeTodoist, useCalendarEvents, useFeed, useNowPlaying } from '../lib/connections'
+import { type CalEvent, CONN_INFO, specOf, loadFeed, closeTodoist, useCalendarEvents, useFeed, useNowPlaying } from '../lib/connections'
 import { mailPreset } from '../../../shared/feeds'
 import { useEffect, useState } from 'react'
 import { MONTHS_LONG, addDays, friendlyDay, parseDay, timeAgo, today } from '../lib/util'
@@ -73,7 +73,8 @@ export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summa
     void navigator.clipboard.writeText(item.resumeCommand!).then(() => toast('Resume command copied')).catch(() => toast('Clipboard unavailable', { kind: 'error' }))
   }}><span className="ellipsis grow">{item.title}</span><Icon name="copy" size={13} /></button>
   if (kind === 'mail') {
-    return (
+    const label=item.unread?'Mark as read':'Mark as unread'
+    return (<div className="row gap-xs" {...meta}>
       <button {...meta} className={`feed-row mail ${item.unread ? 'unread' : ''}`} onClick={() => open(item.url)} title={item.title}>
         <span className="mail-dot" />
         <span className="min0 grow">
@@ -81,6 +82,12 @@ export function FeedRow({ item, summary, kind, connId }: { item: FeedItem; summa
           <span className="ellipsis d-block mail-subject">{item.title}</span>
         </span>
       </button>
+      {item.mailboxRevision&&connId&&<button className="icon-btn" title={label} aria-label={label} data-item-action={label} onClick={async()=>{
+        const c=getData().connections.find(c=>c.id===connId)
+        if(!c)return
+        try{await api.conn.mailSeen(specOf(c),item.id,item.mailboxRevision!,!!item.unread);await loadFeed(c,true)}
+        catch(e){toast(e instanceof Error?e.message:'Could not update message',{kind:'error'})}
+      }}><Icon name={item.unread?'check':'mail'} size={14}/></button>}</div>
     )
   }
   if (kind === 'todoist') {

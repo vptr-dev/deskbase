@@ -22,6 +22,7 @@ function layoutCopier(snapshot: AppData, d: AppData, mode: TemplateMode) {
     a.then?.forEach(step => action(step, parent))
   }
   function config(c: PanelConfig, parent: string | null, type: DeskWidget['type']): void {
+    if(Array.isArray(c.extraSources))c.extraSources=c.extraSources.map((id:string)=>source(id,parent))
     if(Array.isArray(c.extraPages))c.extraPages=c.extraPages.map((id:string)=>source(id,parent))
     if (mode === 'fresh' && !c.pageId && ['tasks','quickadd','wishlist','list','study','reading','workout'].includes(type)) {
       const kind = type === 'reading' || type === 'workout' || type === 'study' || type === 'list' || type === 'wishlist' ? type : 'tasks'
@@ -51,6 +52,7 @@ function layoutCopier(snapshot: AppData, d: AppData, mode: TemplateMode) {
     const p: Page = { ...structuredClone(old), id: newId, title: title || old.title, parentId: parent, children: [],
       template: undefined, createdAt: now, updatedAt: now, source: null, favorite: false, rowOf: null, props: undefined }
     d.pages[newId] = p
+    if(mode==="fresh"&&Array.isArray(p.view?.sourceIds))p.view.sourceIds=p.view.sourceIds.map((id:string)=>source(id,parent))
     if (parent && d.pages[parent]) d.pages[parent].children.push(newId)
     else d.rootOrder.push(newId)
     // Block ids are scoped to a page. Keeping them preserves references to the copied toggles.

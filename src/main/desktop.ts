@@ -228,7 +228,7 @@ function displayFor(id?: number | null): Electron.Display {
 /** Keep at least part of the widget on a screen that exists right now. */
 function visibleBounds(spec: DeskSpec): Electron.Rectangle {
   if (spec.w <= 0 || spec.h <= 0) return displayFor(spec.displayId).workArea
-  const r = { x: Math.round(spec.x), y: Math.round(spec.y), width: Math.max(MIN_W, Math.round(spec.w)), height: Math.max(MIN_H, Math.round(spec.h)) }
+  const r = { x: Math.round(spec.x), y: Math.round(spec.y), width: Math.max(1, Math.round(spec.w)), height: Math.max(1, Math.round(spec.h)) }
   const area = screen.getDisplayMatching(r).workArea
   const overlaps = screen.getAllDisplays().some((d) => {
     const a = d.workArea

@@ -32,6 +32,7 @@ export const ROLLUP_FNS: { fn: RollupFn; name: string }[] = [
 export const propTypeInfo = (t: PropType): (typeof PROP_TYPES)[number] => PROP_TYPES.find((p) => p.type === t) ?? PROP_TYPES[0]
 
 export const VIEW_TYPES: { type: ViewType; name: string; icon: string }[] = [
+  {type:'form',name:'Entry form',icon:'list'},
   { type: 'table', name: 'Table', icon: 'table' },
   { type: 'board', name: 'Board', icon: 'board' },
   { type: 'gallery', name: 'Gallery', icon: 'gallery' },

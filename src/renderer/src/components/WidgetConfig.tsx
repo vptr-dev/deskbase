@@ -2,7 +2,7 @@ import { NamedSourceFields } from './NamedSources'
 import { ButtonActionFields, defaultAction } from './ButtonActions'
 import type { PanelButton } from './PersonalWidgets'
 import { isService, type ServiceId } from '../../../shared/services'
-import type { ReactNode } from 'react'
+import {useState,type ReactNode} from 'react'
 import { findBlock } from './Blocks'
 import { updatePage, openView, setSettings, useData } from '../store'
 import type { Place } from '../types'
@@ -53,6 +53,7 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   patch: (fn: (w: AnyWidget) => void) => void
   selfPageId?: string
 }): JSX.Element {
+  const [viewName,setViewName]=useState('')
   const d = useData((x) => x)
   const c = w.config
   const live = Object.values(d.pages).filter((p) => !p.deletedAt && !p.rowOf)
@@ -122,6 +123,10 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   </>
   return (
     <div className="form-grid">
+      <details><summary>Named panel views</summary><div className="row wrap gap-sm">{(d.settings.panelViews??[]).filter(v=>v.type===w.type).map(v=><span key={v.name}><button type="button" className="btn btn-sm" onClick={()=>patch(x=>{x.config={...structuredClone(v.config),pinnedEverywhere:x.config.pinnedEverywhere}})}>{v.name}</button>
+        <button type="button" className="icon-btn" aria-label={'Remove view '+v.name} onClick={()=>setSettings(s=>{s.panelViews=s.panelViews?.filter(i=>i.type!==w.type||i.name!==v.name)})}>×</button></span>)}
+        <input className="input input-sm" value={viewName} placeholder="View name" onChange={e=>setViewName(e.target.value)}/>
+        <button type="button" className="btn btn-sm" disabled={!viewName.trim()} onClick={()=>{const config=structuredClone(c);for(const key of ['endsAt','startedAt','elapsed','pinnedEverywhere'])delete config[key];setSettings(s=>{s.panelViews=[...(s.panelViews??[]).filter(v=>v.type!==w.type||v.name!==viewName.trim()),{name:viewName.trim(),type:w.type,config}]});setViewName('')}}>Save current view</button></div></details>
       <NamedSourceFields key={w.id+w.type} w={w} patch={patch} />
       {w.type === 'button' && editButton(c, changes => patch(widget => { Object.assign(widget.config, changes) }))}
       {w.type === 'wishlist' && <Field label="Wishlist"><PagePicker value={c.pageId ?? ''} pages={live.filter(p => p.type === 'wishlist')} empty="First wishlist" onChange={v => set('pageId', v)} /></Field>}
@@ -353,13 +358,15 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         <Field label="Your lines" sub="One per line; click the panel for the next one"><textarea className="input input-area grow" rows={4} value={c.lines ?? ''} onChange={(e) => set('lines', e.target.value)} placeholder="Leave empty for the built-in lines" /></Field>
         {String(c.lines ?? '').trim() && <Field label="Mix in built-in lines"><Toggle checked={!!c.builtIn} onChange={(v) => set('builtIn', v)} /></Field>}
       </>}
+      {w.type==='workspaces'&&<Field label="Switch with"><Segmented small value={c.look??'tabs'} onChange={v=>set('look',v)} options={[{value:'tabs',label:'Tabs'},{value:'picker',label:'Dropdown'},{value:'cycle',label:'Cycle button'}]}/></Field>}
       {w.type === 'launcher' && <>
-        <Field label="Look"><Segmented small value={c.look ?? 'grid'} onChange={(v) => set('look', v)} options={[{ value: 'grid', label: 'Grid' }, { value: 'row', label: 'Row' }, { value: 'list', label: 'List' }]} /></Field>
+        <Field label="Look"><Segmented small value={c.look ?? 'grid'} onChange={(v) => set('look', v)} options={[{ value: 'grid', label: 'Grid' }, { value: 'row', label: 'Row' }, { value: 'list', label: 'List' },{value:'folders',label:'Folders'},{value:'search',label:'Search'}]} /></Field>
         <Field label="Labels"><Toggle checked={c.labels !== false} onChange={(v) => set('labels', v)} /></Field>
         <div className="launch-edit">
           {launcherItems(c).map((it, i) => (
             <div key={i} className="launch-edit-row">
               <input className="input input-sm" placeholder="Name" value={it.label ?? ''} onChange={(e) => patch((x) => { x.config.items[i].label = e.target.value })} />
+              <input className="input input-sm" aria-label="Shortcut category" placeholder="Category" value={it.category??''} onChange={e=>patch(x=>{x.config.items[i].category=e.target.value})}/>
               <input className="input input-sm grow" placeholder="Website, app link or C:\Path\to\file" value={it.target ?? ''} onChange={(e) => patch((x) => { x.config.items[i].target = e.target.value })} />
               <select className="input input-sm" value={it.icon ?? ''} onChange={(e) => patch((x) => { x.config.items[i].icon = e.target.value || undefined })}>
                 <option value="">Letter</option>

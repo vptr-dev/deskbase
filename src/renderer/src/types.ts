@@ -97,7 +97,7 @@ export interface ButtonAction {
 export interface WishItem { id: string; name: string; cost: number | null; purchased: boolean; purchasedOn?: string; category?: string; priority?: 'high' | 'medium' | 'low'; url?: string; image?: string }
 export interface PurchaseList { items: WishItem[]; budget: number | null; currency: string }
 
-export interface ListEntry { id: string; name: string; done: number; target: number; unit: string }
+export interface ListEntry { category?: string; id: string; name: string; done: number; target: number; unit: string }
 export interface WorkoutSet { id:string; date:string; exercise:string; sets:number; reps:number; weight:number; unit:string }
 export interface StudyCard { id: string; question: string; answer: string; due: string; interval: number }
 export interface Page {
@@ -165,7 +165,7 @@ export interface DbProp {
   /** formula: an expression over the other properties, e.g. prop("Price") * 2 */
   formula?: string
 }
-export type ViewType = 'table' | 'board' | 'gallery' | 'list' | 'calendar' | 'timeline' | 'chart'
+export type ViewType = 'table' | 'board' | 'gallery' | 'list' | 'calendar' | 'timeline' | 'chart' | 'form'
 export interface DbChart { kind: 'bar' | 'hbar' | 'line' | 'donut'; by: string | null; value: string | null; fn: 'count' | 'sum' | 'avg' }
 export interface DbFilter { id: string; prop: string; op: 'is' | 'not' | 'contains' | 'empty' | 'notEmpty' | 'gt' | 'lt' | 'checked' | 'unchecked'; value?: any }
 export interface DbView {
@@ -193,7 +193,7 @@ export type WidgetType =
   | 'note' | 'countdown' | 'focus' | 'quickadd' | 'stat' | 'page' | 'goals'
   | 'pageview' | 'checklist' | 'dashboard' | 'image' | 'text' | 'agenda' | 'week'
   | 'weather' | 'daylight' | 'system' | 'timer' | 'sections' | 'table'
-  | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'launcher' | 'search' | 'quote' | 'battery'
+  | 'worldclock' | 'stopwatch' | 'timeleft' | 'moon' | 'workspaces' | 'launcher' | 'search' | 'quote' | 'battery'
   | 'tracker' | 'wishlist' | 'button' | 'list' | 'study' | 'reading' | 'workout'
   | 'network' | 'calculator' | 'recent' | 'dbchart' | 'activity' | 'deadlines' | 'events' | 'feed' | 'github' | 'mail' | 'todoist' | 'media'
 export interface Widget {
@@ -379,6 +379,7 @@ export interface ValueRule {
 
 export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'epic'
 export interface CustomRepeat {
+  remaining?: number
   unit: 'day' | 'week' | 'month' | 'year'
   interval: number
   start: string
@@ -512,6 +513,9 @@ export interface FocusSession {
 /** A place for weather and daylight. */
 export interface Place { name: string; lat: number; lon: number }
 export interface Settings {
+  repeatPatterns?: {name:string;rule:CustomRepeat}[]
+  panelViews?: {name:string;type:WidgetType;config:Record<string,any>}[]
+  savedThemes?: {name:string; json:string; panels?:WidgetStyle}[]
   searchKey?: string
   quickAddKey?: string
   theme: 'system' | 'light' | 'dark'

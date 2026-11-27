@@ -760,6 +760,7 @@ export function DatabaseView({ dbId, viewId, embedded }: { dbId: string; viewId?
       {view.type === 'list' && <ListView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'calendar' && <CalendarView dbId={dbId} db={db} view={view} rows={shown} />}
       {view.type === 'timeline' && <TimelineView dbId={dbId} db={db} view={view} rows={shown} />}
+      {view.type==='form'&&<EntryForm key={dbId+view.id} dbId={dbId} db={db} view={view}/>}
       {view.type === 'chart' && <ChartView db={db} view={view} rows={shown} />}
       {tplEl && <Popover anchor={tplEl} align="end" onClose={() => setTplEl(null)}><Menu onClose={() => setTplEl(null)} items={[
         ...templatesOf(getData(), dbId).map((t) => ({ label: t.title || 'Untitled', icon: 'file-text', onClick: () => { const id = addRowFrom(dbId, t.id, defaultsFromFilters(view)); openPage(id) } })),
@@ -798,3 +799,11 @@ export function RowProps({ rowId }: { rowId: string }): JSX.Element | null {
 
 export const friendly = friendlyDay
 export const rowsOfDb = rowsOf
+
+function EntryForm({dbId,db,view}:{dbId:string;db:DbSchema;view:DbView}):JSX.Element {
+ const [title,setTitle]=useState(''),[fields,setFields]=useState<Record<string,any>>({}),[sent,setSent]=useState(false)
+ return <form className="form panel glass" onSubmit={e=>{e.preventDefault();if(!title.trim())return;addRow(dbId,{...defaultsFromFilters(view),...fields},title.trim());setTitle('');setFields({});setSent(true)}}>
+ <label>Name<input className="input" required value={title} onChange={e=>{setTitle(e.target.value);setSent(false)}}/></label>
+ {db.props.filter(p=>['text','number','checkbox','date','url'].includes(p.type)).map(p=><label key={p.id}>{p.name}<input className="input" type={p.type==='checkbox'?'checkbox':p.type==='number'?'number':p.type==='date'?'date':p.type==='url'?'url':'text'} step={p.type==='number'?'any':undefined} checked={p.type==='checkbox'?!!fields[p.id]:undefined} value={p.type==='checkbox'?undefined:fields[p.id]??''} onChange={e=>setFields({...fields,[p.id]:p.type==='checkbox'?e.target.checked:p.type==='number'&&e.target.value?e.target.valueAsNumber:e.target.value})}/></label>)}
+ <button className="btn btn-primary">Submit entry</button>{sent&&<small role="status">Entry saved</small>}</form>
+}

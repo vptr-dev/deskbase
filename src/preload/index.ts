@@ -96,6 +96,10 @@ const api = {
     disconnect: (page: string) => ipcRenderer.invoke('trello:disconnect', page)
   },
   conn: {
+    mailGrant:(id:string)=>ipcRenderer.invoke('conn:mailGrant',id),
+    mailSeen:(spec:unknown,uid:string,revision:string,seen:boolean)=>ipcRenderer.invoke('conn:mailSeen',spec,uid,revision,seen),
+    authorizeProvider:(id:string,kind:string,client:string,key:string)=>ipcRenderer.invoke('conn:authorizeProvider',id,kind,client,key),
+    authorizeMail:(id:string,provider:string,user:string,client:string,secret:string)=>ipcRenderer.invoke("conn:authorizeMail",id,provider,user,client,secret),
     secrets: () => ipcRenderer.invoke('conn:secrets'),
     setSecret: (id: string, value: string | null, kind?: string) => ipcRenderer.invoke('conn:setSecret', id, value, kind),
     fetch: (spec: unknown, force?: boolean) => ipcRenderer.invoke('conn:fetch', spec, force),

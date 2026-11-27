@@ -77,7 +77,7 @@ if (!process.versions.electron) {
     await waitFor('app startup', () => evaluate(main, '!!window.__desk'))
     assert.equal(path.dirname(app.getPath('userData')), path.join(profile, 'appData'))
 
-    const expected={x:52,y:70,width:103,height:83}
+    const expected={x:52,y:70,width:72,height:44}
     if(process.env.DESKBASE_QA_PHASE==='restore'){
       const restored=await waitFor('saved size probe',()=>evaluate(main,'__desk.getData().desktop.widgets.find(w=>w.title==="Size probe")'))
       assert.deepEqual({x:restored.x,y:restored.y,width:restored.w,height:restored.h},expected)
@@ -120,7 +120,7 @@ if (!process.versions.electron) {
     await choose(timer.win, 'Reset timer')
     await waitFor('reset timer', () => evaluate(main, '__desk.getData().desktop.widgets.find(w => w.id === ' + JSON.stringify(timer.id) + ').config.endsAt === null'))
     console.log('Locked timer reset passed.')
-    const probe=await evaluate(main,'__desk.addDesktopWidget("note",{title:"Size probe",x:52,y:70,w:103,h:83})')
+    const probe=await evaluate(main,'__desk.addDesktopWidget("note",{title:"Size probe",x:52,y:70,w:72,h:44})')
     await waitFor('actual bounds before restart',async()=>{
       const b=await evaluate(main,'__desk.api.desk.bounds('+JSON.stringify(probe)+')')
       return b&&Object.keys(expected).every(k=>b[k]===expected[k])

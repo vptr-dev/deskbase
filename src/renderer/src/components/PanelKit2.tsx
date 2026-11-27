@@ -576,24 +576,26 @@ export function MoonWidget({ cfg }: { cfg: Cfg }): JSX.Element {
 }
 
 // ---------- launcher ----------
-export interface LaunchItem { label: string; target: string; icon?: string }
+export interface LaunchItem { category?:string; label: string; target: string; icon?: string }
 const tileHue = (s: string): number => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 360; return h }
 export function LauncherWidget({ cfg }: { cfg: Cfg }): JSX.Element {
+  const [query,setQuery]=useState('')
   const items: LaunchItem[] = Array.isArray(cfg.items) ? cfg.items.filter((i: LaunchItem) => i && i.target) : []
   if (!items.length) return <div className="pk pk-empty"><span className="muted small">Add websites, apps or folders in the panel settings.</span></div>
   const open = (t: string): void => { api.launch(t).then((ok) => { if (!ok) toast('That link or file could not be opened') }).catch(() => {}) }
-  return (
-    <div className={`pk pk-launch ${cfg.look ?? 'grid'} ${cfg.labels === false ? 'nolabel' : ''}`}>
-      {items.map((it, i) => (
-        <button key={i} data-widget-item={it.label || it.target} data-item-action="Launch shortcut" className="pk-launch-item" title={it.target} onClick={() => open(it.target)}>
+  const renderItem=(it:LaunchItem,i:number)=>(<button key={i} data-widget-item={it.label || it.target} data-item-action="Launch shortcut" className="pk-launch-item" title={it.target} onClick={() => open(it.target)}>
           <span className="pk-launch-icon" style={it.icon ? undefined : { background: `hsl(${tileHue(it.label || it.target)} 55% 55% / 0.85)` }}>
             {it.icon ? <Icon name={it.icon} size={18} /> : (it.label || it.target).replace(/^https?:\/\/(www\.)?/, '').slice(0, 1).toUpperCase()}
           </span>
           {cfg.labels !== false && <span className="pk-launch-label">{it.label || it.target.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-        </button>
-      ))}
-    </div>
-  )
+        </button>)
+  const category=(it:LaunchItem)=>it.category?.trim()||'General'
+  if(cfg.look==='folders')return <div className="launch-folders">{[...new Set(items.map(category))].map(name=><details key={name}><summary><Icon name="folder" size={14}/> {name}</summary><div className="pk-launch list">{items.filter(it=>category(it)===name).map(renderItem)}</div></details>)}</div>
+  if(cfg.look==='search'){
+    const matches=items.filter(it=>[it.label,it.target,category(it)].join(' ').toLowerCase().includes(query.trim().toLowerCase()))
+    return <div className="launch-search"><input className="input input-sm" type="search" aria-label="Search shortcuts" placeholder="Search shortcuts" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&matches[0])open(matches[0].target)}}/><div className="pk-launch list">{matches.map(renderItem)}</div></div>
+  }
+  return <div className={'pk pk-launch '+(cfg.look??'grid')+(cfg.labels===false?' nolabel':'')}>{items.map(renderItem)}</div>
 }
 
 // ---------- web search ----------

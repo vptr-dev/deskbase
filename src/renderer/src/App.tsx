@@ -254,7 +254,7 @@ function useAppearance(): void {
   useEffect(() => { api.setTheme(s.theme) }, [s.theme])
   useEffect(() => { api.setShell({ closeToTray: s.closeToTray, quickAddHotkey: s.quickAddHotkey, quickAddKey:s.quickAddKey }).catch(() => {}) }, [s.closeToTray, s.quickAddHotkey,s.quickAddKey])
   useEffect(() => api.onQuickAdd(() => setOverlay('quickAdd')), [])
-  useEffect(() => { api.info().then((i) => { if (i.micaSupported && i.material !== s.material) api.setMaterial(s.material) }) }, [])
+  useEffect(() => { let active=true;api.info().then(i=>{if(active&&i.micaSupported&&i.material!==s.material)void api.setMaterial(s.material)});return ()=>{active=false} }, [s.material])
   useEffect(() => api.onOpenPage((id) => openPage(id)), [])
   const dark = s.theme === 'dark' || (s.theme === 'system' && systemDark)
   useEffect(() => { applyLook(document.documentElement, s, dark) }, [dark, s])
@@ -442,7 +442,9 @@ function MainApp(): JSX.Element {
                 ...(page.accent?[{ label:'Reset page accent',onClick:()=>updatePage(page.id,p=>{delete p.accent}) }]:[]),
                 { label: 'Print or save PDF', icon: 'download', onClick: () => window.print() },
                 { label: 'Export as Markdown', icon: 'download', onClick: () => exportPageMarkdown(page.id) },
-                { label: 'Page history', icon: 'history', onClick: () => setOverlay('history', { pageId: page.id }) },
+                {label:page.view?.reviewedAt?'Reviewed '+new Date(page.view.reviewedAt).toLocaleDateString()+' · Mark reviewed today':'Mark page reviewed today',icon:'check',onClick:()=>updatePage(page.id,p=>{p.view={...p.view,reviewedAt:Date.now()}})},
+                ...(page.view?.reviewedAt?[{label:'Clear review date',onClick:()=>updatePage(page.id,p=>{delete p.view!.reviewedAt})}]:[]),
+                { label: 'Page history' , icon: 'history', onClick: () => setOverlay('history', { pageId: page.id }) },
                 ...(page.source?.kind === 'notion' ? [{ label: 'Refresh from Notion', icon: 'refresh', onClick: () => { refreshFromNotion([page.id]) } }] : []),
                 ...(isDesktop && page.type === 'doc' ? [{ label: 'Show on desktop', icon: 'monitor', onClick: () => { addDesktopWidget(page.blocks.some((b) => b.type === 'todo') ? 'checklist' : 'pageview', { config: { pageId: page.id, hideChecked: true }, w: 340, h: 420 }) } }] : []),
                 { divider: true, label: '' },

@@ -92,6 +92,10 @@ export interface Bridge {
   }
   conn: {
     secrets(): Promise<string[]>
+    mailGrant(id:string):Promise<boolean>
+    mailSeen(spec:ConnSpec,uid:string,revision:string,seen:boolean):Promise<void>
+    authorizeProvider(id:string,kind:string,client:string,key:string):Promise<string[]>
+    authorizeMail(id:string,provider:string,user:string,client:string,secret:string):Promise<string[]>
     setSecret(id: string, value: string | null, kind?: string): Promise<string[]>
     fetch(spec: ConnSpec, force?: boolean): Promise<FeedResult>
     notionList(id: string): Promise<NotionPageInfo[]>
@@ -125,6 +129,10 @@ const desktopTrello = async (): Promise<never> => { throw new Error('Connect to 
 
 const webConn: Bridge['conn'] = {
   secrets: async () => Object.keys(webSecrets()),
+  mailGrant:async()=>false,
+  mailSeen:async()=>{throw Error("Mail changes require the desktop app")},
+  authorizeProvider:async()=>{throw Error("Browser sign-in requires the desktop app")},
+  authorizeMail:async()=>{throw Error('Sign-in requires the desktop app')},
   setSecret: async (id, value) => { const s = webSecrets(); if (value) s[id] = value; else delete s[id]; localStorage.setItem(CONN_KEY, JSON.stringify(s)); return Object.keys(s) },
   fetch: async (spec) => {
     try {

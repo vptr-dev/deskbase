@@ -68,7 +68,7 @@ const quote = (f: string): string => (/^[\w-]+$/.test(f) ? f : `"${f.replace(/"/
 /** CSS variables and data attributes for a look. Applied to the main document and every widget window. */
 export function applyLook(root: HTMLElement, s: Settings, dark: boolean): void {
   const l: Look = { ...DEFAULT_LOOK, ...(s.look ?? {}) }
-  const set = (k: string, v: string): void => root.style.setProperty(k, v)
+  const set = (k: string, v: string): void => { if(root.style.getPropertyValue(k)!==v)root.style.setProperty(k,v) }
   root.dataset.theme = dark ? 'dark' : 'light'
   root.dataset.density = s.density
   root.dataset.font = s.font
@@ -150,7 +150,7 @@ export function applyCustomCss(doc: Document, css: string): void {
 
 /** Look settings worth saving or sharing as a theme file. */
 export function exportTheme(s: Settings): string {
-  return JSON.stringify({ deskbase: 'theme', version: 1, theme: s.theme, accent: s.accent, backdrop: s.backdrop, glassStrength: s.glassStrength, font: s.font, fontSize: s.fontSize, density: s.density, look: s.look }, null, 2)
+  return JSON.stringify({ deskbase: 'theme', version: 1, material:s.material, reduceMotion:s.reduceMotion, theme: s.theme, accent: s.accent, backdrop: s.backdrop, glassStrength: s.glassStrength, font: s.font, fontSize: s.fontSize, density: s.density, look: s.look }, null, 2)
 }
 
 export function parseTheme(text: string): Partial<Settings> | null {
@@ -158,6 +158,8 @@ export function parseTheme(text: string): Partial<Settings> | null {
     const t = JSON.parse(text)
     if (!t || (t.deskbase !== 'theme' && t.planner !== 'theme')) return null
     const out: Partial<Settings> = {}
+    if(['none','mica','acrylic'].includes(t.material))out.material=t.material
+    if(typeof t.reduceMotion==='boolean')out.reduceMotion=t.reduceMotion
     if (['system', 'light', 'dark'].includes(t.theme)) out.theme = t.theme
     if (typeof t.accent === 'string' && /^#[0-9a-f]{3,8}$/i.test(t.accent)) out.accent = t.accent
     if (typeof t.backdrop === 'string') out.backdrop = t.backdrop

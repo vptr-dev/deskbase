@@ -1227,7 +1227,7 @@ button.db-add-col:hover { background: var(--hover); color: var(--fg); }
 /* ---------- desktop widget windows ---------- */
 html.dw-root, html.dw-root body, html.dw-root #root { height: 100%; background: transparent !important; overflow: hidden; }
 html.dw-root body::before, html.dw-root body::after { display: none; }
-html.dw-root .dw { height: 100%; backdrop-filter: none; animation: dw-in var(--dur-slow) var(--ease) both; }
+html.dw-root .dw { height: 100%; backdrop-filter: none; animation: dw-in var(--dur-slow) var(--ease) backwards; }
 @keyframes dw-in { from { opacity: 0; transform: scale(0.97); } }
 .dw-head { cursor: grab; }
 .dw.locked:not(.editing) .dw-head { cursor: default; }
@@ -2650,3 +2650,10 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 @media print{.scroll,#root,.app,.main{overflow:visible!important;height:auto!important;display:block!important} .sidebar,.title-strip,.tabs-bar,.assistant-panel{display:none!important}}
 
 .boot:has(.form){display:grid;place-content:center;padding:24px}.boot .panel{max-width:28rem;padding:24px}.boot .input{width:100%}
+
+.space-switcher{display:flex;flex-wrap:wrap;gap:4px;align-content:start;overflow:auto;min-height:0}.space-switcher button,.space-cycle{max-width:100%;white-space:normal;overflow-wrap:anywhere}.space-picker{width:100%;min-width:0}
+.launch-folders,.launch-search{min-height:0;overflow:auto;width:100%}.launch-folders summary{cursor:pointer;padding:4px}.launch-search>.input{width:100%;position:sticky;top:0}.launch-edit-row{flex-wrap:wrap}
+.fit-panel img,.fit-panel svg:not(.icon){max-width:100%}.fit-panel img{object-fit:contain}.fit-panel .pk-launch-item{max-width:100%}
+
+.fit-panel .pk-launch{align-content:safe center}.fit-panel .pk-launch.grid{grid-template-columns:repeat(auto-fill,minmax(min(64px,100%),1fr))}
+@media(max-width:150px),(max-height:85px){.dw-root .dw{padding:2px;gap:2px}.dw-root .dw-body{min-height:0;min-width:0}.dw-root .pk-launch,.dw-root .space-switcher{gap:2px}.dw-root .space-switcher button{padding:2px 4px}}

@@ -6,7 +6,21 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.21.1.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.22.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+
+## Named schedules and panel views
+
+Save a schedule in the repeat editor to reuse its weekdays, interval and duration on another task or habit. Applying a schedule uses the new item's start date. Panel settings can save named views for each panel type, including the selected sources. Database views now include a local entry form. Workspace search includes collection items, flashcards, wishlist entries and results already loaded by active connections.
+
+## Connecting accounts
+
+The desktop connection editor offers browser authorization for supported account APIs. Use the callback address shown in Deskbase when registering the provider application. Some providers restrict redirects, require app approval or limit permissions by plan. Use the service's credential setup option if your organization uses access tokens. Trello lets you choose read-only or card-editing permission. Public feeds use their URLs, while Codex and Claude Code read local session data.
+
+## Mail sign-in and themes
+
+Under Connections, add Mail, choose Gmail or Outlook, enter your email address, and expand **Sign in through your browser**. Use a Google Desktop OAuth client ID and secret, or a Microsoft public desktop client ID configured for loopback redirects and delegated IMAP access. The provider asks for permission in your browser. Gmail also accepts an app password from an eligible Google account. Deskbase stores the authorization on the device. An inbox panel can mark individual messages read or unread.
+
+Under Appearance, name your current theme and choose whether to include your desktop panel style. Apply a saved theme, edit its settings, and save under a second name to keep both versions.
 
 ## Study and tracking
 

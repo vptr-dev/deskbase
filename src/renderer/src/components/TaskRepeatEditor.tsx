@@ -31,7 +31,7 @@ export function TaskRepeatEditor({ task }: { task: Task }): JSX.Element {
     </select>
     {!draft && saved && <div className="row wrap gap-sm"><span className="small">{repeatLabel(saved)}{saved.until ? ' · ends ' + friendlyDay(saved.until) : ''}</span><Button small kind="ghost" onClick={edit}>Edit schedule</Button></div>}
     {draft && <div className="repeat-form">
-      <ScheduleFields id={task.id} draft={draft} onChange={setDraft} from={from} />
+      <ScheduleFields taskLimit id={task.id} draft={draft} onChange={setDraft} from={from} />
       <div className="row gap-sm"><Button small kind="primary" disabled={!first} onClick={() => {
         if (!first) return
         updateTask(task.id, t => {

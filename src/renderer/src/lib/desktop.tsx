@@ -452,9 +452,8 @@ function syncRoot(doc: Document): void {
   const from = document.documentElement
   const to = doc.documentElement
   for (const a of Array.from(to.attributes)) if (!from.hasAttribute(a.name)) to.removeAttribute(a.name)
-  for (const a of Array.from(from.attributes)) if (to.getAttribute(a.name) !== a.value) to.setAttribute(a.name, a.value)
-  to.classList.add('dw-root')
-  to.classList.remove('mica')
+  for (const a of Array.from(from.attributes)) {if(a.name==='class')continue;if(to.getAttribute(a.name)!==a.value)to.setAttribute(a.name,a.value)}
+  const names=[...Array.from(from.classList).filter(c=>c!=='mica'),'dw-root'];if(to.classList.contains('dw-dragging'))names.push('dw-dragging');const next=names.join(' ');if(to.className!==next)to.className=next
 }
 
 let observers: MutationObserver[] = []
@@ -475,6 +474,7 @@ function watchHost(): void {
 
 async function openWidget(w: DeskWidget, spec: DeskSpec): Promise<void> {
   await api.desk.prepare(spec)
+  if(!activePanels().some(panel=>panel.id===w.id&&!panel.hidden)||!getData().desktop.enabled)return
   const win = window.open('about:blank', 'pw-' + w.id, 'popup')
   if (!win) return
   const doc = win.document
@@ -512,7 +512,7 @@ async function reconcile(): Promise<void> {
     const d = getData()
     const want = d.desktop.enabled ? activePanels(d.desktop).filter((w) => !w.hidden) : []
     for (const id of [...open.keys()]) if (!want.some((w) => w.id === id)) closeWidget(id)
-    for (const w of want) {
+    await Promise.all(want.map(async w=>{
       const spec = specOf(w, d.desktop.style)
       const cur = open.get(w.id)
       if (!cur || cur.win.closed) {
@@ -523,7 +523,8 @@ async function reconcile(): Promise<void> {
         if (cur.win.document.title !== spec.title) cur.win.document.title = spec.title
         await api.desk.update(spec)
       }
-    }
+    }))
+    if(d.desktop!==getData().desktop){queued=true;return}
     await api.desk.active(want.length > 0 || d.desktop.enabled, d.desktop.spaces.map((s) => ({ id: s.id, name: s.name })), d.desktop.active)
   } finally {
     running = false

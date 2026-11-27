@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { create } from 'zustand'
 import { act, openView, setSettings, toast, useData } from '../store'
 import type { Look, Settings, Surface } from '../types'
-import { ACCENTS, BACKDROPS, DEFAULT_LOOK, DEFAULT_WIDGET_STYLE, normalizeLook } from '../lib/defaults'
+import { ACCENTS, BACKDROPS, DEFAULT_LOOK, DEFAULT_WIDGET_STYLE, normalizeStyle, normalizeLook } from '../lib/defaults'
 import { FONT_CHOICES, PRESETS, TEXT_TONES, exportTheme, parseTheme, type ThemePreset } from '../lib/look'
 import { api, isDesktop } from '../lib/api'
 import { pickImageData } from '../lib/image'
@@ -185,6 +185,9 @@ export function AppearancePage(): JSX.Element {
   const isDark = document.documentElement.dataset.theme === 'dark'
   const blurs = [l.surface, l.panelSurface].some((x) => x === 'blur' || x === 'frosted')
   const set = (fn: (x: Settings) => void, key?: string): void => setSettings(fn, key)
+  const panelStyle=useData(d=>d.desktop.style)
+  const [includePanels,setIncludePanels]=useState(true)
+  const [themeName,setThemeName]=useState('')
   const [cssDraft, setCssDraft] = useState<string | null>(null)
   const place = useLookPlace((x) => x.place)
   const [mica, setMica] = useState<boolean | null>(null)
@@ -222,6 +225,8 @@ export function AppearancePage(): JSX.Element {
             <Button small kind="ghost" icon="upload" onClick={importTheme}>Import</Button>
             <Button small kind="ghost" icon="download" onClick={() => api.exportFile(exportTheme(s), 'theme.json')}>Export</Button>
           </>}>
+            <form className="row wrap gap-sm" onSubmit={e=>{e.preventDefault();const name=themeName.trim();if(!name)return;const json=exportTheme(s);setSettings(x=>{x.savedThemes=[...(x.savedThemes??[]).filter(t=>t.name!==name),{name,json,...(includePanels?{panels:{...panelStyle}}:{})}]});setThemeName('')}}><label className="row gap-xs"><input type="checkbox" checked={includePanels} onChange={e=>setIncludePanels(e.target.checked)}/>Include desktop panel style</label><input className="input input-sm" aria-label="Custom theme name" placeholder="Theme name" value={themeName} onChange={e=>setThemeName(e.target.value)}/><button className="btn btn-sm" disabled={!themeName.trim()}>{s.savedThemes?.some(t=>t.name===themeName.trim())?'Update theme':'Save theme'}</button></form>
+            <div className="row wrap gap-sm">{(s.savedThemes??[]).map(t=><span key={t.name}><button className="btn btn-sm" onClick={()=>{const settings=parseTheme(t.json);if(settings)act(d=>{Object.assign(d.settings,settings);d.settings.look=normalizeLook(settings.look);if(t.panels)d.desktop.style=normalizeStyle(t.panels)})}}>{t.name}</button><button className="icon-btn" aria-label={'Remove theme '+t.name} onClick={()=>setSettings(x=>{x.savedThemes=x.savedThemes?.filter(theme=>theme.name!==t.name)})}>×</button></span>)}</div>
             <div className="preset-grid">
               {PRESETS.map((p) => <PresetCard key={p.id} p={p} active={l.preset === p.id} />)}
             </div>
@@ -241,7 +246,7 @@ export function AppearancePage(): JSX.Element {
           </Section>
 
           <Section id="surface" title="Surface" icon="layers">
-            <SurfacePick value={l.surface} onChange={(v) => setLook({ surface: v })} />
+            <SurfacePick value={l.surface} onChange={(v) => setLook({ surface: v, ...((v==='blur'||v==='frosted')&&!l.blur?{blur:28}:{}) })} />
             <Row label="Borders" sub="Edges of the app window and its cards"><Slider value={l.border} min={0} max={100} unit="%" onChange={(v) => setLook({ border: v }, 'border')} /></Row>
             <Row label="Border width"><Segmented small value={l.borderWidth} onChange={(v) => setLook({ borderWidth: v })} options={[{ value: 0, label: 'None' }, { value: 1, label: 'Thin' }, { value: 1.5, label: 'Medium' }, { value: 2, label: 'Thick' }]} /></Row>
           </Section>
@@ -268,7 +273,7 @@ export function AppearancePage(): JSX.Element {
             </div>
             {s.backdrop === 'mica' && <p className="muted small">Shows your desktop through the window (Windows 11).</p>}
             {isDesktop && <Row label="Window material" sub={mica === false ? 'Mica needs Windows 11' : 'Used with the Desktop background'}>
-              <Segmented small value={s.material} onChange={(v) => { set((x) => { x.material = v }); api.setMaterial(v) }} options={[{ value: 'mica', label: 'Mica' }, { value: 'acrylic', label: 'Acrylic' }, { value: 'none', label: 'Solid' }]} />
+              <Segmented small value={s.material} onChange={(v) => { set((x) => { x.material = v }) }} options={[{ value: 'mica', label: 'Mica' }, { value: 'acrylic', label: 'Acrylic' }, { value: 'none', label: 'Solid' }]} />
             </Row>}
             {s.backdrop === 'custom' && <>
               <Row label="Colors">

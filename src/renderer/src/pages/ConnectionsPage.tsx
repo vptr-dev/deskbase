@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { act, getData, openPage, toast, useData } from '../store'
 import type { Connection, ConnectionKind } from '../types'
 import type { NotionPageInfo } from '../../../shared/import-types'
+import { supportsBrowserSignIn,PROVIDER_REDIRECT } from '../../../shared/provider-auth'
 import { MAIL_PRESETS, mailPreset, repoOf } from '../../../shared/feeds'
 import { api, isDesktop } from '../lib/api'
 import { CONN_COLORS, CONN_INFO, addConnection, loadFeed, notionPagesOf, useCalendarEvents, patchConnection, removeConnection, setSecret, useFeed, useFeeds } from '../lib/connections'
@@ -46,12 +47,25 @@ function statusOf(c: Connection, r: ReturnType<typeof useFeed>['result'], busy: 
   return { text: `${n} · checked ${timeAgo(r.at)}` }
 }
 
+function TrelloConsent():JSX.Element{
+ const [key,setKey]=useState(''),[write,setWrite]=useState(false)
+ return <details><summary>Authorize with Trello</summary><label>Power-Up API key<input className="input" value={key} onChange={e=>setKey(e.target.value)}/></label>
+ <label><input type="checkbox" checked={write} onChange={e=>setWrite(e.target.checked)}/>Allow creating and moving cards</label>
+ <Button small disabled={!key.trim()} onClick={()=>{const url=new URL('https://trello.com/1/authorize');url.search=new URLSearchParams({key:key.trim(),scope:write?'read,write':'read',name:'Deskbase',expiration:'30days',response_type:'token'}).toString();void api.openExternal(url.href)}}>Authorize on Trello</Button><p className="muted small">After approval, save your API key and the token Trello displays in the credential field below.</p></details>
+}
+function ProviderSignIn({c}:{c:Connection}):JSX.Element{
+ const [client,setClient]=useState(''),[key,setKey]=useState(''),[busy,setBusy]=useState(false)
+ return <details><summary>Sign in through your browser</summary><p className="small">Use an OAuth client registered with this provider. Register this callback address in its settings.</p>
+ <code>{PROVIDER_REDIRECT}</code> <button className="link" onClick={()=>navigator.clipboard.writeText(PROVIDER_REDIRECT)}>Copy address</button>
+ <div className="form"><label>Client ID<input className="input" value={client} onChange={e=>setClient(e.target.value)}/></label><label>Client secret<input className="input" type="password" value={key} onChange={e=>setKey(e.target.value)}/></label>
+ <Button small disabled={!client.trim()||busy} onClick={async()=>{setBusy(true);try{const secrets=await api.conn.authorizeProvider(c.id,c.kind,client.trim(),key.trim());setKey('');useFeeds.setState({secrets});const current=getData().connections.find(x=>x.id===c.id);if(current)await loadFeed(current,true)}catch(e){toast(e instanceof Error?e.message:'Sign-in failed',{kind:'error'})}finally{setBusy(false)}}}>{busy?'Waiting for sign-in…':'Connect account'}</Button></div></details>
+}
 function SecretField({ c, label }: { c: Connection; label: string }): JSX.Element {
   const has = useFeeds((s) => s.secrets.includes(c.id))
   const [val, setVal] = useState('')
   const pw = c.kind === 'mail' ? mailPreset(c.account?.preset).passwordUrl : undefined
   const link = pw ? { url: pw, label: 'Create an app password' } : isService(c.kind) && serviceInfo(c.kind).setup ? { url: serviceInfo(c.kind).setup!, label: 'Credential setup' } : KEY_LINKS[c.kind]
-  const save = async (v: string | null): Promise<void> => { try { await setSecret(c.id, v); setVal(''); void loadFeed(c, true) } catch { toast('Could not save the credential on this device.', { kind: 'error' }) } }
+  const save = async (v: string | null): Promise<void> => { try { await setSecret(c.id, c.kind==='mail'&&c.account?.preset==='gmail'&&v?v.replace(/\s/g,''):v); setVal(''); void loadFeed(c, true) } catch { toast('Could not save the credential on this device.', { kind: 'error' }) } }
   return (
     <Field label={label} sub={has ? 'Saved and encrypted on this computer' : c.kind === 'github' ? 'Needed for private repositories and for what is assigned to you' : 'Stored encrypted on this computer, never in exports'}>
       <input type="password" className="input input-sm w-220" placeholder={has ? '••••••••••••' : 'Paste it here'} value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && val.trim()) void save(val.trim()) }} />
@@ -139,6 +153,9 @@ function NotionPages({ c }: { c: Connection }): JSX.Element {
 function MailFields({ c }: { c: Connection }): JSX.Element {
   const a = c.account ?? { preset: 'gmail', host: 'imap.gmail.com', port: 993, user: '' }
   const [user, setUser] = useState(a.user)
+  const [browserGrant,setBrowserGrant]=useState(false)
+  useEffect(()=>{let active=true;if(isDesktop)void api.conn.mailGrant(c.id).then(on=>{if(active)setBrowserGrant(on)});return ()=>{active=false}},[c.id])
+  const [client,setClient]=useState(''),[clientSecret,setClientSecret]=useState(''),[busy,setBusy]=useState(false)
   const [host, setHost] = useState(a.host)
   const [port, setPort] = useState(String(a.port || 993))
   const save = (patch: Partial<NonNullable<Connection['account']>>): void => {
@@ -158,7 +175,16 @@ function MailFields({ c }: { c: Connection }): JSX.Element {
         <input className="input input-sm w-60" value={port} onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))} onBlur={() => { const n = Number(port) || 993; if (n !== a.port) save({ port: n }) }} />
       </Field>
     )}
-    <SecretField c={c} label="App password" />
+    {isDesktop&&['gmail','outlook'].includes(a.preset)&&<details><summary>Sign in through your browser</summary>
+      <p className="small">Use a desktop OAuth client registered with {a.preset==='gmail'?'Google':'Microsoft'} for loopback sign-in. The provider will ask permission to access this mailbox using IMAP.</p>
+      <label>Desktop client ID<input className="input" value={client} onChange={e=>setClient(e.target.value)}/></label>
+      {a.preset==='gmail'&&<label>Client secret<input type="password" className="input" value={clientSecret} onChange={e=>setClientSecret(e.target.value)}/></label>}
+      <Button small disabled={busy||!client.trim()||!user.trim()} onClick={async()=>{setBusy(true);try{
+        const secrets=await api.conn.authorizeMail(c.id,a.preset,user.trim(),client.trim(),a.preset==='gmail'?clientSecret.trim():'');setClientSecret('');setBrowserGrant(true);useFeeds.setState({secrets})
+        const current=getData().connections.find(x=>x.id===c.id);if(current)await loadFeed(current,true)
+      }catch(e){toast(e instanceof Error?e.message:'Sign-in failed',{kind:'error'})}finally{setBusy(false)}}}>{busy?'Waiting for sign-in…':'Sign in with '+(a.preset==='gmail'?'Google':'Microsoft')}</Button></details>}
+    {browserGrant?<Field label="Browser authorization"><Button small onClick={async()=>{try{await setSecret(c.id,null);setBrowserGrant(false);await loadFeed(c,true)}catch{toast('Could not disconnect this mailbox',{kind:'error'})}}}>Disconnect mailbox</Button>
+      {['outlook','gmail'].includes(a.preset)&&<Button small kind="ghost" onClick={()=>api.openExternal(a.preset==='gmail'?'https://myaccount.google.com/connections':'https://myapplications.microsoft.com/')}>Manage provider permissions</Button>}</Field>:<SecretField c={c} label="App password" />}
   </>
 }
 
@@ -207,6 +233,8 @@ function ConnCard({ c, open, onToggle }: { c: Connection; open: boolean; onToggl
           )}
           {service?.field && <Field label={service.field}><input className="input input-sm w-320" value={url} placeholder={service.example}
             onChange={e => setUrl(e.target.value)} onBlur={saveUrl} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} /></Field>}
+          {c.kind==='trello'&&isDesktop&&<TrelloConsent/>}
+          {isDesktop&&supportsBrowserSignIn(c.kind)&&<ProviderSignIn c={c}/>}
           {service?.secret && (isDesktop ? <SecretField c={c} label={service.secret} /> : <p className="small muted">Open the Windows app to connect this account.</p>)}
           {c.kind === 'github' && <>
             <Field label="Repositories" sub="owner/name, separated by commas. Leave empty for everything assigned to you.">

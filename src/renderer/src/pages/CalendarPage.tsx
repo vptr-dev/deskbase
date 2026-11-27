@@ -42,6 +42,8 @@ function Agenda({ byDay, evBy, onOpen, days, onDays }: { days: number; onDays: (
 }
 
 export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
+  const pages=useData(d=>d.pages)
+  const sources:string[]|undefined=pages[pageId]?.view?.sourceIds
   const tasks = useData((d) => d.tasks)
   const journal = useData((d) => d.journal)
   const habits = useData((d) => d.habits)
@@ -83,10 +85,10 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
   const byDay = useMemo(() => {
     const m: Record<string, Task[]> = {}
     for (const t of Object.values(tasks)) {
-      if (t.due && !t.archived && (options.completed || !t.done) && options.weekdays.includes(parseDay(t.due).getDay())) (m[t.due] ??= []).push(t)
+      if ((!sources||sources.includes(t.pageId)) && t.due && !t.archived && (options.completed || !t.done) && options.weekdays.includes(parseDay(t.due).getDay())) (m[t.due] ??= []).push(t)
     }
     return m
-  }, [tasks, options])
+  }, [tasks, options,sources])
   const moodBy = useMemo(() => {
     const m: Record<string, number> = {}
     for (const j of Object.values(journal)) if (j.mood) m[j.date] = j.mood
@@ -110,6 +112,7 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
 
   return (
     <div className="calendar-page">
+      <details><summary>Calendars and planners</summary>{Object.values(pages).filter(p=>!p.deletedAt&&['calendar','tasks','board','project'].includes(p.type)).map(p=><label key={p.id} className="row gap-sm"><input type="checkbox" checked={!sources||sources.includes(p.id)} onChange={e=>{const current=sources??Object.values(pages).filter(x=>!x.deletedAt&&['calendar','tasks','board','project'].includes(x.type)).map(x=>x.id);updatePage(pageId,x=>{x.view={...x.view,sourceIds:e.target.checked?[...current,p.id]:current.filter(id=>id!==p.id)}})}}/>{p.title}</label>)}</details>
       <div className="toolbar">
         <h2 className="cal-title">{mode === 'agenda' ? 'Agenda' : mode === 'month' ? `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}` : `Week of ${longDate(gridStart)}`}</h2>
         <div className="spacer" />
@@ -148,7 +151,7 @@ export function CalendarPage({ pageId }: { pageId: string }): JSX.Element {
         <div className="cal-side glass">
           <div className="strong">{longDate(selected)}</div>
           {!!evBy[selected]?.length && <div className="cal-events">{evBy[selected].map((e) => <EventRow key={e.id + e.conn} e={e} />)}</div>}
-          <QuickAdd pageId={defaultListId()} defaults={{ due: selected }} placeholder="Add task on this day" />
+          {(!sources||sources.length>0)&&<QuickAdd key={pageId+selected+String(sources)} pageId={sources?.includes(pageId)?pageId:sources?.[0]||defaultListId()} defaults={{ due: selected }} placeholder="Add task on this day" />}
           <div className="task-list">
             {selTasks.length ? selTasks.map((t) => <TaskRow key={t.id} task={t} showPage draggable onOpen={openTask} />) : <div className="muted small pad">Nothing scheduled</div>}
           </div>

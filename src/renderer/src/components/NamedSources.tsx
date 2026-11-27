@@ -28,7 +28,7 @@ export function NamedSourceFields({w,patch}:{w:AnyWidget;patch:(fn:(w:AnyWidget)
   const [name,setName]=useState(''),[adding,setAdding]=useState(false)
   const pages=useData(d=>d.pages)
   const c=w.config
-  const taskPages:PageType[]=['tasks','board','project']
+  const taskPages:PageType[]=['tasks','board','project','calendar']
   const databaseCount=w.type==='stat'&&c.stat==='rows'
   const type=databaseCount?'database':(w.type==='chart'&&c.source==='habits')||(w.type==='stat'&&c.stat==='habitsToday')?'habits':types[w.type]
   if(!type || (w.type==='chart'&&['value','metric','focus'].includes(c.source)) || (w.type==='stat'&&c.stat==='focusToday') || (w.type==='progress'&&c.source!=='db'))return null
@@ -44,6 +44,7 @@ export function NamedSourceFields({w,patch}:{w:AnyWidget;patch:(fn:(w:AnyWidget)
     {ownPicker&&<label>Source<select className="input input-sm" value={c[field]??''} onChange={e=>bind(e.target.value)}>
       <option value="">{grouped||['goals','habits'].includes(w.type)?'All sources':'First '+typeInfo(type).name.toLowerCase()}</option>
       {Object.values(pages).filter(p=>!p.deletedAt&&!p.rowOf&&allowed.includes(p.type)).map(p=><option key={p.id} value={p.id}>{p.title||'Untitled'}</option>)}</select></label>}
+    {grouped&&<details><summary>Overlay more sources</summary>{Object.values(pages).filter(p=>!p.deletedAt&&!p.rowOf&&p.id!==c[field]&&allowed.includes(p.type)).map(p=><label key={p.id} className="row gap-sm"><input type="checkbox" checked={(c.extraSources??[]).includes(p.id)} onChange={e=>patch(x=>{const ids:string[]=x.config.extraSources??[];x.config.extraSources=e.target.checked?[...ids,p.id]:ids.filter(id=>id!==p.id)})}/>{p.title}</label>)}</details>}
     {adding?<form className="source-create" onSubmit={e=>{e.preventDefault();if(!name.trim())return
       const p=newPage(type,name.trim());const metricId=uid()
       if(w.type==='table')p.blocks=[{id:uid(),type:'table',text:name.trim(),rows:[['Item','Amount'],['','']]}]

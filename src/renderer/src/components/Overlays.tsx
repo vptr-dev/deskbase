@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { newTab, reopenTab } from '../lib/tabs'
-import { createPage, getData, openPage, openSettings, openView, purgePage, restorePage, setOverlay, setSettings, toast, useApp, useData, undo, redo } from '../store'
+import { updatePage, createPage, getData, openPage, openSettings, openView, purgePage, restorePage, setOverlay, setSettings, toast, useApp, useData, undo, redo } from '../store'
 import { PAGE_TYPES, typeInfo } from '../lib/defaults'
+import { useFeeds } from '../lib/connections'
 import { api } from '../lib/api'
 import { exportAll } from '../lib/exporters'
 import { createFromPageLayout, type TemplateMode } from '../lib/layoutTemplates'
-import { timeAgo } from '../lib/util'
+import { uid,timeAgo } from '../lib/util'
 import { Button, ConfirmButton, Empty, Modal } from './ui'
 import { Glyph, Icon } from './Icon'
 import { toggleAssistant } from './Assistant'
@@ -97,6 +98,7 @@ export function CommandPalette(): JSX.Element {
   const [sel, setSel] = useState(0)
   const data = useApp((s) => s.data)
   const listRef = useRef<HTMLDivElement>(null)
+  const feeds=useFeeds(s=>s.results)
   const results = useMemo<Result[]>(() => {
     const ql = q.trim().toLowerCase()
     const out: Result[] = []
@@ -117,7 +119,27 @@ export function CommandPalette(): JSX.Element {
         out.push({ id: 'h' + h.id, icon: h.icon, title: h.name, sub: 'Habit', run: () => openPage(h.pageId) })
       }
     }
+    if(ql){
+      const matches=(text:string)=>text.toLowerCase().includes(ql)
+      for(const p of pages){
+        const items=[...(p.entries??[]).map(x=>x.name),...(p.cards??[]).map(x=>x.question),...(p.wishlist?.items??[]).map(x=>x.name)]
+        for(const [i,title] of items.entries())if(matches(title)&&out.length<35)out.push({id:p.id+'-entry-'+i,icon:typeInfo(p.type).icon,title,sub:p.title,page:p.id,run:()=>openPage(p.id)})
+      }
+      for(const c of data.connections){
+        if(c.off)continue
+        const feed=feeds[c.id]
+        for(const item of [...(feed?.items??[]),...(feed?.events??[])]){
+          if(out.length>=45)break
+          if(matches(item.title))out.push({id:c.id+'-'+item.id,icon:'plug',title:item.title,sub:c.name,run:()=>{if(item.url&&(item.url.startsWith('https://')||item.url.startsWith('http://')))void api.openExternal(item.url);else openView('@connections')}})
+        }
+      }
+    }
     const cmds: Result[] = [
+      {id:'c-clip',icon:'bookmark',title:'Save clipboard link as a page',run:async()=>{
+        try{const url=new URL((await navigator.clipboard.readText()).trim());if(!['http:','https:'].includes(url.protocol))throw Error()
+          const id=createPage('doc',null,url.hostname);updatePage(id,p=>{p.blocks=[{id:uid(),type:'bookmark',text:url.hostname,url:url.href},{id:uid(),type:'p',text:''}]})
+        }catch{toast('Copy a web address first and allow clipboard access',{kind:'error'})}
+      }},
       { id: 'c-new', icon: 'plus', title: 'New page', sub: 'Ctrl N', run: () => setOverlay('newPage', { parentId: null }) },
       { id: 'c-tab', icon: 'app-window', title: 'New tab', sub: 'Ctrl T', run: () => newTab() },
       { id: 'c-reopen', icon: 'rotate-ccw', title: 'Reopen closed tab', sub: 'Ctrl Shift T', run: () => reopenTab() },
@@ -142,7 +164,7 @@ export function CommandPalette(): JSX.Element {
     ]
     out.push(...cmds.filter((c) => !ql || c.title.toLowerCase().includes(ql)).slice(0, ql ? 6 : 4))
     return out
-  }, [q, data])
+  }, [q, data, feeds])
   useEffect(() => setSel(0), [q])
   useEffect(() => { listRef.current?.querySelector('.active')?.scrollIntoView({ block: 'nearest' }) }, [sel])
   const run = (r?: Result, inTab = false): void => { if (!r) return; setOverlay(null); if (inTab && r.page) newTab(r.page); else r.run() }

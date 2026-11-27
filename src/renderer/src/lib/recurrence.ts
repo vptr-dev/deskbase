@@ -18,7 +18,7 @@ export function normalizeRepeat(value: unknown): Repeat {
   if (rule.until && !validDay(rule.until)) return 'none'
   const days = Array.isArray(rule.days) ? [...new Set(rule.days.filter(n => Number.isInteger(n) && n >= 0 && n < 7))].sort() : []
   if (!days.length) days.push(parseDay(rule.start).getDay())
-  return { unit: rule.unit, interval: rule.interval, start: rule.start, weekStart: rule.weekStart === 0 ? 0 : 1, days, ...(rule.until ? { until: rule.until } : {}) }
+  return { unit: rule.unit, interval: rule.interval, start: rule.start, weekStart: rule.weekStart === 0 ? 0 : 1, days, ...(typeof rule.remaining==="number" && Number.isSafeInteger(rule.remaining) && rule.remaining>0 ? {remaining:rule.remaining}:{}), ...(rule.until ? { until: rule.until } : {}) }
 }
 
 export function repeatLabel(rule: Repeat): string {
@@ -56,7 +56,7 @@ export function occurrence(rule: CustomRepeat, from: string): string | null {
 }
 
 export function nextTaskDate(rule: Repeat, due: string, completed: string): string | null {
-  if (rule === 'none') return null
+  if (rule === 'none'||(typeof rule==='object'&&rule.remaining===1)) return null
   const start = validDay(due) ? due : completed
   const from = addDays(start > completed ? start : completed, 1)
   if (typeof rule !== 'string') return occurrence(rule, from)

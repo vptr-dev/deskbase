@@ -20,6 +20,7 @@ export const PRIORITY = [
 ] as const
 
 export function QuickAdd({ pageId, initialTitle, submitButton, resolvePage, defaults = {}, placeholder = 'Add a task', autoFocus, onAdded, onEscape, schedulePicker }: { initialTitle?: string; submitButton?: boolean; resolvePage?: () => string; schedulePicker?: boolean; pageId: string; defaults?: Partial<Task>; placeholder?: string; autoFocus?: boolean; onAdded?: (id: string) => void; onEscape?: () => void }): JSX.Element {
+  const [expanded,setExpanded]=useState(!!autoFocus||!!initialTitle||!!submitButton),[due,setDue]=useState(''),[time,setTime]=useState(''),[priority,setPriority]=useState('')
   const scheduleId = useId()
   const [v, setV] = useState(initialTitle ?? '')
   const weekStart = useData(d => d.settings.weekStart)
@@ -31,17 +32,18 @@ export function QuickAdd({ pageId, initialTitle, submitButton, resolvePage, defa
     const id = addTask(resolvePage?.() ?? pageId, {
       ...defaults,
       title: parsed.title,
-      due: first ?? parsed.due ?? defaults.due ?? null,
-      time: parsed.time ?? null,
-      priority: parsed.priority ?? defaults.priority ?? 0,
+      due: first ?? (due || parsed.due || defaults.due || null),
+      time: time||parsed.time||null,
+      priority: priority ? Number(priority) as Task['priority'] : parsed.priority ?? defaults.priority ?? 0,
       tags: [...(defaults.tags ?? []), ...parsed.tags],
       repeat: schedule ?? parsed.repeat ?? defaults.repeat ?? 'none',
       difficulty: defaults.difficulty ?? 'easy'
     })
-    setV('')
+    setV('');setDue('');setTime('');setPriority('');if(!submitButton&&!autoFocus)setExpanded(false)
     setSchedule(null)
     onAdded?.(id)
   }
+  if(!expanded)return <button className="btn btn-sm" style={{borderRadius:24}} onClick={()=>setExpanded(true)}><Icon name="plus" size={16}/>Add task</button>
   return (
     <><div className="quickadd glass">
       <Icon name="plus" size={16} className="muted" />
@@ -54,13 +56,14 @@ export function QuickAdd({ pageId, initialTitle, submitButton, resolvePage, defa
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { if (!v && onEscape) onEscape(); else setV('') } }}
       />
-      {submitButton && <button type="button" className="btn btn-primary btn-sm" disabled={!parsed?.title || (!!schedule && !first)} onClick={submit}>Add</button>}
-      {schedulePicker && <button type="button" className="icon-btn" title="Repeat schedule" aria-label="Repeat schedule" aria-pressed={!!schedule} onClick={() => {
-        const start = defaults.due || today()
+      {<button type="button" className="btn btn-primary btn-sm" disabled={!parsed?.title || (!!schedule && !first)} onClick={submit}>Add</button>}
+      {<button type="button" className="icon-btn" title="Repeat schedule" aria-label="Repeat schedule" aria-pressed={!!schedule} onClick={() => {
+        const start = due || parsed?.due || defaults.due || today()
         setSchedule(schedule ? null : { unit: 'week', interval: 1, start, days: [new Date(start + 'T12:00:00').getDay()], weekStart })
       }}><Icon name="repeat" size={15} /></button>}
     </div>
-    {schedule && <div className="panel-repeat"><ScheduleFields id={scheduleId} draft={schedule} onChange={setSchedule} />
+    <div className="row wrap gap-sm"><label>Due<input className="input input-sm" type="date" value={due||defaults.due||''} onChange={e=>setDue(e.target.value)} disabled={!!schedule}/></label><label>Time<input className="input input-sm" type="time" value={time} onChange={e=>setTime(e.target.value)}/></label><label>Priority<select className="input input-sm" value={priority} onChange={e=>setPriority(e.target.value)}><option value="">Default</option>{PRIORITY.map(p=><option key={p.v} value={p.v}>{p.label}</option>)}</select></label>{!submitButton&&<button onClick={()=>setExpanded(false)}>Collapse</button>}</div>
+    {schedule && <div className="panel-repeat"><ScheduleFields taskLimit id={scheduleId} draft={schedule} onChange={setSchedule} />
       <Button small kind="primary" disabled={!first || !parsed?.title} onClick={submit}>Add repeating task</Button></div>}</>
   )
 }

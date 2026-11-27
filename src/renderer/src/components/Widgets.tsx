@@ -8,13 +8,14 @@ import { ensureTaskPlanner } from '../lib/widgetSources'
 import { blockTextColor } from '../lib/look'
 import { SERVICES, isService, serviceIds } from '../../../shared/services'
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { openPage, setOverlay, updatePage, useData } from '../store'
+import { getData, openPage, setOverlay, updatePage, useData } from '../store'
 import type { AppData, Block, Page, Task, Widget, WidgetType } from '../types'
 import { formatValue, valueNow, valueSeries } from '../lib/values'
 import { habitDayTarget, habitDoneOn, habitDueToday } from '../lib/habits'
 import { DAYS_SHORT, addDays, dayKey, diffDays, friendlyDay, longDate, parseDay, today, weekStartOf } from '../lib/util'
 import { countRows, datedRows, rowsOf, setRowDone, type DatedRow } from '../lib/db'
 import { BarChart, Checkbox, Progress, Ring, Sparkline, useDoc } from './ui'
+import { switchSpace } from '../lib/desktop'
 import { Glyph, Icon } from './Icon'
 import { TaskRepeatEditor } from './TaskRepeatEditor'
 import { QuickAdd, TaskRow, useTaskDrawer } from './TaskItems'
@@ -57,6 +58,7 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'database', name: 'Database', icon: 'database', desc: 'A table, board or gallery you can edit', w: 6, h: 5, group: 'Work', config: {} },
   { type: 'timer', name: 'Timer', icon: 'timer', desc: 'Click to start; put a few side by side', w: 2, h: 2, group: 'Work', config: { minutes: 5 } },
   { type: 'stopwatch', name: 'Stopwatch', icon: 'stopwatch', desc: 'Start, pause, laps', w: 3, h: 3, group: 'Work', config: {} },
+  {type:'workspaces', name:'Workspace switcher', icon:'layout', desc:'Switch desktop workspaces', w:3,h:2,group:'Work',config:{pinnedEverywhere:true,look:'tabs'}},
   { type: 'launcher', name: 'Launcher', icon: 'rocket', desc: 'Open websites, apps, files and folders with one click', w: 4, h: 2, group: 'Work', config: { items: [], look: 'grid' } },
   { type: 'search', name: 'Web search', icon: 'search', desc: 'Search the web from the desktop', w: 4, h: 1, group: 'Work', config: { engine: 'google' } },
   { type: 'agenda', name: 'Agenda', icon: 'calendar-days', desc: 'The next days with tasks and times', w: 3, h: 4, group: 'Plan', config: { days: 5 } },
@@ -463,7 +465,7 @@ export function WidgetBody(props: WidgetBodyProps): JSX.Element {
   const ancestors = useContext(RenderingWidgets)
   const data=useData(d=>d)
   const id=props.w.config.sourcePageId
-  const scope=useMemo(()=>id && aggregateWidgets.has(props.w.type) ? scopedData(data,id) : null,[id,data,props.w.type])
+  const scope=useMemo(()=>(id||props.w.config.extraSources?.length) && aggregateWidgets.has(props.w.type) ? scopedData(data,[id,...(props.w.config.extraSources??[])].filter(Boolean)) : null,[id,data,props.w.type,props.w.config.extraSources])
   if (ancestors.includes(props.w.id)) return <div className="small muted">This widget is already displayed above.</div>
   const button = props.w.config.footerButton
   return <RenderingWidgets.Provider value={[...ancestors,props.w.id]}><WidgetScope.Provider value={scope}><WidgetContent {...props} /></WidgetScope.Provider>{button && props.w.type !== 'button' && <div className="widget-action"><CustomButton config={button} /></div>}</RenderingWidgets.Provider>
@@ -493,6 +495,7 @@ function WidgetContent({ w, setConfig }: WidgetBodyProps): JSX.Element {
     case 'stopwatch': return <StopwatchWidget cfg={c} setConfig={setConfig} />
     case 'timeleft': return <TimeLeftWidget cfg={c} />
     case 'moon': return <MoonWidget cfg={c} />
+    case 'workspaces': return <WorkspaceSwitcher look={c.look}/>
     case 'launcher': return <LauncherWidget cfg={c} />
     case 'search': return <SearchWidget cfg={c} />
     case 'quote': return <QuoteWidget cfg={c} setConfig={setConfig} />
@@ -536,7 +539,7 @@ export function widgetTitle(w: AnyWidget, d: AppData): string {
   switch (w.type) {
     case 'value': case 'progress': case 'stat': case 'clock': case 'countdown': case 'quickadd': case 'page': case 'focus': case 'image': case 'text': case 'dashboard': case 'week':
     case 'calendar': case 'weather': case 'daylight': case 'system': case 'timer':
-    case 'worldclock': case 'stopwatch': case 'timeleft': case 'moon': case 'search': case 'quote': case 'battery': case 'launcher': case 'network': case 'calculator': return ''
+    case 'workspaces': case 'worldclock': case 'stopwatch': case 'timeleft': case 'moon': case 'search': case 'quote': case 'battery': case 'launcher': case 'network': case 'calculator': return ''
     case 'button': case 'tracker': return ''
     case 'wishlist': return d.pages[w.config.pageId]?.title || 'Wishlist'
     case 'sections': return w.config.section || d.pages[w.config.pageId]?.title || 'Progress'
@@ -904,4 +907,12 @@ function WeekWidget(): JSX.Element {
       })}
     </div>
   )
+}
+
+function WorkspaceSwitcher({look}:{look?:string}):JSX.Element {
+ const desk=useData(d=>d.desktop)
+ const current=desk.spaces.find(s=>s.id===desk.active)
+ if(look==='picker')return <select className="input input-sm space-picker" aria-label="Switch workspace" value={desk.active} onChange={e=>switchSpace(e.target.value)}>{desk.spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+ if(look==='cycle')return <button className="btn space-cycle" title="Next workspace" onClick={()=>{const latest=getData().desktop;const i=latest.spaces.findIndex(s=>s.id===latest.active);const next=latest.spaces[(i+1)%latest.spaces.length];if(next)switchSpace(next.id)}}><Icon name="repeat" size={14}/>{current?.name}</button>
+ return <div className="space-switcher">{desk.spaces.map(s=><button key={s.id} aria-pressed={s.id===desk.active} className={'chip-btn '+(s.id===desk.active?'active':'')} onClick={()=>switchSpace(s.id)}>{s.icon&&<Glyph value={s.icon} color={s.iconColor} size={14}/>} {s.name}</button>)}</div>
 }

@@ -513,7 +513,7 @@ class NotionReader {
     const viewIds: string[] = json(r.view_ids, [])
     const views: DbView[] = []
     let manual: string[] = []
-    const VIEW: Record<string, ViewType> = { table: 'table', board: 'board', gallery: 'gallery', list: 'list', calendar: 'calendar', timeline: 'timeline' }
+    const VIEW: Record<string, ViewType> = { table: 'table', board: 'board', gallery: 'gallery', list: 'list', calendar: 'calendar', timeline: 'timeline', form:'form' }
     for (const vid of Array.isArray(viewIds) ? viewIds : []) {
       const v: Row | undefined = this.db.prepare('select * from collection_view where id = ? and alive = 1').get(vid)
       if (!v) continue
@@ -522,7 +522,7 @@ class NotionReader {
       const type = VIEW[v.type] ?? 'table'
       if (!manual.length) { const ps = json(v.page_sort, []); if (Array.isArray(ps)) manual = ps }
       const list: any[] = vf[`${v.type}_properties`] ?? vf.table_properties ?? []
-      const vname = typeof v.name === 'string' && v.name.replace(/[\sㅤ]/g, '') ? v.name.trim() : ({ table: 'Table', board: 'Board', gallery: 'Gallery', list: 'List', calendar: 'Calendar', timeline: 'Timeline', chart: 'Chart' } as const)[type]
+      const vname = typeof v.name === 'string' && v.name.replace(/[\sㅤ]/g, '') ? v.name.trim() : ({ table: 'Table', board: 'Board', gallery: 'Gallery', list: 'List', calendar: 'Calendar', timeline: 'Timeline', chart: 'Chart', form:'Entry form' } as const)[type]
       const view: DbView = { id: 'v_' + propId(vid).slice(2, 40), name: vname, type, filters: [], hidden: [] }
       const known = (k: unknown): k is string => typeof k === 'string' && pid(k) !== null
       view.hidden = list.filter((x) => x?.visible === false && known(x.property) && x.property !== 'title').map((x) => pid(x.property)!)

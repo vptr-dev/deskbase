@@ -6,6 +6,8 @@ import fs from 'fs'
 import path from 'path'
 import { serviceFeed } from './service-feeds'
 import { isService } from '../shared/services'
+import {connectProvider,renewProvider,type Grant} from "./provider-auth"
+import { authorizeMail, renewMail, matchesMail, type MailGrant, type MailProvider } from './mail-auth'
 import { ImapFlow } from 'imapflow'
 import { type ConnSpec, type FeedItem, type FeedResult, feedUrl, githubItems, mailPreset, parseFeed, parseIcs, todoistItems } from '../shared/feeds'
 import type { ImportResult, NotionPageInfo } from '../shared/import-types'
@@ -19,7 +21,21 @@ const serviceKey = (kind: string, id: string): string => {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id) || !isService(kind)) throw new Error('Invalid connection')
   return kind + ':' + id
 }
-const savedConnectionIds = (): string[] => [...Object.keys(readSecrets()), ...Object.keys(readSecrets(serviceKeysFile())).map(k => k.split(':')[1])]
+const grantsFile=()=>path.join(app.getPath("userData"),"mail-grants.json")
+const providerFile=()=>path.join(app.getPath('userData'),'provider-grants.json')
+const renewing=new Map<string,Promise<string>>()
+async function credential(kind:string,id:string):Promise<string|undefined>{
+ const encoded=secret(id,providerFile())
+ if(!encoded)return isService(kind)?secret(serviceKey(kind,id),serviceKeysFile()):secret(id)
+ const g:Grant=JSON.parse(encoded)
+ if(g.kind!==kind)throw Error('Provider mismatch. Reconnect this account.')
+ if(!g.expires||g.expires>Date.now()+60000)return g.access
+ const pending=renewing.get(id);if(pending)return pending
+ const work=renewProvider(g).then(next=>{if(secret(id,providerFile())!==encoded)throw Error('Connection changed. Retry.');writeSecrets({...readSecrets(providerFile()),[id]:seal(JSON.stringify(next))},providerFile());return next.access}).finally(()=>renewing.delete(id))
+ renewing.set(id,work);return work
+}
+const attempts=new Map<string,symbol>()
+const savedConnectionIds = (): string[] => [...Object.keys(readSecrets(providerFile())),...Object.keys(readSecrets(grantsFile())),...Object.keys(readSecrets()), ...Object.keys(readSecrets(serviceKeysFile())).map(k => k.split(':')[1])]
 
 const file = (): string => path.join(app.getPath('userData'), 'connections.json')
 
@@ -27,7 +43,7 @@ function readSecrets(location = file()): Record<string, string> {
   try { return JSON.parse(fs.readFileSync(location, 'utf8')).secrets ?? {} } catch { return {} }
 }
 function writeSecrets(s: Record<string, string>, location = file()): void {
-  fs.writeFileSync(location, JSON.stringify({ secrets: s }, null, 2))
+  const tmp=location+'.tmp';fs.writeFileSync(tmp, JSON.stringify({ secrets: s }, null, 2));fs.renameSync(tmp,location)
 }
 function secret(id: string, location = file()): string | undefined {
   const v = readSecrets(location)[id]
@@ -50,7 +66,7 @@ async function text(url: string, headers: Record<string, string> = {}): Promise<
 }
 
 async function github(spec: ConnSpec): Promise<FeedResult> {
-  const token = secret(spec.id)
+  const token = await credential(spec.kind,spec.id)
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
   const get = async (p: string): Promise<any> => JSON.parse(await text('https://api.github.com' + p, headers))
   let title: string | undefined
@@ -64,12 +80,26 @@ async function github(spec: ConnSpec): Promise<FeedResult> {
   return { ok: true, at: Date.now(), title: title ?? repos.join(', '), items }
 }
 
-async function mail(spec: ConnSpec): Promise<FeedResult> {
+async function connectMailbox(spec:ConnSpec){
   const pass = secret(spec.id)
   const a = spec.account
   if (!a?.host || !a.user) throw new Error('Fill in the email address and the server.')
-  if (!pass) throw new Error('Paste the app password first.')
-  const client = new ImapFlow({ host: a.host, port: a.port || 993, secure: true, auth: { user: a.user, pass }, logger: false, connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 60000 })
+  const saved=secret(spec.id,grantsFile())
+  let auth:{user:string;pass:string}|{user:string;accessToken:string}
+  if(saved){
+    let grant:MailGrant=JSON.parse(saved)
+    if((a.port||993)!==993||!matchesMail(grant,a.host,a.user))throw Error('Sign in again for this mailbox.')
+    if(grant.expires<Date.now()+60000){
+      grant=await renewMail(grant)
+      if(secret(spec.id,grantsFile())!==saved)throw Error('Connection changed during refresh. Retry.')
+      writeSecrets({...readSecrets(grantsFile()),[spec.id]:seal(JSON.stringify(grant))},grantsFile())
+    }
+    auth={user:a.user,accessToken:grant.access}
+  }else {
+    if(!pass)throw Error('Sign in or enter an app password.')
+    auth={user:a.user,pass}
+  }
+  const client = new ImapFlow({ host: a.host, port: a.port || 993, secure: true, auth, logger: false, connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 60000 })
   client.on('error', () => { /* reported through the calls below */ })
   try {
     await client.connect()
@@ -78,6 +108,10 @@ async function mail(spec: ConnSpec): Promise<FeedResult> {
     const msg = String(e?.message ?? '')
     throw new Error(e?.code === 'ENOTFOUND' ? `Could not find the server ${a.host}.` : e?.code === 'ECONNREFUSED' ? `${a.host} refused the connection.` : /SSL|TLS|certificate/i.test(msg) ? `${a.host} did not answer over a secure connection on port ${a.port || 993}.` : e?.code === 'ETIMEDOUT' || /timeout/i.test(msg) ? `${a.host} did not answer in time.` : msg || 'Could not connect to the mail server.')
   }
+  return client
+}
+async function mail(spec:ConnSpec):Promise<FeedResult>{
+  const a=spec.account!,client=await connectMailbox(spec)
   try {
     const status = await client.status('INBOX', { unseen: true, messages: true })
     const gmail = /gmail|googlemail/i.test(a.host)
@@ -85,6 +119,7 @@ async function mail(spec: ConnSpec): Promise<FeedResult> {
     const lock = await client.getMailboxLock('INBOX')
     let items: FeedItem[] = []
     try {
+      const mailboxRevision=client.mailbox?String(client.mailbox.uidValidity):undefined
       const total = typeof client.mailbox === 'object' && client.mailbox ? client.mailbox.exists : 0
       if (total) {
         const msgs = await client.fetchAll(`${Math.max(1, total - 29)}:*`, { uid: true, envelope: true, flags: true, internalDate: true, ...(gmail ? { emailId: true } : {}) })
@@ -93,7 +128,7 @@ async function mail(spec: ConnSpec): Promise<FeedResult> {
           const date = m.internalDate ? new Date(m.internalDate as any).getTime() : m.envelope?.date ? new Date(m.envelope.date as any).getTime() : undefined
           let url = web
           if (gmail && m.emailId) { try { url = `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(a.user)}#all/${BigInt(m.emailId).toString(16)}` } catch { /* keep the inbox */ } }
-          return { id: String(m.uid), title: (m.envelope?.subject ?? '').trim() || '(no subject)', url, kind: 'mail' as const, author: from?.name || from?.address, ...(date ? { date } : {}), unread: !m.flags?.has('\\Seen') }
+          return { id: String(m.uid), mailboxRevision, title: (m.envelope?.subject ?? '').trim() || '(no subject)', url, kind: 'mail' as const, author: from?.name || from?.address, ...(date ? { date } : {}), unread: !m.flags?.has('\\Seen') }
         })
       }
     } finally { lock.release() }
@@ -104,7 +139,7 @@ async function mail(spec: ConnSpec): Promise<FeedResult> {
 }
 
 async function todoist(spec: ConnSpec): Promise<FeedResult> {
-  const token = secret(spec.id)
+  const token = await credential(spec.kind,spec.id)
   if (!token) throw new Error('Paste the API token first.')
   const h = { Authorization: `Bearer ${token}` }
   const get = async (p: string): Promise<any> => {
@@ -131,7 +166,7 @@ async function todoist(spec: ConnSpec): Promise<FeedResult> {
 }
 
 async function todoistClose(id: string, task: string): Promise<void> {
-  const token = secret(id)
+  const token = await credential('todoist',id)
   if (!token) throw new Error('This Todoist connection has no token.')
   const r = await net.fetch(`https://api.todoist.com/api/v1/tasks/${encodeURIComponent(task)}/close`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'User-Agent': UA } })
   if (!r.ok) throw new Error(`Todoist answered ${r.status}.`)
@@ -153,12 +188,12 @@ async function fetchSpec(spec: ConnSpec): Promise<FeedResult> {
       const r = parseFeed(body)
       return { ok: true, at: Date.now(), title: r.title, items: r.items.slice(0, 80) }
     }
-    if (isService(spec.kind)) return await serviceFeed(spec.kind, spec.url, secret(serviceKey(spec.kind, spec.id), serviceKeysFile()) || '', (url, init) => net.fetch(url, init))
+    if (isService(spec.kind)) return await serviceFeed(spec.kind, spec.url, await credential(spec.kind,spec.id) || '', (url, init) => net.fetch(url, init), Boolean(readSecrets(providerFile())[spec.id]))
     if (spec.kind === 'github') return await github(spec)
     if (spec.kind === 'mail') return await mail(spec)
     if (spec.kind === 'todoist') return await todoist(spec)
     if (spec.kind === 'notion') {
-      const token = secret(spec.id)
+      const token = await credential(spec.kind,spec.id)
       if (!token) throw new Error('Paste the integration token first.')
       const pages = await notionApiSearch(token)
       return { ok: true, at: Date.now(), title: `${pages.length} page${pages.length === 1 ? '' : 's'} shared`, items: [] }
@@ -185,8 +220,8 @@ async function fetchConn(spec: ConnSpec, force: boolean): Promise<FeedResult> {
   return p
 }
 
-function token(id: string): string {
-  const t = secret(id)
+async function token(id: string): Promise<string> {
+  const t = await credential('notion',id)
   if (!t) throw new Error('This Notion connection has no token.')
   return t
 }
@@ -222,6 +257,43 @@ export function registerConnections(): void {
     writeSecrets(values, trelloFile())
   })
   ipcMain.handle('conn:secrets', savedConnectionIds)
+  ipcMain.handle('conn:mailSeen',async (_e,spec:ConnSpec,uid:string,revision:string,seen:boolean)=>{
+    if(spec.kind!=='mail'||!/^[1-9]\d*$/.test(uid)||!revision||typeof seen!=='boolean')throw Error('Invalid mail item')
+    const key=JSON.stringify([spec.id,spec.kind,spec.url,spec.repos,spec.account??null])
+    const previous=cache.get(key)
+    if(!previous?.items?.some(item=>item.id===uid&&item.mailboxRevision===revision))throw Error('Refresh this inbox before changing the message')
+    const client=await connectMailbox(spec)
+    try{
+      const lock=await client.getMailboxLock('INBOX')
+      try{
+        if(!client.mailbox||String(client.mailbox.uidValidity)!==revision)throw Error('Inbox changed. Refresh and try again.')
+        const flags=['\\Seen']
+        if(seen)await client.messageFlagsAdd(uid,flags,{uid:true});else await client.messageFlagsRemove(uid,flags,{uid:true})
+        cache.delete(key)
+      }finally{lock.release()}
+    }finally{await client.logout().catch(()=>{})}
+  })
+  ipcMain.handle('conn:authorizeProvider',async(_e,id:string,kind:string,client:string,key:string)=>{
+    if(!/^[a-zA-Z0-9_-]{1,128}$/.test(id)||!safeStorage.isEncryptionAvailable())throw Error('Secure connection storage unavailable')
+    const attempt=Symbol();attempts.set(id,attempt)
+    try{const grant=await connectProvider(kind,client,key)
+      if(attempts.get(id)!==attempt)throw Error('Connection changed during sign-in')
+      writeSecrets({...readSecrets(providerFile()),[id]:seal(JSON.stringify(grant))},providerFile())
+      return savedConnectionIds()
+    }finally{if(attempts.get(id)===attempt)attempts.delete(id)}
+  })
+  ipcMain.handle('conn:mailGrant',(_e,id:string)=>Boolean(readSecrets(grantsFile())[id]))
+  ipcMain.handle('conn:authorizeMail',async (_e,id:string,provider:MailProvider,user:string,client:string,clientSecret:string)=>{
+    if(!safeStorage.isEncryptionAvailable()||!/^[\w-]{1,128}$/.test(id))throw Error('Secure connection storage unavailable')
+    const attempt=Symbol();attempts.set(id,attempt)
+    try {
+      const grant=await authorizeMail(provider,user,client,clientSecret)
+      if(attempts.get(id)!==attempt)throw Error('Connection changed while signing in')
+      writeSecrets({...readSecrets(grantsFile()),[id]:seal(JSON.stringify(grant))},grantsFile())
+      const passwords=readSecrets();delete passwords[id];writeSecrets(passwords)
+      return savedConnectionIds()
+    }finally{if(attempts.get(id)===attempt)attempts.delete(id)}
+  })
   ipcMain.handle('conn:setSecret', (_e, id: string, value: string | null, kind?: string) => {
     const scoped = kind && isService(kind)
     const location = scoped ? serviceKeysFile() : file()
@@ -231,12 +303,18 @@ export function registerConnections(): void {
     if (value && value.trim()) s[key] = seal(value.trim())
     else delete s[key]
     writeSecrets(s, location)
+    attempts.delete(id)
+    const grants=readSecrets(providerFile());if(Object.hasOwn(grants,id)){delete grants[id];writeSecrets(grants,providerFile())}
+    if(kind==='mail'){
+      attempts.delete(id)
+      const grants=readSecrets(grantsFile());delete grants[id];writeSecrets(grants,grantsFile())
+    }
     for (const k of [...cache.keys()]) if (k.startsWith(JSON.stringify([id]).slice(0, -1))) cache.delete(k)
     return savedConnectionIds()
   })
   ipcMain.handle('conn:fetch', (_e, spec: ConnSpec, force?: boolean) => fetchConn(spec, !!force))
-  ipcMain.handle('conn:notionList', async (_e, id: string): Promise<NotionPageInfo[]> => notionApiSearch(token(id)))
-  ipcMain.handle('conn:notionImport', async (_e, id: string, ids: string[]): Promise<ImportResult> => notionApiImport(token(id), ids, id))
+  ipcMain.handle('conn:notionList', async (_e, id: string): Promise<NotionPageInfo[]> => notionApiSearch(await token(id)))
+  ipcMain.handle('conn:notionImport', async (_e, id: string, ids: string[]): Promise<ImportResult> => notionApiImport(await token(id), ids, id))
   ipcMain.handle('conn:todoistClose', (_e, id: string, task: string) => todoistClose(id, task))
-  ipcMain.handle('conn:notionPush', async (_e, id: string, op: NotionPush) => notionApiPush(token(id), op))
+  ipcMain.handle('conn:notionPush', async (_e, id: string, op: NotionPush) => notionApiPush(await token(id), op))
 }

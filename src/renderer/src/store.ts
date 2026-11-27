@@ -405,7 +405,7 @@ export function setTaskDone(id: string, done: boolean): void {
           d.tasks[nid] = {
             ...t, id: nid, done: false, status: 'todo', doneAt: null, due: next, createdAt: Date.now(),
             remindAt: shiftTaskReminder(t.remindAt, due, next), reminded: false,
-            tags: [...t.tags], repeat: normalizeRepeat(t.repeat),
+            tags: [...t.tags], repeat: normalizeRepeat(typeof t.repeat==='object'&&t.repeat.remaining?{...t.repeat,remaining:t.repeat.remaining-1}:t.repeat),
             subtasks: t.subtasks.map(s => ({ ...s, done: false }))
           }
         }

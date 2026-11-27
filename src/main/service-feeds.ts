@@ -13,7 +13,7 @@ function item(id: string | number, title: string, link?: string, summary?: strin
     summary: typeof summary === 'string' ? summary : undefined, date: Number.isFinite(date) ? date : undefined }
 }
 
-export async function serviceFeed(kind: ServiceId, value: string, token: string, request: Request): Promise<FeedResult> {
+export async function serviceFeed(kind: ServiceId, value: string, token: string, request: Request, oauth=false): Promise<FeedResult> {
   const info = serviceInfo(kind)
   const v = value.trim()
   if (info.field && !v && kind !== 'dropbox') throw new Error('Enter ' + info.field.toLowerCase() + ' in Connections.')
@@ -49,7 +49,7 @@ export async function serviceFeed(kind: ServiceId, value: string, token: string,
         return data.tasks.map((r: Row) => item(r.id, r.name, r.url, r.status?.status))
       }
       case 'linear': {
-        const data = await json('https://api.linear.app/graphql', { Authorization: token }, { query: '{ viewer { assignedIssues(first: 50) { nodes { id identifier title url state { name } } } } }' })
+        const data = await json('https://api.linear.app/graphql', { Authorization: oauth?'Bearer '+token:token }, { query: '{ viewer { assignedIssues(first: 50) { nodes { id identifier title url state { name } } } } }' })
         if (data.errors) throw new Error('Linear could not read your assigned issues.')
         return data.data.viewer.assignedIssues.nodes.map((r: Row) => item(r.id, r.identifier + ' ' + r.title, r.url, r.state?.name))
       }
@@ -67,7 +67,7 @@ export async function serviceFeed(kind: ServiceId, value: string, token: string,
         return data.records.map((r: Row) => item(r.id, Object.values(r.fields).find((x): x is string => typeof x === 'string') ?? r.id, 'https://airtable.com/' + base + '/' + table + '/' + r.id, undefined, r.createdTime))
       }
       case 'figma': {
-        const data = await json('https://api.figma.com/v1/projects/' + q + '/files', { 'X-Figma-Token': token })
+        const data = await json('https://api.figma.com/v1/projects/' + q + '/files', oauth?bearer:{ 'X-Figma-Token': token })
         return data.files.map((r: Row) => item(r.key, r.name, 'https://www.figma.com/design/' + r.key, undefined, r.last_modified))
       }
       case 'slack': {
@@ -102,11 +102,11 @@ export async function serviceFeed(kind: ServiceId, value: string, token: string,
       }
       case 'codex': case 'claude': return localSessions(kind)
       case 'gitlab': {
-        const data = await json('https://gitlab.com/api/v4/projects/' + q + '/issues?state=opened&per_page=50', token ? { 'PRIVATE-TOKEN': token } : {})
+        const data = await json('https://gitlab.com/api/v4/projects/' + q + '/issues?state=opened&per_page=50', oauth?bearer:token ? { 'PRIVATE-TOKEN': token } : {})
         return data.map((r: Row) => item(r.id, r.title, r.web_url, r.author?.name, r.updated_at))
       }
       case 'bitbucket': {
-        const data = await json('https://api.bitbucket.org/2.0/repositories/' + path + '/pullrequests?state=OPEN')
+        const data = await json('https://api.bitbucket.org/2.0/repositories/' + path + '/pullrequests?state=OPEN',oauth?bearer:{})
         return data.values.map((r: Row) => item(r.id, r.title, r.links?.html?.href, r.author?.display_name, r.updated_on))
       }
       case 'dockerhub': {

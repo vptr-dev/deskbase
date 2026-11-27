@@ -1,4 +1,3 @@
-import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../../../shared/panelBounds'
 import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, Connection, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
 import { serviceIds } from '../../../shared/services'
@@ -7,7 +6,7 @@ import { normalizeRepeat } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 22
+export const SCHEMA = 23
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -212,6 +211,7 @@ export function newPage(type: PageType, title?: string, parentId: string | null 
   }
   if (type === 'database') page.db = newDatabase()
   if (type === 'dashboard') page.widgets = []
+  if(type==='calendar')page.view={...page.view,sourceIds:[page.id]}
   return page
 }
 
@@ -342,7 +342,7 @@ export function normalize(raw: any): AppData {
     if(p.type==='workout')p.workouts=(Array.isArray(p.workouts)?p.workouts:[]).filter(w=>w&&typeof w.exercise==='string'&&Number.isFinite(w.reps)&&Number.isFinite(w.sets)&&Number.isFinite(w.weight))
     if (p.type === 'list'||p.type==='reading') p.entries = (Array.isArray(p.entries) ? p.entries : []).filter(e => e && typeof e.name === 'string').map(e => {
       const target = Number.isFinite(e.target) ? Math.max(1,e.target) : 1
-      return { id: e.id || uid(), name: e.name, target, done: Number.isFinite(e.done) ? Math.max(0,Math.min(target,e.done)) : 0, unit: typeof e.unit === 'string' ? e.unit : '' }
+      return { id: e.id || uid(), name: e.name, category:typeof e.category==='string'?e.category:undefined, target, done: Number.isFinite(e.done) ? Math.max(0,Math.min(target,e.done)) : 0, unit: typeof e.unit === 'string' ? e.unit : '' }
     })
     if (p.type === 'study') p.cards = (Array.isArray(p.cards) ? p.cards : []).filter(c => c && typeof c.question === 'string' && typeof c.answer === 'string').map(c => ({
       id: c.id || uid(), question: c.question, answer: c.answer, due: typeof c.due === 'string' ? c.due : '', interval: Math.max(0,Number(c.interval) || 0)
@@ -515,6 +515,9 @@ export function normalizeLook(raw: any): Look {
 function normalizeSettings(raw: any): Settings {
   const s = { ...DEFAULT_SETTINGS, ...obj(raw) } as Settings & { widget?: unknown }
   delete s.widget
+  s.panelViews=Array.isArray(s.panelViews)?s.panelViews.filter(v=>v&&typeof v.name==='string'&&typeof v.type==='string'&&v.config&&typeof v.config==='object'):[]
+  s.repeatPatterns=Array.isArray(s.repeatPatterns)?s.repeatPatterns.filter(v=>v&&typeof v.name==='string'&&typeof normalizeRepeat(v.rule)==='object'):[]
+  s.savedThemes=Array.isArray(s.savedThemes)?s.savedThemes.filter(t=>t&&typeof t.name==='string'&&typeof t.json==='string'):[]
   s.look = normalizeLook(raw?.look)
   s.notionSync = s.notionSync !== false
   const pl = raw?.place
@@ -583,8 +586,8 @@ function normalizeDesktop(raw: any): Desktop {
         x: num(w.x, -100000, 100000, 0),
         y: num(w.y, -100000, 100000, 0),
         // Panels are always a set size now (no full-screen panels).
-        w: Number(w.w) > 0 ? num(w.w, MIN_PANEL_WIDTH, 20000, 300) : 900,
-        h: Number(w.h) > 0 ? num(w.h, MIN_PANEL_HEIGHT, 20000, 200) : 600,
+        w: Number(w.w) > 0 ? num(w.w, 1, 20000, 300) : 900,
+        h: Number(w.h) > 0 ? num(w.h, 1, 20000, 200) : 600,
         style: normalizeStyle(w.style, true),
         layer: 'desktop',
         locked: Boolean(w.locked),

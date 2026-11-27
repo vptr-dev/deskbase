@@ -29,6 +29,7 @@ export interface FeedEvent {
 }
 
 export interface FeedItem {
+  mailboxRevision?:string
   resumeCommand?: string
   id: string
   title: string
@@ -392,6 +393,7 @@ export function repoOf(s: string): string | null {
 
 export const MAIL_PRESETS: { id: string; name: string; host: string; port: number; web: string; passwordUrl?: string }[] = [
   { id: 'gmail', name: 'Gmail', host: 'imap.gmail.com', port: 993, web: 'https://mail.google.com/mail/u/0/#inbox', passwordUrl: 'https://myaccount.google.com/apppasswords' },
+  { id:'outlook',name:'Outlook / Microsoft 365',host:'outlook.office365.com',port:993,web:'https://outlook.office.com/mail/' },
   { id: 'icloud', name: 'iCloud', host: 'imap.mail.me.com', port: 993, web: 'https://www.icloud.com/mail', passwordUrl: 'https://account.apple.com/account/manage' },
   { id: 'yahoo', name: 'Yahoo', host: 'imap.mail.yahoo.com', port: 993, web: 'https://mail.yahoo.com', passwordUrl: 'https://login.yahoo.com/account/security' },
   { id: 'fastmail', name: 'Fastmail', host: 'imap.fastmail.com', port: 993, web: 'https://app.fastmail.com', passwordUrl: 'https://app.fastmail.com/settings/security/apps' },

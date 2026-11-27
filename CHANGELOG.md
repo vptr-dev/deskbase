@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.22.0 - 2026-11-27
+
+- Added workspace switcher panels and categorized folder and search launchers. Preserved compact window bounds.
+- Added named collections, reusable schedules and views, calendar overlays, task entry controls, custom themes, database forms and connection authorization options.
+
 ## 0.21.1 - 2026-11-26
 
 - Recovery checks older backups when a newer snapshot is damaged. Unreadable workspaces and files saved by a newer version are preserved on disk.

@@ -1,6 +1,8 @@
+import { useState } from 'react'
+import { setSettings,useData } from '../store'
 import type { CustomRepeat } from '../types'
 import { occurrence, validDay } from '../lib/recurrence'
-import { addDays, DAYS_LONG, DAYS_SHORT, friendlyDay } from '../lib/util'
+import { diffDays, addDays, DAYS_LONG, DAYS_SHORT, friendlyDay } from '../lib/util'
 
 export function firstScheduledDate(draft: CustomRepeat, from = draft.start): string | null {
   const valid = validDay(draft.start) && Number.isInteger(draft.interval) && draft.interval >= 1 && draft.interval <= 999 &&
@@ -8,19 +10,30 @@ export function firstScheduledDate(draft: CustomRepeat, from = draft.start): str
   return valid ? occurrence(draft, from) : null
 }
 
-export function ScheduleFields({ id, draft, onChange, from }: {
-  id: string; draft: CustomRepeat; onChange: (rule: CustomRepeat) => void; from?: string
+export function ScheduleFields({ id, draft, onChange, from, taskLimit }: {
+  id: string; draft: CustomRepeat; onChange: (rule: CustomRepeat) => void; from?: string; taskLimit?:boolean
 }): JSX.Element {
+  const patterns=useData(d=>d.settings.repeatPatterns)??[]
+  const [name,setName]=useState('')
   const first = firstScheduledDate(draft, from)
   const preview: string[] = []
   if (first) {
     let date: string | null = first
-    while (date && preview.length < 3) {
+    while (date && preview.length < Math.min(3,draft.remaining??3)) {
       preview.push(date)
       date = occurrence(draft, addDays(date, 1))
     }
   }
   return <>
+      <details><summary>Named schedules</summary><div className="row wrap gap-sm">
+        {patterns.map(p=><span key={p.name}><button type="button" className="btn btn-sm" onClick={()=>{
+          const rule={...p.rule,start:draft.start,until:p.rule.until?addDays(draft.start,diffDays(p.rule.until,p.rule.start)):undefined}
+          if(!taskLimit)delete rule.remaining
+          onChange(rule)
+        }}>{p.name}</button><button type="button" className="icon-btn" aria-label={'Remove schedule '+p.name} onClick={()=>setSettings(s=>{s.repeatPatterns=s.repeatPatterns?.filter(x=>x.name!==p.name)})}>×</button></span>)}
+        <input className="input input-sm" placeholder="Schedule name" aria-label="Schedule name" value={name} onChange={e=>setName(e.target.value)}/>
+        <button type="button" className="btn btn-sm" disabled={!name.trim()||!first} onClick={()=>{setSettings(s=>{s.repeatPatterns=[...(s.repeatPatterns??[]).filter(x=>x.name!==name.trim()),{name:name.trim(),rule:{...draft,days:[...draft.days]}}]});setName('')}}>Save schedule</button>
+      </div></details>
       <div className="row gap-sm wrap"><label htmlFor={`interval-${id}`}>Every</label>
         <input id={`interval-${id}`} aria-label="Repeat interval" className="input input-sm w-60" type="number" min={1} max={999} value={draft.interval || ''} onChange={e => onChange({ ...draft, interval: Number(e.target.value) })} />
         <select aria-label="Repeat unit" className="input input-sm" value={draft.unit} onChange={e => onChange({ ...draft, unit: e.target.value as CustomRepeat['unit'] })}>
@@ -35,6 +48,7 @@ export function ScheduleFields({ id, draft, onChange, from }: {
       </div>}
       <label className="repeat-date">Start date<input className="input input-sm" type="date" value={draft.start} onChange={e => onChange({ ...draft, start: e.target.value })} /></label>
       <label className="repeat-date">End date (optional)<input className="input input-sm" type="date" min={draft.start} value={draft.until ?? ''} onChange={e => onChange({ ...draft, until: e.target.value || undefined })} /></label>
+      {taskLimit&&<label className="repeat-date">Occurrences including this task<input aria-label="Occurrence limit" className="input input-sm" type="number" min="1" step="1" placeholder="Unlimited" value={draft.remaining??''} onChange={e=>{const n=e.target.valueAsNumber;if(!e.target.value||Number.isSafeInteger(n)&&n>0)onChange({...draft,remaining:e.target.value?n:undefined})}}/></label>}
       <span className="muted small" aria-live="polite">{first ? 'Scheduled: ' + preview.map(friendlyDay).join(' · ') : !draft.days.length && draft.unit === 'week' ? 'Choose at least one weekday.' : 'Choose an interval and dates that include an occurrence.'}</span>
   </>
 }
