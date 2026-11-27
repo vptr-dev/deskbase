@@ -34,6 +34,7 @@ export async function browserCode(endpoint:string,parameters:Record<string,strin
       const timer=setTimeout(()=>reject(Error('Sign-in timed out. Try again.')),180000)
       server.once('close',()=>clearTimeout(timer))
       server.on('request',(req,res)=>{
+        res.shouldKeepAlive=false
         if(req.method!=='GET'||!URL.canParse(req.url||'/',redirect)){res.writeHead(400);res.end();return}
         const url=new URL(req.url||'/',redirect)
         if(url.pathname!=='/'||url.searchParams.get('state')!==state){res.writeHead(404);res.end();return}
