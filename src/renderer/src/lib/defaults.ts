@@ -1,3 +1,4 @@
+import { normalizeHousehold } from './household'
 import { wishlistCategories } from './wishlist'
 import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, Connection, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
@@ -7,7 +8,7 @@ import { normalizeRepeat, validDay } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 28
+export const SCHEMA = 29
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -18,6 +19,7 @@ export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: str
   { type: 'board', name: 'Board', icon: 'square-kanban', desc: 'Kanban columns' },
   { type: 'calendar', name: 'Calendar', icon: 'calendar', desc: 'Month, week and agenda' },
   { type: 'habits', name: 'Habits', icon: 'repeat', desc: 'Daily habits and streaks' },
+  { type: 'household', name: 'Household', icon: 'home', desc: 'Recipes, weekly meals and household stock' },
   { type: 'journal', name: 'Journal', icon: 'notebook-pen', desc: 'Daily entries and mood' },
   { type: 'goals', name: 'Goals', icon: 'target', desc: 'Goals and milestones' },
   { type: 'list', name: 'List tracker', icon: 'list-checks', desc: 'Track items, quantities and progress in a named list' },
@@ -347,6 +349,7 @@ export function normalize(raw: any): AppData {
       return { ...e, id: e.id || uid(), name: e.name, category:typeof e.category==='string'?e.category:undefined, target, done: Number.isFinite(e.done) ? Math.max(0,Math.min(target,e.done)) : 0, unit: typeof e.unit === 'string' ? e.unit : '' }
     })
     if (p.type==='list') p.removedEntries=Array.isArray(p.removedEntries)?p.removedEntries.filter(r=>r && typeof r.id==='string' && typeof r.name==='string'):[]
+    if (p.type==='household') p.household=normalizeHousehold(p.household)
     if (p.type==='project' && p.lab) {
       const number=(value:unknown)=>typeof value==='number' && Number.isSafeInteger(value) && value>=0?value:0
       const lab=p.lab
@@ -487,6 +490,8 @@ export function normalize(raw: any): AppData {
   }
   for (const h of Object.values(d.habits)) {
     h.log = h.log ?? {}
+    h.pauses=Array.isArray(h.pauses)?h.pauses.filter(p=>p&&validDay(p.from)&&validDay(p.until)&&p.from<=p.until):[]
+    if(!validDay(h.restartOn))delete h.restartOn
     if (h.schedule) {
       const rule = normalizeRepeat(h.schedule)
       if (typeof rule === 'object' && h.kind === 'good' && h.period !== 'week') h.schedule = rule

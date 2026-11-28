@@ -1,9 +1,9 @@
 import { firstScheduledDate, ScheduleFields } from '../components/ScheduleFields'
-import { repeatLabel } from '../lib/recurrence'
+import { repeatLabel, validDay } from '../lib/recurrence'
 import { useState } from 'react'
 import { act, emit, pageItems, removeItem, unemit, upsert, useData, patch, updatePage } from '../store'
 import type { Habit } from '../types'
-import { habitBestStreak, habitDayTarget, habitDoneOn, habitDueToday, habitRate, habitScheduled, habitStreak, habitWeekCount, isWeekly } from '../lib/habits'
+import { habitNeedsCatchUp, habitBestStreak, habitDayTarget, habitDoneOn, habitDueToday, habitRate, habitScheduled, habitStreak, habitWeekCount, isWeekly } from '../lib/habits'
 import { COLORS } from '../lib/defaults'
 import { DAYS_SHORT, MONTHS_LONG, addDays, friendlyDay, parseDay, today, uid } from '../lib/util'
 import { Button, ColorDots, ConfirmButton, Empty, IconPickerButton, MenuButton, Modal, Ring, Segmented } from '../components/ui'
@@ -33,6 +33,8 @@ function newHabit(pageId: string, order: number): Habit {
 function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }): JSX.Element {
   const weekStart = useData(d => d.settings.weekStart)
   const [h, setH] = useState<Habit>(habit)
+  const [pauseFrom,setPauseFrom]=useState(today)
+  const [pauseUntil,setPauseUntil]=useState(today)
   const set = (p: Partial<Habit>): void => setH({ ...h, ...p })
   return (
     <Modal onClose={onClose} width={480}>
@@ -66,6 +68,14 @@ function HabitEditor({ habit, onClose }: { habit: Habit; onClose: () => void }):
             </div></>}
           </>}
         </>}
+        <label>Pause dates</label>
+        <div className="row gap-xs wrap"><input type="date" className="input input-sm" aria-label="Pause starts" value={pauseFrom} onChange={e=>setPauseFrom(e.target.value)}/>
+          <input type="date" className="input input-sm" aria-label="Pause ends" value={pauseUntil} onChange={e=>setPauseUntil(e.target.value)}/>
+          <Button small disabled={!validDay(pauseFrom)||!validDay(pauseUntil)||pauseFrom>pauseUntil} onClick={()=>set({pauses:[...h.pauses ?? [],{from:pauseFrom,until:pauseUntil}]})}>Add pause</Button>
+        </div>
+        {!!h.pauses?.length && <div>{h.pauses.map((p,i)=><div key={i} className="row gap-xs">
+          <span>{p.from} – {p.until}</span><Button small onClick={()=>set({pauses:h.pauses?.filter((_,j)=>i!==j)})}>Remove pause</Button>
+        </div>)}</div>}
         <label>Color</label>
         <ColorDots value={h.color} colors={COLORS} onChange={(color) => set({ color })} />
         <label>Notes</label>
@@ -128,6 +138,12 @@ export function HabitsPage({ pageId }: { pageId: string }): JSX.Element {
 
   return (
     <div className="habits-page">
+      {habits.some(h=>habitNeedsCatchUp(h,t)) && <details className="lab-section"><summary>Catch up at your pace</summary>
+        {habits.filter(h=>habitNeedsCatchUp(h,t)).map(h=><div key={h.id} className="row gap-sm wrap">
+          <span>{h.name}</span><Button small onClick={()=>patch('habits',h.id,x=>{x.restartOn=t})}>Restart today</Button>
+        </div>)}
+      </details>}
+
       <div className="toolbar">
         <Ring value={scheduledToday.length ? doneToday / scheduledToday.length : 0} size={40} stroke={4}><span className="small">{doneToday}/{scheduledToday.length}</span></Ring>
         <div className="toolbar-text"><div className="strong">Today</div><div className="muted small">{scheduledToday.length - doneToday} left</div></div>

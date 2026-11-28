@@ -1,3 +1,4 @@
+import { HouseholdPage } from './HouseholdPage'
 import type { Page } from '../types'
 import { BoardPage, TasksPage } from './TasksPage'
 import { HabitsPage } from './HabitsPage'
@@ -27,6 +28,7 @@ export function ToolBody({ page, embedded = false }: { page: Page; embedded?: bo
     case 'focus': return <FocusPage />
     case 'workout': return <WorkoutLog key={page.id} page={page}/>
     case 'reading': case 'list': return <ListTracker key={page.id} page={page} />
+    case 'household': return <HouseholdPage key={page.id} page={page} />
     case 'study': return <StudyDeck key={page.id} page={page} />
     case 'wishlist': return <WishlistPage key={page.id} page={page} />
     case 'tracker': return <TrackerPage pageId={page.id} />

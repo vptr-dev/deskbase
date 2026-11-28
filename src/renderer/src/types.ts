@@ -1,4 +1,5 @@
 export type PageType =
+  | 'household'
   | 'doc'
   | 'today'
   | 'tasks'
@@ -129,7 +130,7 @@ export interface ListEntry {
   runs?:{id:string;date:string;notes:string}[]
   fields?:Record<string,string>
 }
-export interface WorkoutSet { id:string; date:string; exercise:string; sets:number; reps:number; weight:number; unit:string }
+export interface WorkoutSet { routine?:string; id:string; date:string; exercise:string; sets:number; reps:number; weight:number; unit:string }
 export interface DiagramMask { x:number; y:number; width:number; height:number }
 export interface StudyCard {
   id:string; question:string; answer:string; due:string; interval:number
@@ -158,7 +159,31 @@ export interface LabRun {
 export interface LabLoan {id:string; tool:string; borrower:string; returnBy:string; returned?:boolean}
 export interface LabPack {id:string; name:string; quantity:number; packed?:boolean}
 export interface ProjectLab { parts:LabPart[]; pins:LabPin[]; runs:LabRun[]; loans?:LabLoan[]; packing?:LabPack[]; decisions?:string }
+export interface Ingredient { name:string; quantity:number; unit:string; aisle?:string }
+export interface HouseholdRecipe { id:string; name:string; servings:number; ingredients:Ingredient[]; substitutions?:{text:string; worked:boolean}[] }
+export interface MealSlot { id:string; date:string; recipe:string; servings:number; leftoversFrom?:string; frozenItem?:string }
+export interface PantryItem extends Ingredient { id:string; opened?:string; expires?:string; drawer?:string }
+export interface GroceryReceipt { id:string; date:string; image?:string; lines:string; reviewed:boolean }
+export interface HouseholdData {
+  recipes:HouseholdRecipe[]; meals:MealSlot[]; stock:PantryItem[]; receipts:GroceryReceipt[]
+  shops?:{id:string;name:string;aisles:string[]}[]
+  routine?: {
+    containers:{id:string;name:string;volume:number;unit:'ml'|'fl oz'}[]
+    fields:{id:string;name:string;unit:string;goals:Partial<Record<'workday'|'rest'|'holiday',number>>}[]
+    checkins:{day:string;time:string;kind:'workday'|'rest'|'holiday';water:number;sleepFrom?:string;sleepTo?:string;energy?:number;notes:string;values:Record<string,number>}[]
+    breaks:{id:string;name:string;minutes:number}[]
+  }
+  care?: {
+    meters:{id:string;name:string;date:string;value:number}[]
+    plants:{id:string;name:string;species:string;room:string;watered?:string}[]
+    seasonal:{id:string;name:string;monthDay:string;completedYear?:number}[]
+    pets:{id:string;name:string;instructions:string}[]
+    bin?:{anchor:string;every:number}
+    binExceptions:{from:string;to:string}[]
+  }
+}
 export interface Page {
+  household?:HouseholdData
   lab?:ProjectLab
   accent?: string
   workouts?: WorkoutSet[]
@@ -503,6 +528,8 @@ export interface Task {
 }
 
 export interface Habit {
+  pauses?: {from:string;until:string}[]
+  restartOn?: string
   id: string
   pageId: string
   name: string

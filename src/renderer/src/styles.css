@@ -2764,3 +2764,6 @@ select option, select optgroup { color: CanvasText; background-color: Canvas; }
 .lab-chart { width:min(260px,100%); position:relative; }
 .lab-chart svg { width:100%; }
 .lab-chart-marker { position:absolute; top:5%; bottom:5%; border-left:1px dashed var(--muted); cursor:help; }
+
+.household-page details form,.household-page details ul { margin-block:8px; }
+.household-page .purchase-budget label { display:grid; gap:4px; }

@@ -142,17 +142,29 @@ export function StudyDeck({page}: {page:Page}): JSX.Element {
 
 export function WorkoutLog({page}:{page:Page}):JSX.Element {
  const [exercise,setExercise]=useState(''),[date,setDate]=useState(today()),[sets,setSets]=useState('3'),[reps,setReps]=useState('8'),[weight,setWeight]=useState('0'),[unit,setUnit]=useState('kg')
+ const routines:string[]=Array.isArray(page.view?.workoutRotation)?page.view.workoutRotation:[]
+ const [routine,setRoutine]=useState('')
+ const [rotation,setRotation]=useState(routines.join('\n'))
  const log=[...(page.workouts??[])].sort((a,b)=>b.date.localeCompare(a.date))
  const last=log.find(w=>w.exercise.toLowerCase()===exercise.trim().toLowerCase())
- return <section><form className="tracker-add" onSubmit={e=>{e.preventDefault();if(!exercise.trim()||!date||![sets,reps,weight].every(x=>x.trim()&&Number.isFinite(+x))||+sets<1||+reps<1||+weight<0)return
-  updatePage(page.id,p=>{(p.workouts??=[]).unshift({id:uid(),exercise:exercise.trim(),date,sets:+sets,reps:+reps,weight:+weight,unit})})
+ const lastRoutine=log.find(w=>w.routine && routines.includes(w.routine))?.routine
+ const next=routines[(routines.indexOf(lastRoutine || '')+1)%routines.length]
+ return <section>
+ <details className="lab-section"><summary>Alternating routines</summary>
+   <label>Routine names in order, one per line<textarea className="input" value={rotation} onChange={e=>setRotation(e.target.value)}/></label>
+   <Button small onClick={()=>updatePage(page.id,p=>{p.view={...p.view,workoutRotation:[...new Set(rotation.split('\n').map(r=>r.trim()).filter(Boolean))].slice(0,20)}})}>Save rotation</Button>
+   {next && <p>Suggested next · {next}</p>}
+ </details>
+ <form className="tracker-add" onSubmit={e=>{e.preventDefault();if(!exercise.trim()||!date||![sets,reps,weight].every(x=>x.trim()&&Number.isFinite(+x))||+sets<1||+reps<1||+weight<0)return
+  updatePage(page.id,p=>{(p.workouts??=[]).unshift({id:uid(),exercise:exercise.trim(),date,sets:+sets,reps:+reps,weight:+weight,unit,routine:routine || next})})
  }}><label>Exercise<input required className="input" value={exercise} onChange={e=>setExercise(e.target.value)}/></label>
  <label>Date<input required type="date" className="input" value={date} onChange={e=>setDate(e.target.value)}/></label>
  <label>Sets<input required className="input" type="number" min="1" value={sets} onChange={e=>setSets(e.target.value)}/></label>
  <label>Reps<input required className="input" type="number" min="1" value={reps} onChange={e=>setReps(e.target.value)}/></label>
  <label>Weight<input required className="input" type="number" min="0" step="any" value={weight} onChange={e=>setWeight(e.target.value)}/></label>
+ {!!routines.length && <label>Routine<select className="input" value={routine || ''} onChange={e=>setRoutine(e.target.value)}><option value="">{next?'Suggested · '+next:'Choose routine'}</option>{routines.map(r=><option key={r}>{r}</option>)}</select></label>}
  <label>Unit<select className="input" value={unit} onChange={e=>setUnit(e.target.value)}><option>kg</option><option>lb</option></select></label>
  <button className="btn btn-primary btn-sm">Log workout</button></form>
  {last&&<small>Previous session · {last.date} · {last.sets} × {last.reps} at {last.weight} {last.unit}</small>}
- {log.map(w=><div className="list-entry" data-widget-item={w.exercise} key={w.id}><span className="grow"><strong>{w.exercise}</strong><br/>{w.date} · {w.sets} × {w.reps} · {w.weight} {w.unit}</span><Button small kind="ghost" icon="repeat" title="Repeat workout" onClick={()=>{setExercise(w.exercise);setSets(String(w.sets));setReps(String(w.reps));setWeight(String(w.weight));setUnit(w.unit);setDate(today())}}/><Button small kind="ghost" icon="trash" title="Remove workout" onClick={()=>updatePage(page.id,p=>{p.workouts=p.workouts?.filter(x=>x.id!==w.id)})}/></div>)}</section>
+ {log.map(w=><div className="list-entry" data-widget-item={w.exercise} key={w.id}><span className="grow"><strong>{w.exercise}</strong><br/>{w.date}{w.routine && ' · '+w.routine} · {w.sets} × {w.reps} · {w.weight} {w.unit}</span><Button small kind="ghost" icon="repeat" title="Repeat workout" onClick={()=>{setExercise(w.exercise);setSets(String(w.sets));setReps(String(w.reps));setWeight(String(w.weight));setUnit(w.unit);setRoutine(w.routine || '');setDate(today())}}/><Button small kind="ghost" icon="trash" title="Remove workout" onClick={()=>updatePage(page.id,p=>{p.workouts=p.workouts?.filter(x=>x.id!==w.id)})}/></div>)}</section>
 }

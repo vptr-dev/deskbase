@@ -63,6 +63,8 @@ function layoutCopier(snapshot: AppData, d: AppData, mode: TemplateMode) {
       if (p.cards) p.cards = p.cards.map(c=>({...c,interval:0,due:''}))
       if (p.study) p.study = {...p.study, reviews:[],lastPaper:undefined}
       if (p.lab) p.lab = {parts:[],pins:[],runs:[]}
+      if (p.household) p.household = {...p.household,meals:[],stock:[],receipts:[],care:undefined,
+        routine:p.household.routine?{...p.household.routine,checkins:[]}:undefined}
       for (const m of Object.values(snapshot.metrics).filter(m => m.pageId === id)) {
         const mid = uid(); metrics.set(m.id, mid)
         d.metrics[mid] = { ...structuredClone(m), id: mid, pageId: newId, entries: [] }

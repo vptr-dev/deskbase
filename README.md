@@ -6,7 +6,13 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.27.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.28.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+
+## Household planning and routines
+
+Choose **Household** in New page to plan meals, scale recipes and combine a week of groceries using pantry stock. Link leftovers to their original meal, plan freezer portions and review a typed or photographed receipt.
+
+**Household care** keeps meter readings, plant care, seasonal tasks, sitter handovers and collection date exceptions. **Routines** lets you correct past check-ins, save water containers and set goals by day type. Habits support pause periods, and Workout Log can suggest the next routine in a rotation.
 
 ## Study decks and project labs
 

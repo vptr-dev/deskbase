@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.28.0 - 2026-11-28
+
+- Added household recipes, meal plans, stock, weekly groceries, freezer portions and receipt review.
+- Added home check-ins, water containers, seated breaks, habit pauses and workout rotations.
+- Added meter readings, plant care, seasonal checklists, pet sitter handovers and bin date exceptions.
+
 ## 0.27.0 - 2026-11-28
 
 - Added study planning, diagram masks, missed-card practice, confidence tracking, printable sheets, and timed past papers.
