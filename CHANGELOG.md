@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.23.0 - 2026-11-28
+
+- Create editable documents with embedded tools. Insert blocks from their context menu, reuse snippets, compare paragraph revisions, move by keyboard and paste table ranges.
+- Added creative projects for visual references, draft and sketch comparisons, production lists, unfinished experiments and short local voice notes.
+- Compact widget action menus support type-ahead, scrolling and right-click dismissal.
+
 ## 0.22.0 - 2026-11-27
 
 - Added workspace switcher panels and categorized folder and search launchers. Preserved compact window bounds.

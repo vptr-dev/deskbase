@@ -30,6 +30,7 @@ if (!process.versions.electron) {
     fs.mkdirSync(dir, { recursive: true })
     app.setPath(key, dir)
   }
+  app.commandLine.appendSwitch('use-fake-device-for-media-stream')
   app.disableHardwareAcceleration()
   require('../out/main/index.js')
 
@@ -87,6 +88,23 @@ if (!process.versions.electron) {
       })
       console.log('Saved and native bounds match after a second Electron launch.');return
     }
+    // Exercise the packaged renderer's microphone policy with a generated device.
+    // This also catches mismatches between Electron's check and request callbacks.
+    const voiceBytes = await evaluate(main, `(async()=>{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true})
+      try {
+        const recorder=new MediaRecorder(stream)
+        const captured=new Promise((resolve,reject)=>{
+          recorder.ondataavailable=e=>resolve(e.data.size)
+          recorder.onerror=reject
+        })
+        recorder.start()
+        await new Promise(done=>setTimeout(done,350))
+        recorder.stop()
+        return await captured
+      } finally {stream.getTracks().forEach(track=>track.stop())}
+    })()`)
+    assert.ok(voiceBytes>0,'App recorded a short synthetic voice idea')
     const tasks = await createPanel(main, 'tasks', { filter: 'all', quickAdd: false })
     await rightClick(tasks.win, '.dw')
     await choose(tasks.win, 'Lock panel')

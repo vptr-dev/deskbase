@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 23
+export const CURRENT_SCHEMA = 24
 
 type Raw = Record<string, any>
 
@@ -249,6 +249,8 @@ migrations[20] = d => d
 migrations[21] = d => d
 // Existing calendars retain their combined view and existing list entries retain their progress.
 migrations[22] = d => d
+// Document snippets and section widths are optional.
+migrations[23] = d => d
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

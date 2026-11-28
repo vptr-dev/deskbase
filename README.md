@@ -6,7 +6,13 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.22.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.23.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+
+## Editable pages and creative projects
+
+Choose a tool under **New page** to start a document with that tool and a place to write. Use the block handle or right-click a block to insert above or below, save a snippet, compare paragraph revisions, or move the block by keyboard. Right-click the blank area at the end to append another tool.
+
+Expand **Creative projects** in New page for shot lists, scene boards, asset registers, mood boards, reference sheets, sketch pairs, draft comparisons, experiments and voice ideas. Mood boards can sample colours from an imported image. A reference image accepts a rating from 0 to 5 while it has keyboard focus. Voice notes record up to one minute and support a typed summary.
 
 ## Named schedules and panel views
 

@@ -17,6 +17,7 @@ export type PageType =
   | 'dashboard'
 
 export type BlockType =
+  | 'studio'
   | 'p'
   | 'h1'
   | 'h2'
@@ -47,7 +48,13 @@ export type BlockType =
   | 'tool'
   | 'widget'
 
+export interface StudioEntry {
+  id: string; title: string; notes: string; image?: string; later?: string; credit?: string
+  rating?: number; color?: string; x?: number; y?: number; done?: boolean; audio?: string
+}
 export interface Block {
+  entries?: StudioEntry[]
+  fullWidth?: boolean
   id: string
   type: BlockType
   text: string
@@ -513,6 +520,7 @@ export interface FocusSession {
 /** A place for weather and daylight. */
 export interface Place { name: string; lat: number; lon: number }
 export interface Settings {
+  blockSnippets?: { id:string; name:string; pageId:string; blocks:Block[] }[]
   repeatPatterns?: {name:string;rule:CustomRepeat}[]
   panelViews?: {name:string;type:WidgetType;config:Record<string,any>}[]
   savedThemes?: {name:string; json:string; panels?:WidgetStyle}[]

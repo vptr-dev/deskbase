@@ -1,9 +1,10 @@
+import { creativeProject } from './lib/creativeProjects'
 import { nextTaskDate, normalizeRepeat, shiftTaskReminder } from './lib/recurrence'
 import { create } from 'zustand'
 import { applyPatches, enablePatches, type Patch, produceWithPatches } from 'immer'
 import type { AppData, Page, PageType, Task } from './types'
 import { api } from './lib/api'
-import { freshData, newPage, normalize } from './lib/defaults'
+import { freshData, newPage, normalize, typeInfo } from './lib/defaults'
 import { applyRules, revertRules, type ValueEvent } from './lib/values'
 import { addDays, dayKey, friendlyDay, parseDay, today, uid } from './lib/util'
 
@@ -201,8 +202,31 @@ export const setOverlay = (overlay: Overlay, arg: any = null): void => useApp.se
 // ---------- pages ----------
 export function createPage(type: PageType, parentId: string | null = null, title?: string, index?: number): string {
   const page = newPage(type, title, parentId)
+  return insertPage(page, index)
+}
+
+/** A tool created from New page starts inside an editable document. */
+export function createToolDocument(type: PageType, parentId: string | null, title?: string): string {
+  if (type === 'doc') return createPage(type, parentId, title)
+  const info = typeInfo(type)
+  const page = newPage('doc', title || info.name, parentId)
+  const source = newPage(type, page.title, page.id)
+  page.icon = info.icon
+  page.children.push(source.id)
+  page.blocks.unshift({ id: uid(), type: type === 'database' ? 'database' : 'tool', text: '', ref: source.id })
+  return insertPage(page, undefined, source)
+}
+
+export function createCreativePage(kind: string, parentId: string | null, title: string): string {
+  const {page,source} = creativeProject(kind,title,parentId)
+  return insertPage(page,undefined,source)
+}
+
+function insertPage(page: Page, index?: number, source?: Page): string {
+  const parentId = page.parentId
   act((d) => {
     d.pages[page.id] = page
+    if (source) d.pages[source.id] = source
     const list = parentId ? d.pages[parentId].children : d.rootOrder
     if (index === undefined) list.push(page.id)
     else list.splice(index, 0, page.id)

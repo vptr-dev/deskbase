@@ -2532,7 +2532,7 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 .cover-swatch:hover, .cover-swatch:focus-visible { outline: 2px solid var(--fg-2); outline-offset: 1px; }
 .erase-confirm { padding: 0 18px 18px; }
 
-.insert-block-row { display: flex; margin: 0 0 8px 22px; }
+@media (hover: none) { .block > .block-gutter { opacity: 1; } }
 .block.drop-above { box-shadow: 0 -2px var(--accent); }
 .block.drop-below { box-shadow: 0 2px var(--accent); }
 .block:focus-within > .block-gutter { opacity: 1; }
@@ -2598,9 +2598,11 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 .purchase-date { display: block; font-size: .8em; }
 .action-step + .action-step { padding-top: 8px; border-top: 1px solid var(--line); }
 
+select option, select optgroup { color: CanvasText; background-color: Canvas; }
+
 .popover.widget-action-popover {
   box-sizing: border-box; width: min(260px, calc(100vw - 16px)); max-width: calc(100vw - 16px);
-  max-height: calc(100dvh - 16px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  max-height: min(20rem, 78dvh, calc(100dvh - 16px)); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
   scrollbar-width: thin; scrollbar-color: var(--muted) transparent;
   color: var(--fg); border: 1px solid var(--line); border-radius: clamp(8px,var(--w-radius,12px),16px);
   background: color-mix(in srgb, var(--w-tint,var(--card-strong)) 8%, var(--card-strong));
@@ -2609,7 +2611,7 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 .widget-menu-section { padding: 3px; }
 .widget-menu-section + .widget-menu-section { border-top: 1px solid var(--line); margin-top: 3px; padding-top: 6px; }
 .widget-menu-heading { padding: 4px 7px; font-size: 11px; font-weight: 600; color: var(--muted); overflow-wrap: anywhere; }
-.widget-menu-section .menu-item { width: 100%; gap: 9px; text-align: left; }
+.widget-menu-section .menu-item { width: 100%; height: auto; min-height: 26px; padding-block: 3px; gap: 7px; text-align: left; }
 .widget-menu-section .menu-item:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .widget-menu-section .menu-label { white-space: normal; }
 .widget-menu-form, .widget-menu-form label, .embed-widget-picker label { display: grid; gap: 6px; min-width: 0; }
@@ -2657,3 +2659,23 @@ button.tl-name-col:hover { color: var(--accent-ink); }
 
 .fit-panel .pk-launch{align-content:safe center}.fit-panel .pk-launch.grid{grid-template-columns:repeat(auto-fill,minmax(min(64px,100%),1fr))}
 @media(max-width:150px),(max-height:85px){.dw-root .dw{padding:2px;gap:2px}.dw-root .dw-body{min-height:0;min-width:0}.dw-root .pk-launch,.dw-root .space-switcher{gap:2px}.dw-root .space-switcher button{padding:2px 4px}}
+
+.doc-tool-dialog { display:grid; gap:12px; }
+.doc-tool-dialog label { display:grid; gap:5px; }
+.draft-pair { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr)); gap:12px; }
+.draft-pair p { white-space:pre-wrap; overflow-wrap:anywhere; }
+.scroll:has(.block-wide) { container-type:inline-size; }
+.doc > .blocks > .block-wide { width:max(100%,calc(100cqw - 48px)); margin-inline-start:min(0px,calc((100% - 100cqw + 48px)/2)); }
+
+.block-move-picker { position:sticky; top:4px; z-index:8; display:flex; flex-wrap:wrap; gap:8px; background:var(--card-strong); padding:8px; border:1px solid var(--accent); border-radius:8px; }
+.creative-studio, .studio-entry, .creative-studio label { display:grid; gap:8px; min-width:0; }
+.creative-studio { gap:14px; }
+.creative-studio input[type=file] { max-width:100%; font-size:12px; }
+.mood-canvas { position:relative; height:clamp(200px,38vh,440px); background:var(--hover); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.mood-canvas button { position:absolute; width:17%; height:30%; touch-action:none; overflow:hidden; cursor:grab; }
+.reference-sheet { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; }
+.reference-sheet img,.mood-canvas img,.studio-entry figure img { max-width:100%; max-height:180px; object-fit:contain; }
+.reference-sheet button,.mood-canvas button { display:grid; place-items:center; border:1px solid var(--line); border-radius:6px; }
+.reference-sheet button[aria-pressed=true],.mood-canvas button[aria-pressed=true] { outline:2px solid var(--accent); outline-offset:-2px; }
+.studio-entry figure { margin:0; }
+.studio-entry audio { max-width:100%; }

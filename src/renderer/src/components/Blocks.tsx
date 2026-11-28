@@ -388,13 +388,13 @@ export function SyncedBlock({ block, locked }: { block: Block; locked?: boolean 
       <button className="synced-from" title="Open the original" onClick={(e) => { openFromClick(srcPage, e); setTimeout(() => scrollToBlock(srcBlock), 120) }}>
         <Icon name="refresh" size={11} /> {src ? title : 'Original deleted'}
       </button>
-      {src ? (
+      {src && block.style !== 'reference' ? (
         src.type === 'divider' ? <hr /> : (
           <AutoText className={`bt bt-${src.type}`} value={src.text} spellCheck={spell}
-            placeholder="Synced text"
-            onChange={(v) => { if (!locked) updatePage(srcPage, (p) => { const b = findBlock(p.blocks, srcBlock); if (b) b.text = v }, 'sync:' + srcBlock) }} />
+            readOnly={locked || page?.locked} placeholder="Synced text"
+            onChange={(v) => { if (!locked && !page?.locked) updatePage(srcPage, (p) => { const b = findBlock(p.blocks, srcBlock); if (b) b.text = v }, 'sync:' + srcBlock) }} />
         )
-      ) : <div className="muted small">The original block is gone.</div>}
+      ) : !src && <div className="muted small">The original block is gone.</div>}
     </div>
   )
 }

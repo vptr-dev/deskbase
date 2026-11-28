@@ -6,7 +6,7 @@ import { normalizeRepeat } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 23
+export const SCHEMA = 24
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -249,6 +249,7 @@ function normBlocks(list: any[]): Block[] {
   return list.filter((b) => b && typeof b === 'object').map((b) => {
     const out: Block = { ...b, id: typeof b.id === 'string' && b.id ? b.id : uid(), type: typeof b.type === 'string' ? b.type : 'p', text: typeof b.text === 'string' ? b.text : '' }
     if (out.iconColor !== undefined && !optionalColor(out.iconColor)) delete out.iconColor
+    if (out.type === 'studio') out.entries = Array.isArray(b.entries) ? b.entries.filter((item:any)=>item && typeof item.id==='string').map((item:any)=>({...item,title:typeof item.title==='string'?item.title:'',notes:typeof item.notes==='string'?item.notes:''})) : []
     if (out.type === 'tool' && typeof out.ref !== 'string') delete out.ref
     if (out.type === 'widget' && (!out.widgetSource || typeof out.widgetSource.id !== 'string' || (out.widgetSource.page !== null && typeof out.widgetSource.page !== 'string'))) delete out.widgetSource
     if (out.type === 'columns' || out.type === 'tabs') {
@@ -517,6 +518,7 @@ function normalizeSettings(raw: any): Settings {
   delete s.widget
   s.panelViews=Array.isArray(s.panelViews)?s.panelViews.filter(v=>v&&typeof v.name==='string'&&typeof v.type==='string'&&v.config&&typeof v.config==='object'):[]
   s.repeatPatterns=Array.isArray(s.repeatPatterns)?s.repeatPatterns.filter(v=>v&&typeof v.name==='string'&&typeof normalizeRepeat(v.rule)==='object'):[]
+  s.blockSnippets = Array.isArray(s.blockSnippets) ? s.blockSnippets.filter(x => x && typeof x.id === 'string' && typeof x.name === 'string' && typeof x.pageId === 'string' && Array.isArray(x.blocks)).map(x => ({ ...x, blocks: normBlocks(x.blocks) })) : []
   s.savedThemes=Array.isArray(s.savedThemes)?s.savedThemes.filter(t=>t&&typeof t.name==='string'&&typeof t.json==='string'):[]
   s.look = normalizeLook(raw?.look)
   s.notionSync = s.notionSync !== false

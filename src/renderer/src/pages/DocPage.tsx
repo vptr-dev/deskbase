@@ -1,3 +1,6 @@
+import { CreativeStudio } from '../components/CreativeStudio'
+import { DocumentTools, type EditorRequest } from '../components/DocumentTools'
+import { splitAtHeading } from '../lib/documentTools'
 import { EmbeddedWidget } from '../components/EmbeddedWidget'
 import { blockTextColor } from '../lib/look'
 import { memo, useEffect, useRef, useState } from 'react'
@@ -134,12 +137,28 @@ const BlockRow = memo(function BlockRow({ render }: { b: Block; deps: string; re
 export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: boolean; col?: ColumnRef }): JSX.Element {
   const blocks = useData((d) => listOf(d.pages[pageId], col) ?? EMPTY)
   const spell = useData((d) => d.settings.spellcheck)
+  const [move, setMove] = useState<{ids:string[]; index:number; before:boolean} | null>(null)
+  const moveControl = useRef<HTMLDivElement>(null)
+  const editor = useRef<HTMLDivElement>(null)
+  const caret = useRef<{el:HTMLTextAreaElement;start:number;end:number} | null>(null)
+  const destinations = move ? Array.from(editor.current?.closest('.doc')?.querySelectorAll<HTMLElement>('[data-block]') ?? []).filter(el=>
+    el.closest('.doc')===editor.current?.closest('.doc') && el.getClientRects().length && !move.ids.some(id=>el.closest('[data-block="'+CSS.escape(id)+'"]'))
+  ) : []
+  const destination = destinations[move?.index ?? 0]
+  useEffect(()=>{
+    if(!move || !destination)return
+    moveControl.current?.focus({preventScroll:true})
+    destination.classList.add(move.before?'drop-above':'drop-below')
+    destination.scrollIntoView({block:'nearest'})
+    return ()=>destination.classList.remove('drop-above','drop-below')
+  },[move,destination])
+  const [request, setRequest] = useState<EditorRequest | null>(null)
   const [slash, setSlash] = useState<{ id: string; el: HTMLElement; q: string } | null>(null)
   const [mention, setMention] = useState<MentionState | null>(null)
-  const [handleMenu, setHandleMenu] = useState<{ id: string; el: HTMLElement } | null>(null)
+  const [handleMenu, setHandleMenu] = useState<{ id: string; el: HTMLElement | { x: number; y: number } } | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
   const selectionAnchor = useRef<string | null>(null)
-  const [insertMenu, setInsertMenu] = useState<HTMLElement | null>(null)
+  const [insertMenu, setInsertMenu] = useState<{ x: number; y: number } | null>(null)
   const selIds = useSelection((s) => (s.page === pageId && !col ? s.ids : NONE))
   /** A menu on a selected block acts on every selected block. */
   const targetsOf = (id: string): string[] => (selIds.length > 1 && selIds.includes(id) ? selIds : [id])
@@ -310,6 +329,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>, b: Block, idx: number): void => {
     const el = e.currentTarget
+    if(e.altKey && e.shiftKey && e.key.toLowerCase()==='m'){e.preventDefault();setMove({ids:targetsOf(b.id),index:0,before:true});return}
     if (mention && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Tab'].includes(e.key)) {
       if (e.key === 'Escape') { e.preventDefault(); setMention(null) }
       if (e.key === 'Enter' || e.key === 'Tab') {
@@ -452,8 +472,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
     const ref = parseBlockLink(e.clipboardData.getData('text'))
     if (ref && b.type === 'p' && !b.text) {
       e.preventDefault()
-      setBlock(b.id, (x) => { x.type = 'synced'; x.ref = ref })
-      lineAfter(b.id)
+      setRequest({ action:'paste', id:b.id, ref })
     }
   }
 
@@ -476,7 +495,8 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
       ...(targetsOf(id).length > 1 ? [{ label: `${targetsOf(id).length} blocks`, disabled: true }] : []),
       { label: 'Delete', icon: 'trash', danger: true, hint: 'Del', onClick: () => { const ts = new Set(targetsOf(id)); edit((bs) => { for (let i = bs.length - 1; i >= 0; i--) if (ts.has(bs[i].id)) bs.splice(i, 1); if (!bs.length) bs.push({ id: uid(), type: 'p', text: '' }) }); clearSelection() } },
       { label: 'Duplicate', icon: 'copy', hint: 'Ctrl D', onClick: () => { const ts = targetsOf(id); edit((bs) => { const picked = bs.filter((x) => ts.includes(x.id)); const last = Math.max(...picked.map((x) => bs.indexOf(x))); bs.splice(last + 1, 0, ...picked.map(cloneBlock)) }) } },
-      { label: 'Insert below', icon: 'plus', onClick: () => insertAfter(id) }
+      { label: 'Insert above', icon: 'plus', onClick: () => addNear(id, true) },
+      { label: 'Insert below', icon: 'plus', onClick: () => addNear(id, false) }
     ]
     if (TEXT_TYPES.has(b.type) || b.type === 'divider') {
       items.push({ label: 'Copy as synced block', icon: 'refresh', onClick: () => { navigator.clipboard.writeText(blockLink(pageId, id)).then(() => toast('Synced block copied. Paste it on an empty line.', { icon: 'refresh' })).catch(() => {}) } })
@@ -484,6 +504,16 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
     if (b.type === 'divider') {
       items.push({ divider: true, label: '' }, ...DIVIDERS.map(([v, label]) => ({ label, checked: (b.style || 'line') === v, onClick: () => setBlock(id, (x) => { x.style = v === 'line' ? undefined : v }) })))
     }
+    items.push(
+      {label:'Move with keyboard', onClick:()=>setMove({ids:targetsOf(id),index:0,before:true})},
+      {label:'Save as snippet', onClick:()=>setRequest({ action:'save', id, ids:current().filter(x=>targetsOf(id).includes(x.id)).map(x=>x.id) })},
+      {label:'Insert snippet below', onClick:()=>setRequest({action:'shelf',id})},
+      {label:'Resolve page links', onClick:()=>setRequest({action:'links',id})}
+    )
+    if (!col) items.push({label:'Full-width section',checked:!!b.fullWidth,onClick:()=>setBlock(id,x=>{x.fullWidth=!x.fullWidth})})
+    if (!col && /^(toggle-)?h[123]$/.test(b.type)) items.push({label:'Split page here', onClick:()=>splitAtHeading(pageId,id)})
+    if (TEXT_TYPES.has(b.type)) items.push({label:'Paragraph history',onClick:()=>setRequest({action:'history',id})})
+    if (b.type==='link' && b.ref) items.push({label:'Preview linked page',onClick:()=>setRequest({action:'read',id})})
     if (b.type === 'columns') {
       const n = b.cols?.length ?? 0
       items.push({ divider: true, label: '' },
@@ -527,11 +557,33 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
   live.current = { onKey, onChange, onPaste, selIds }
   let num = 0
   return (
-    <div className={`blocks ${locked ? 'locked' : ''} ${col ? 'nested' : ''}`}>
-      {!col && !locked && <div className="insert-block-row">
-        <button className="page-add" aria-haspopup="menu" onClick={e => setInsertMenu(e.currentTarget)}><Icon name="plus" size={14} />Insert block</button>
+    <div ref={editor} onBlurCapture={e=>{
+      const el=e.target
+      if(el instanceof HTMLTextAreaElement && editor.current?.contains(el)) caret.current={el,start:el.selectionStart,end:el.selectionEnd}
+    }} data-column-owner={col?.block} data-column-index={col?.index} className={`blocks ${locked ? 'locked' : ''} ${col ? 'nested' : ''}`}>
+      {move && <div ref={moveControl} tabIndex={0} autoFocus className="block-move-picker" onKeyDown={e=>{
+        if(e.key==='Escape'){e.preventDefault();setMove(null);return}
+        if(!destination)return
+        if(['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();setMove({...move,index:(move.index+(e.key==='ArrowDown'?1:-1)+destinations.length)%destinations.length})}
+        if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setMove({...move,before:e.key==='ArrowLeft'})}
+        if(e.key==='Enter'){e.preventDefault();const list=destination.parentElement?.dataset
+          movingBlocks={pageId,ids:move.ids,source:col}
+          moveBlocks(pageId,destination.dataset.block!,list?.columnOwner?{block:list.columnOwner,index:Number(list.columnIndex)}:undefined,move.before)
+          setMove(null);focusBlock(move.ids[0])
+        }
+      }}><span aria-live="polite">{destination ? (destination.parentElement?.dataset.columnIndex ? 'Column '+(Number(destination.parentElement.dataset.columnIndex)+1) : 'Page')+' · '+(move.before?'Before':'After')+' '+(destination.textContent?.trim().slice(0,40)||'empty block') : 'No other destination'}</span>
+        <small>↑ ↓ destination · ← → position · Enter to move</small><button onClick={()=>setMove(null)}>Cancel</button></div>}
+      {request && <DocumentTools request={request} pageId={pageId} close={()=>{
+        setRequest(null)
+        const position=caret.current
+        if(request.action==='read' && position?.el.isConnected)requestAnimationFrame(()=>{position.el.focus({preventScroll:true});position.el.setSelectionRange(position.start,position.end)})
+        else focusBlock(request.id)
+      }} insert={copies=>edit(bs=>{
+        const index=bs.findIndex(x=>x.id===request.id)
+        if(index>=0)bs.splice(index+1,0,...copies)
+      })} replace={replacement=>{edit(bs=>{const i=bs.findIndex(x=>x.id===request.id);if(i>=0)bs.splice(i,1,replacement)});lineAfter(replacement.id)}}/>}
         {insertMenu && <Popover anchor={insertMenu} onClose={() => setInsertMenu(null)} width={242}>
-          <Menu onClose={() => setInsertMenu(null)} items={SLASH.filter(item => ['tool', 'tabs', 'columns', 'database', 'button', 'widget'].includes(item.type)).map(item => ({
+          <Menu onClose={() => setInsertMenu(null)} items={SLASH.map(item => ({
             label: item.label, icon: item.icon, onClick: () => {
               const tail = current().at(-1)
               const id = tail?.type === 'p' && !tail.text ? tail.id : insertAfter(tail?.id ?? '')
@@ -539,7 +591,6 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
             }
           }))} />
         </Popover>}
-      </div>}
       {blocks.map((b, idx) => {
         if (hidden.has(b.id)) return null
         num = b.type === 'number' ? num + 1 : 0
@@ -567,6 +618,7 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           case 'toc': content = <TocBlock pageId={pageId} />; break
           case 'bookmark': content = <BookmarkBlock block={b} locked={locked} set={set} />; break
           case 'image': content = <ImageBlock block={b} locked={locked} set={set} />; break
+          case 'studio': content = <CreativeStudio block={b} locked={locked} set={set}/>; break
           case 'widget': content = <EmbeddedWidget block={b} locked={locked} select={source => set(x => { x.widgetSource = source })} />; break
           case 'embed': content = <EmbedBlock block={b} locked={locked} set={set} />; break
           case 'equation': content = <EquationBlock block={b} locked={locked} set={set} />; break
@@ -612,7 +664,15 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
           <div
             key={b.id}
             data-block={b.id}
-            className={`block block-${b.type} ${headLevel ? 'block-' + headLevel : ''} ${dragOver?.slice(1) === b.id ? (dragOver[0] === '<' ? 'drop-above' : 'drop-below') : ''} ${selIds.includes(b.id) ? 'selected' : ''} ${b.bg ? 'has-bg' : ''}`}
+            onContextMenu={e => {
+              const target = e.target as HTMLElement
+              if (locked || e.defaultPrevented || !e.currentTarget.contains(target) || target.closest('[data-block]') !== e.currentTarget) return
+              if (target.closest('.inline-tool-body, .inline-db, .embedded-widget, a, button, select, input, iframe')) return
+              e.preventDefault()
+              e.stopPropagation()
+              setHandleMenu({ id: b.id, el: { x: e.clientX, y: e.clientY } })
+            }}
+            className={`block ${b.fullWidth && !col ? 'block-wide' : ''} block-${b.type} ${headLevel ? 'block-' + headLevel : ''} ${dragOver?.slice(1) === b.id ? (dragOver[0] === '<' ? 'drop-above' : 'drop-below') : ''} ${selIds.includes(b.id) ? 'selected' : ''} ${b.bg ? 'has-bg' : ''}`}
             style={{ paddingLeft: 28 + (b.indent ?? 0) * 24, color: blockTextColor(b.color), ['--ind' as string]: (b.indent ?? 0) * 24 + 'px', ['--bgc' as string]: bgColor(b.bg) }}
             onDragOver={e => {
               if (locked || movingBlocks?.pageId !== pageId) return
@@ -657,7 +717,10 @@ export function BlockEditor({ pageId, locked, col }: { pageId: string; locked?: 
         )
         }} />
       })}
-      {!locked && <div className="blocks-tail" onClick={() => {
+      {!locked && <div className="blocks-tail" onContextMenu={e => {
+        e.preventDefault(); e.stopPropagation()
+        setInsertMenu({ x: e.clientX, y: e.clientY })
+      }} onClick={() => {
         const last = blocks[blocks.length - 1]
         if (!last || last.text || last.type !== 'p') insertAfter(last?.id ?? '')
         else focusBlock(last.id)
@@ -860,7 +923,19 @@ function TableBlock({ block, locked, onEdit }: { block: Block; locked?: boolean;
             <tr key={ri} className={ri === 0 ? 'tbl-head' : ''}>
               {pad(r).map((c, ci) => (
                 <td key={ci}>
-                  <AutoText className="tbl-cell" value={c} onChange={(v) => onEdit((rs) => { fix(rs); rs[ri][ci] = v })} />
+                  <AutoText className="tbl-cell" readOnly={locked} onPaste={e=>{
+                    const text=e.clipboardData.getData('text/plain')
+                    if(locked || !text.includes('\t'))return
+                    e.preventDefault()
+                    const cells=text.replace(/\r\n?/g,'\n').replace(/\n$/,'').split('\n').map(row=>row.split('\t'))
+                    onEdit(rs=>{
+                      cells.forEach((values,dy)=>{
+                        const dest=rs[ri+dy] ?? (rs[ri+dy]=[])
+                        while(dest.length<ci)dest.push('')
+                        values.forEach((value,dx)=>{dest[ci+dx]=value})
+                      })
+                    })
+                  }} value={c} onChange={(v) => onEdit((rs) => { fix(rs); rs[ri][ci] = v })} />
                 </td>
               ))}
               {!locked && <td className="tbl-x"><button title="Delete row" onClick={() => onEdit((rs) => { if (rs.length > 1) rs.splice(ri, 1) })}><Icon name="x" size={11} /></button></td>}

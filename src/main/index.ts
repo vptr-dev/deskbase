@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url'
 import { registerMedia } from './media'
 import { registerConnections } from './connections'
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, shell, Tray } from 'electron'
@@ -157,8 +158,17 @@ function createWindow(): void {
     }
   })
   const allowed = new Set(['local-fonts', 'notifications', 'clipboard-sanitized-write', 'fullscreen'])
-  mainWindow.webContents.session.setPermissionRequestHandler((_wc, permission, cb) => cb(allowed.has(permission)))
-  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) => allowed.has(permission))
+  const appDocument = (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) || pathToFileURL(path.join(__dirname,'../renderer/index.html')).href
+  const isAppFrame = (wc: Electron.WebContents | null, details: { isMainFrame:boolean; requestingUrl?:string }) =>
+    !!mainWindow && wc === mainWindow.webContents && details.isMainFrame &&
+    !!details.requestingUrl && URL.canParse(details.requestingUrl) && new URL(details.requestingUrl).href.split('#')[0] === new URL(appDocument).href.split('#')[0]
+  mainWindow.webContents.session.setPermissionRequestHandler((wc,permission,cb,details)=>{
+    if(permission !== 'media')return cb(allowed.has(permission))
+    const media = details as Electron.MediaAccessPermissionRequest
+    cb(isAppFrame(wc,media) && media.mediaTypes?.length===1 && media.mediaTypes[0]==='audio')
+  })
+  mainWindow.webContents.session.setPermissionCheckHandler((wc,permission,_origin,details)=>
+    permission==='media' ? isAppFrame(wc,details) && details.mediaType==='audio' : allowed.has(permission))
   // Video players in embed blocks refuse to play without a web address naming the page that shows them;
   // the app's pages have none (file://), so embeds name the app's home page instead.
   mainWindow.webContents.session.webRequest.onBeforeSendHeaders(

@@ -1,6 +1,7 @@
+import { creativeNames } from '../lib/creativeProjects'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { newTab, reopenTab } from '../lib/tabs'
-import { updatePage, createPage, getData, openPage, openSettings, openView, purgePage, restorePage, setOverlay, setSettings, toast, useApp, useData, undo, redo } from '../store'
+import { updatePage, createCreativePage, createToolDocument, createPage, getData, openPage, openSettings, openView, purgePage, restorePage, setOverlay, setSettings, toast, useApp, useData, undo, redo } from '../store'
 import { PAGE_TYPES, typeInfo } from '../lib/defaults'
 import { useFeeds } from '../lib/connections'
 import { api } from '../lib/api'
@@ -49,7 +50,7 @@ export function NewPageDialog(): JSX.Element {
   const [mode, setMode] = useState<TemplateMode>('linked')
   const templates = useData((d) => Object.values(d.pages).filter((p) => p.template && !p.rowOf && !p.deletedAt))
   const make = (type: (typeof PAGE_TYPES)[number]['type']): void => {
-    const id = createPage(type, arg?.parentId ?? null, title.trim() || undefined)
+    const id = createToolDocument(type, arg?.parentId ?? null, title.trim() || undefined)
     ;(window as any).__lastCreated = id
     setOverlay(null)
   }
@@ -72,6 +73,9 @@ export function NewPageDialog(): JSX.Element {
             </button>
           ))}
         </div>
+        <details><summary>Creative projects</summary><div className="type-grid">
+          {creativeNames.map(kind=><button key={kind} className="type-card" onClick={()=>{createCreativePage(kind,arg?.parentId ?? null,title);setOverlay(null)}}>{kind}</button>)}
+        </div></details>
         {templates.length > 0 && <>
           <div className="section-label">Templates</div>
           <label>Template lists<select className="input input-sm" value={mode} onChange={e => setMode(e.target.value as TemplateMode)}><option value="linked">Link to existing lists</option><option value="fresh">Start with fresh lists</option></select></label>
@@ -160,7 +164,7 @@ export function CommandPalette(): JSX.Element {
       { id: 'c-undo', icon: 'undo', title: 'Undo', sub: 'Ctrl Z', run: undo },
       { id: 'c-redo', icon: 'redo', title: 'Redo', sub: 'Ctrl Shift Z', run: redo },
       { id: 'c-keys', icon: 'keyboard', title: 'Keyboard shortcuts', sub: 'Ctrl /', run: () => setOverlay('shortcuts') },
-      ...PAGE_TYPES.map((t) => ({ id: 'c-new-' + t.type, icon: t.icon, title: `New ${t.name.toLowerCase()} page`, run: () => { createPage(t.type, null); setOverlay(null) } }))
+      ...PAGE_TYPES.map((t) => ({ id: 'c-new-' + t.type, icon: t.icon, title: `New ${t.name.toLowerCase()} page`, run: () => { createToolDocument(t.type, null); setOverlay(null) } }))
     ]
     out.push(...cmds.filter((c) => !ql || c.title.toLowerCase().includes(ql)).slice(0, ql ? 6 : 4))
     return out

@@ -40,6 +40,8 @@ function Section({ label, actions, close }: { label: string; actions: Action[]; 
 
 export function WidgetActionHost({ widget: w, source, name, globalActions = [], desktopId, resetTimer, children, ...host }: HostProps): JSX.Element {
   const root = useRef<HTMLDivElement>(null)
+  const opener = useRef<Element | null>(null)
+  const search = useRef({ prefix: '', time: 0 })
   const body = useRef<HTMLDivElement>(null)
   const doc = useDoc()
   const [menu, setMenu] = useState<MenuState | null>(null)
@@ -77,6 +79,10 @@ export function WidgetActionHost({ widget: w, source, name, globalActions = [], 
     if (!panel || !panel.contains(el) || el.closest('[data-widget-host]') !== panel) return
     e.preventDefault(); e.stopPropagation()
     const item = el.closest<HTMLElement>('[data-widget-item]')
+    const target = item || el.closest('button, input, textarea, select, a') || panel
+    if (menu && opener.current === target) { close(); return }
+    opener.current = target
+    search.current = { prefix: '', time: 0 }
     const title = itemTitle || item?.dataset.widgetItem || ''
     const url = item?.dataset.itemUrl || ''
     const summary = item?.dataset.itemSummary || ''
@@ -138,13 +144,25 @@ export function WidgetActionHost({ widget: w, source, name, globalActions = [], 
     return () => { live = false; window.removeEventListener('desk:widget-menu-opening', close) }
   }, [menu, task, insert, desktopId, doc])
   const planners = Object.values(pages).filter(p => !p.deletedAt && ['tasks','board','project'].includes(p.type))
-  return <div {...host} ref={root} data-widget-host="" onContextMenu={e => show(e)}>
+  return <div {...host} ref={root} data-widget-host="" onMouseDownCapture={e => {
+    // Let contextmenu toggle the current action menu before the outside-click handler clears it.
+    if (menu && e.button === 2 && root.current?.contains(e.target as Node)) e.stopPropagation()
+  }} onContextMenu={e => show(e)}>
     <WidgetItemMenu.Provider value={show}>{children}</WidgetItemMenu.Provider>
-    {menu && <Popover anchor={menu.anchor} width={260} className="widget-action-popover" theme={root.current?.dataset.theme} style={Object.fromEntries(Object.entries(host.style ?? {}).filter(([k]) => k.startsWith('--')))} onClose={close}>
-      <div ref={body} className="widget-action-content" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} onContextMenu={e => {e.preventDefault();e.stopPropagation()}} onKeyDown={e => {
-        if (task || insert || !['ArrowDown','ArrowUp','Home','End'].includes(e.key)) return
+    {menu && <Popover anchor={menu.anchor} width={task || insert ? 260 : 216} className="widget-action-popover" theme={root.current?.dataset.theme} style={Object.fromEntries(Object.entries(host.style ?? {}).filter(([k]) => k.startsWith('--')))} onClose={close}>
+      <div ref={body} className="widget-action-content" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} onContextMenu={e => {e.preventDefault();e.stopPropagation();close()}} onKeyDown={e => {
+        if (task || insert || e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return
         const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('[role=menuitem]:not(:disabled)'))
         if (!buttons.length) return
+        if (e.key.length === 1 && e.key.trim()) {
+          const now = Date.now()
+          const prefix = (now - search.current.time < 750 ? search.current.prefix : '') + e.key.toLowerCase()
+          search.current = { prefix, time: now }
+          const match = buttons.find(button => button.textContent?.trim().toLowerCase().startsWith(prefix))
+          if (match) { e.preventDefault(); match.focus() }
+          return
+        }
+        if (!['ArrowDown','ArrowUp','Home','End'].includes(e.key)) return
         e.preventDefault()
         const i = buttons.indexOf(doc.activeElement as HTMLButtonElement)
         buttons[e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : (i + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length].focus()
