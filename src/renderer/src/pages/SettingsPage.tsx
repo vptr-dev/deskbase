@@ -1,3 +1,4 @@
+import { useFeeds } from '../lib/connections'
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { openView, flushSave, replaceData, setOverlay, setSettings, toast, useApp, useData, act } from '../store'
 import { WorkspacePassword } from '../components/WorkspacePassword'
@@ -37,6 +38,22 @@ function StartWithWindows({ sub }: { sub?: string }): JSX.Element {
   const [on, setOn] = useState(false)
   useEffect(() => { api.loginItem().then(setOn).catch(() => {}) }, [])
   return <Row label="Start with Windows" sub={sub}><Toggle checked={on} onChange={(v) => { setOn(v); api.loginItem(v).then(setOn).catch(() => {}) }} /></Row>
+}
+
+function StorageBreakdown() {
+  const [stats,setStats]=useState<Awaited<ReturnType<typeof api.storageBreakdown>>|null>(null)
+  const [error,setError]=useState(false)
+  const results=useFeeds(s=>s.results)
+  const format=(size:number)=>new Intl.NumberFormat(undefined,{style:'unit',unit:'megabyte',maximumFractionDigits:2}).format(size/1_048_576)
+  const feeds=Object.keys(results).length?new TextEncoder().encode(JSON.stringify(results)).length:0
+  return <details onToggle={e=>{
+    if (e.currentTarget.open)void api.storageBreakdown().then(value=>{setStats(value);setError(false)}).catch(()=>setError(true))
+  }}>
+    <summary>Storage breakdown</summary>
+    {error ? <p>Could not read local storage sizes.</p> : !stats ? <p className="muted">Reading local sizes…</p> :
+      <dl className="storage-breakdown">{Object.entries({'Local records':stats.records,Attachments:stats.attachments,'Page history':stats.history,Backups:stats.backups,'Feed cache (current session)':feeds}).map(([label,size])=>
+        <div key={label}><dt>{label}</dt><dd>{format(size)}</dd></div>)}</dl>}
+  </details>
 }
 
 export function SettingsPage(): JSX.Element {
@@ -113,6 +130,7 @@ export function SettingsPage(): JSX.Element {
             <TagManager/>
             {isDesktop&&<details><summary>Workspace password</summary><p className="small muted">Protects local pages, images, history and backups. Keep your password safe. Exported files are readable without it.</p><WorkspacePassword mode={protectedFiles?'disable':'enable'} onDone={()=>setProtectedFiles(!protectedFiles)}/></details>}
             <h3>Data & backups</h3>
+            {isDesktop && <StorageBreakdown/>}
             <p className="muted small">Everything is stored on this computer{info?.dataPath ? <> in <code>{info.dataPath}</code></> : null}. Updates never touch your data, and a backup is made every day.</p>
             <Row label="Import Markdown pages"><label className="btn btn-sm">Choose files<input type="file" accept=".md,.markdown" multiple hidden onChange={async e=>{
               const files=Array.from(e.target.files??[]);e.target.value=''

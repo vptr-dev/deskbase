@@ -7,7 +7,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import {protectedData,lockedData,setProtection} from './vault'
-import { createBackup, dataDir, listBackups, loadData, parseImport, readBackup, saveData } from './storage'
+import { createBackup, dataDir, storageBreakdown, listBackups, loadData, parseImport, readBackup, saveData } from './storage'
 import { checkForUpdates, getStatus, initUpdater, installUpdate } from './updater'
 import { linkInfo } from './linkinfo'
 import { registerAi } from './ai'
@@ -307,6 +307,7 @@ function registerIpc(): void {
     return parseImport(fs.readFileSync(r.filePaths[0], 'utf8'))
   })
 
+  ipcMain.handle('data:breakdown', () => storageBreakdown())
   ipcMain.handle('backups:list', () => listBackups())
   ipcMain.handle('backups:create', () => createBackup('manual'))
   ipcMain.handle('backups:read', (_e, name: string) => {

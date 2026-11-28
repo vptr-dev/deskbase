@@ -57,7 +57,7 @@ function layoutCopier(snapshot: AppData, d: AppData, mode: TemplateMode) {
     else d.rootOrder.push(newId)
     // Block ids are scoped to a page. Keeping them preserves references to the copied toggles.
     if (mode === 'fresh') {
-      if (p.wishlist) p.wishlist.items = []
+      if (p.wishlist) { p.wishlist.items = []; p.wishlist.trash = [] }
       if(p.workouts)p.workouts=[]
       if (p.entries) p.entries = p.entries.map(e=>({...e,done:0}))
       if (p.cards) p.cards = p.cards.map(c=>({...c,interval:0,due:''}))

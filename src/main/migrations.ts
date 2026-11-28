@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 26
+export const CURRENT_SCHEMA = 27
 
 type Raw = Record<string, any>
 
@@ -255,6 +255,8 @@ migrations[23] = d => d
 migrations[24] = d => d
 // Task occurrence overrides and repeat exceptions are optional.
 migrations[25] = d => d
+// Wishlist and collection metadata extend existing item records.
+migrations[26] = d => d
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

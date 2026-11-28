@@ -31,6 +31,7 @@ export interface Bridge {
   vaultChange(password:string,action:'enable'|'disable'|'unlock'):Promise<void>
   exportFile(text: string, name: string): Promise<string | null>
   importFile(): Promise<any>
+  storageBreakdown(): Promise<{records:number;attachments:number;history:number;backups:number}>
   listBackups(): Promise<{ name: string; date: string; size: number; mtime: number }[]>
   history: { list(id: string): Promise<PageVersion[]>; save(id: string, v: PageVersion): Promise<void> }
   createBackup(): Promise<string | null>
@@ -270,6 +271,7 @@ const browserBridge: Bridge = {
       }
       input.click()
     }),
+  storageBreakdown: async () => ({records:0,attachments:0,history:0,backups:0}),
   listBackups: async () => [],
   history: {
     // In the browser preview, a few versions per page in local storage.

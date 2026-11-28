@@ -29,6 +29,8 @@ async function test() {
     const backup = store.createBackup('qa')
     await store.saveVersion('bio', { at: Date.now(), title: 'Biology QA', icon: '', blocks: [] })
     assert.equal(store.readBackup(backup).pages.bio.cover, photo)
+    const sizes=await store.storageBreakdown()
+    assert.ok(sizes.records>0 && sizes.attachments>=photo.length && sizes.history>0 && sizes.backups>0)
     store.setProtection(dir,password,'enable')
     assert.ok(!fs.readFileSync(store.dataFile(),'utf8').includes('Biology QA'))
     assert.ok(!fs.readFileSync(path.join(dir,'history','bio.json'),'utf8').includes('Biology QA'))

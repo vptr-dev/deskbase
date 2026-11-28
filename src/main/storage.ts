@@ -35,6 +35,21 @@ export function dataFile(): string {
   return file
 }
 
+export async function storageBreakdown(): Promise<{ records:number; attachments:number; history:number; backups:number }> {
+  const root = dataDir()
+  const bytes = async (file:string):Promise<number> => fs.promises.stat(file).then(s=>s.isFile()?s.size:0,()=>0)
+  const directory = async (name:string):Promise<number> => {
+    const dir=path.join(root,name)
+    const entries=await fs.promises.readdir(dir,{withFileTypes:true}).catch(()=>[])
+    const sizes=await Promise.all(entries.filter(e=>e.isFile()).map(e=>bytes(path.join(dir,e.name))))
+    return sizes.reduce((a,b)=>a+b,0)
+  }
+  const [records,attachments,history,backups]=await Promise.all([
+    bytes(path.join(root,'deskbase.json')),directory('images'),directory('history'),directory('backups')
+  ])
+  return {records,attachments,history,backups}
+}
+
 function stamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
 }

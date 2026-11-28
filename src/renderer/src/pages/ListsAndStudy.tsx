@@ -1,3 +1,4 @@
+import { Collection } from '../components/Collection'
 import { useState } from 'react'
 import type { ListEntry, Page, StudyCard } from '../types'
 import { updatePage } from '../store'
@@ -6,17 +7,6 @@ import { Button, Checkbox, Progress, Segmented } from '../components/ui'
 
 export function ListTracker({ page }: {page: Page}): JSX.Element {
   return page.type==='reading'?<ReadingProgress page={page}/>:<Collection page={page}/>
-}
-function Collection({page}:{page:Page}):JSX.Element{
- const [title,setTitle]=useState(''),[category,setCategory]=useState(''),[filter,setFilter]=useState(''),[edit,setEdit]=useState('')
- const rows=page.entries??[], categories=[...new Set(rows.map(r=>r.category||'Unsorted'))]
- const clear=()=>{setTitle('');setCategory('');setEdit('')}
- return <section className="list-tracker"><label>Show category<select className="input input-sm" value={filter} onChange={e=>setFilter(e.target.value)}><option value="">All categories</option>{categories.map(c=><option key={c}>{c}</option>)}</select></label>
- <form className="tracker-add" onSubmit={e=>{e.preventDefault();if(!title.trim())return
- updatePage(page.id,p=>{const entries=p.entries??=[];const row=entries.find(r=>r.id===edit);const fields={name:title.trim(),category:category.trim()||filter||'Unsorted'};if(row)Object.assign(row,fields);else entries.push({id:uid(),...fields,done:0,target:1,unit:''})});clear()
- }}><label>Title<input className="input" aria-label="List item" required value={title} onChange={e=>setTitle(e.target.value)}/></label>
- <label>Category<input className="input" list={'categories-'+page.id} placeholder="e.g. To play" value={category} onChange={e=>setCategory(e.target.value)}/></label><datalist id={'categories-'+page.id}>{categories.map(c=><option key={c}>{c}</option>)}</datalist><button className="btn btn-sm">{edit?'Save':'Add'}</button>{edit&&<button type="button" onClick={clear}>Cancel</button>}</form>
- {categories.filter(c=>!filter||filter===c).map(c=><section key={c}><h3>{c}</h3>{rows.filter(r=>(r.category||'Unsorted')===c).map(r=><div className="list-entry" data-widget-item={r.name} key={r.id}><span className="grow">{r.name}</span><Button small icon="edit" title="Edit item or category" onClick={()=>{setEdit(r.id);setTitle(r.name);setCategory(c)}}/><Button small icon="trash" title="Remove item" onClick={()=>{updatePage(page.id,p=>{p.entries=p.entries?.filter(x=>x.id!==r.id)});if(edit===r.id)clear()}}/></div>)}</section>)}</section>
 }
 function ReadingProgress({page}:{page:Page}):JSX.Element {
   const [filter,setFilter] = useState<'all'|'open'|'done'>('all')

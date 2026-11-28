@@ -6,7 +6,13 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.25.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.26.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+
+## Wishlists and collections
+
+Each Wishlist keeps its own categories and saved filters. Manage category order, colours and archives on the page. Edit an item for quantities, variants, price history, order details, receipts and gift notes. Reserve money from a non-resetting Value whose unit matches the wishlist currency. Other wishlists using the same Value share its balance.
+
+Collections have field presets for films, games and books, and can also use your own statuses and fields. Import CSV rows using a mapping preview, record separate runs of one entry or group a series in order. Recently removed entries can be restored individually. Export previews let you choose which details leave the workspace.
 
 ## Planning and schedules
 

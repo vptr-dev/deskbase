@@ -2727,3 +2727,19 @@ select option, select optgroup { color: CanvasText; background-color: Canvas; }
 .calendar-event-source { padding-inline:22px 8px; }
 .cal-cell[data-over-capacity=true] .cal-num { color:var(--danger); }
 .cal-num .danger { padding-inline:4px; }
+
+.wish-category-settings { border:1px solid var(--line); border-radius:var(--radius-sm); padding:6px 8px; }
+.wish-category-settings > :not(summary) { margin-top:8px; }
+.purchase-list.compact .wish-category-settings input,.purchase-list.compact .wish-category-settings select { max-width:100%; min-width:0; }
+
+.wish-variant-table { overflow:auto; }
+.wish-variant-table table { border-collapse:collapse; width:100%; }
+.wish-variant-table th,.wish-variant-table td { padding:3px 5px; text-align:left; min-width:75px; }
+.wish-variant-table input { width:100%; }
+.wish-price-history { padding-inline-start:22px; max-height:110px; overflow:auto; }
+.wish-receipt { max-width:min(100%,180px); max-height:120px; object-fit:contain; }
+
+.wishlist-export-items { max-height:150px; overflow:auto; padding-inline-start:25px; }
+
+.storage-breakdown > div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:4px; }
+.storage-breakdown dd { margin:0; font-variant-numeric:tabular-nums; }

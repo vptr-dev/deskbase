@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.26.0 - 2026-11-28
+
+- Named wishlist categories and filters, purchase and variant details, price history, shared savings allocation and printable gift shortlists.
+- Collections support configurable fields, runs, CSV mapping, borrowing notes, series, and bulk moves with undo.
+- Restore individual removed items, preview exports and inspect local storage usage.
+
 ## 0.25.0 - 2026-11-28
 
 - Recurring tasks support date exceptions, household rotation, completion-based intervals and one-off moves.

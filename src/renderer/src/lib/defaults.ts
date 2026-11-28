@@ -1,3 +1,4 @@
+import { wishlistCategories } from './wishlist'
 import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, AssistantSettings, Block, Connection, DbSchema, Desktop, Look, Page, PageType, Settings, WidgetStyle } from '../types'
 import { emojiToIcon } from '../../../shared/emoji-icons'
 import { serviceIds } from '../../../shared/services'
@@ -6,7 +7,7 @@ import { normalizeRepeat, validDay } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 26
+export const SCHEMA = 27
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -343,25 +344,53 @@ export function normalize(raw: any): AppData {
     if(p.type==='workout')p.workouts=(Array.isArray(p.workouts)?p.workouts:[]).filter(w=>w&&typeof w.exercise==='string'&&Number.isFinite(w.reps)&&Number.isFinite(w.sets)&&Number.isFinite(w.weight))
     if (p.type === 'list'||p.type==='reading') p.entries = (Array.isArray(p.entries) ? p.entries : []).filter(e => e && typeof e.name === 'string').map(e => {
       const target = Number.isFinite(e.target) ? Math.max(1,e.target) : 1
-      return { id: e.id || uid(), name: e.name, category:typeof e.category==='string'?e.category:undefined, target, done: Number.isFinite(e.done) ? Math.max(0,Math.min(target,e.done)) : 0, unit: typeof e.unit === 'string' ? e.unit : '' }
+      return { ...e, id: e.id || uid(), name: e.name, category:typeof e.category==='string'?e.category:undefined, target, done: Number.isFinite(e.done) ? Math.max(0,Math.min(target,e.done)) : 0, unit: typeof e.unit === 'string' ? e.unit : '' }
     })
+    if (p.type==='list') p.removedEntries=Array.isArray(p.removedEntries)?p.removedEntries.filter(r=>r && typeof r.id==='string' && typeof r.name==='string'):[]
     if (p.type === 'study') p.cards = (Array.isArray(p.cards) ? p.cards : []).filter(c => c && typeof c.question === 'string' && typeof c.answer === 'string').map(c => ({
       id: c.id || uid(), question: c.question, answer: c.answer, due: typeof c.due === 'string' ? c.due : '', interval: Math.max(0,Number(c.interval) || 0)
     }))
     if (p.type === 'wishlist') {
       const list = p.wishlist
-      p.wishlist = {
-        items: Array.isArray(list?.items) ? list.items.filter(item => item && typeof item.name === 'string').map(item => ({
-          id: typeof item.id === 'string' && item.id ? item.id : uid(), name: item.name,
-          category: typeof item.category === 'string' ? item.category : undefined,
-          priority: item.priority === 'high' || item.priority === 'medium' || item.priority === 'low' ? item.priority : undefined,
-          url: typeof item.url === 'string' && /^https?:\/\//i.test(item.url) ? item.url : undefined,
-          image: typeof item.image === 'string' && /^(data:image\/|https?:\/\/)/i.test(item.image) ? item.image : undefined,
-          cost: typeof item.cost === 'number' && Number.isFinite(item.cost) && item.cost >= 0 ? item.cost : null, purchased: item.purchased === true, purchasedOn: typeof item.purchasedOn === 'string' ? item.purchasedOn : undefined
+      const cost = (v:unknown):v is number=>typeof v==='number' && Number.isFinite(v) && v>=0
+      const cleanItem = (item: NonNullable<Page['wishlist']>['items'][number]) => ({
+        savingsId: typeof item.savingsId==='string' ? item.savingsId : undefined,
+        earmarked: cost(item.earmarked) ? item.earmarked : undefined,
+        recipient: typeof item.recipient==='string' ? item.recipient : undefined,
+        privateNote: typeof item.privateNote==='string' ? item.privateNote : undefined,
+        skipReason: typeof item.skipReason==='string' ? item.skipReason : undefined,
+        skipUntil: validDay(item.skipUntil) ? item.skipUntil : undefined,
+        warrantyUntil: validDay(item.warrantyUntil) ? item.warrantyUntil : undefined,
+        returnBy: validDay(item.returnBy) ? item.returnBy : undefined,
+        receipt: typeof item.receipt==='string' && /^(data:image\/|https?:\/\/)/i.test(item.receipt) ? item.receipt : undefined,
+        quantity: Number.isSafeInteger(item.quantity) && item.quantity!>0 ? item.quantity : undefined,
+        boughtQuantity: Number.isSafeInteger(item.boughtQuantity) && item.boughtQuantity!>=0 ? Math.min(Number.isSafeInteger(item.quantity) && item.quantity!>0 ? item.quantity! : 1,item.boughtQuantity!) : undefined,
+        preorder: item.preorder===true,
+        variants: Array.isArray(item.variants) ? item.variants.filter(v=>v && typeof v.id==='string').map(v=>({
+          id:v.id,shop:typeof v.shop==='string'?v.shop:'',size:typeof v.size==='string'?v.size:'',color:typeof v.color==='string'?v.color:'',price:cost(v.price)?v.price:null
         })) : [],
+        prices: Array.isArray(item.prices) ? item.prices.filter(p=>p && validDay(p.date) && cost(p.amount)).sort((a,b)=>a.date.localeCompare(b.date)) : [],
+        id: typeof item.id === 'string' && item.id ? item.id : uid(), name: item.name,
+        category: typeof item.category === 'string' ? item.category : undefined,
+        priority: item.priority === 'high' || item.priority === 'medium' || item.priority === 'low' ? item.priority : undefined,
+        url: typeof item.url === 'string' && /^https?:\/\//i.test(item.url) ? item.url : undefined,
+        image: typeof item.image === 'string' && /^(data:image\/|https?:\/\/)/i.test(item.image) ? item.image : undefined,
+        cost: typeof item.cost === 'number' && Number.isFinite(item.cost) && item.cost >= 0 ? item.cost : null,
+        purchased: item.purchased === true, purchasedOn: validDay(item.purchasedOn) ? item.purchasedOn : undefined
+      })
+      p.wishlist = {
+        items: Array.isArray(list?.items) ? list.items.filter(item => item && typeof item.name === 'string').map(cleanItem) : [],
         currency: ['GBP','USD','EUR','CAD','AUD','JPY','INR'].includes(list?.currency ?? '') ? list!.currency : 'GBP',
-        budget: typeof list?.budget === 'number' && Number.isFinite(list.budget) && list.budget >= 0 ? list.budget : null
+        budget: typeof list?.budget === 'number' && Number.isFinite(list.budget) && list.budget >= 0 ? list.budget : null,
+        delivery: cost(list?.delivery) ? list!.delivery : undefined,
+        discount: cost(list?.discount) ? list!.discount : undefined,
+        categories: Array.isArray(list?.categories) ? list.categories.filter(c=>c && typeof c.id==='string' && typeof c.name==='string' && c.name.trim()).map(c=>({
+          id:c.id,name:c.name,color:optionalColor(c.color) || undefined,archived:c.archived===true
+        })) : [],
+        filters: Array.isArray(list?.filters) ? list.filters.filter(v=>v && typeof v.id==='string' && typeof v.name==='string' && typeof v.category==='string' && typeof v.priority==='string' && (v.tab==='wishlist'||v.tab==='purchased')) : [],
+        trash: Array.isArray(list?.trash) ? list.trash.filter(t=>t?.item && typeof t.item.name==='string').map(t=>({item:cleanItem(t.item),deletedAt:Number(t.deletedAt)||Date.now()})) : []
       }
+      p.wishlist.categories = wishlistCategories(p.wishlist)
     }
     p.blocks = Array.isArray(p.blocks) ? normBlocks(p.blocks) : []
     if (!p.blocks.length) p.blocks = [{ id: uid(), type: 'p', text: '' }]

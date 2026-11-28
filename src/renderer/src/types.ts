@@ -101,16 +101,41 @@ export interface ButtonAction {
   title?: string
 }
 
-export interface WishItem { id: string; name: string; cost: number | null; purchased: boolean; purchasedOn?: string; category?: string; priority?: 'high' | 'medium' | 'low'; url?: string; image?: string }
-export interface PurchaseList { items: WishItem[]; budget: number | null; currency: string }
+export interface WishItem {
+  id:string; name:string; cost:number|null; purchased:boolean; purchasedOn?:string; category?:string
+  priority?:'high'|'medium'|'low'; url?:string; image?:string
+  recipient?:string; privateNote?:string; quantity?:number; boughtQuantity?:number
+  savingsId?:string; earmarked?:number
+  preorder?:boolean; skipUntil?:string; skipReason?:string
+  warrantyUntil?:string; returnBy?:string; receipt?:string
+  variants?: {id:string; shop:string; size:string; color:string; price:number|null}[]
+  prices?: {date:string; amount:number}[]
+}
+export interface WishCategory { id:string; name:string; color?:string; archived?:boolean }
+export interface WishlistFilter { id:string; name:string; category:string; priority:string; tab:'wishlist'|'purchased' }
+export interface PurchaseList {
+  items: WishItem[]; budget: number | null; currency: string
+  categories?: WishCategory[]
+  delivery?: number
+  discount?: number
+  filters?: WishlistFilter[]
+  trash?: { item: WishItem; deletedAt:number }[]
+}
 
-export interface ListEntry { category?: string; id: string; name: string; done: number; target: number; unit: string }
+export interface ListEntry {
+  category?:string; id:string; name:string; done:number; target:number; unit:string
+  status?:string; mood?:string; minutes?:number; series?:string; installment?:number
+  lender?:string; returnBy?:string; handover?:string; spoiler?:string
+  runs?:{id:string;date:string;notes:string}[]
+  fields?:Record<string,string>
+}
 export interface WorkoutSet { id:string; date:string; exercise:string; sets:number; reps:number; weight:number; unit:string }
 export interface StudyCard { id: string; question: string; answer: string; due: string; interval: number }
 export interface Page {
   accent?: string
   workouts?: WorkoutSet[]
   entries?: ListEntry[]
+  removedEntries?: ListEntry[]
   cards?: StudyCard[]
   wishlist?: PurchaseList
   id: string

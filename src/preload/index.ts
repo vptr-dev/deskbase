@@ -9,6 +9,7 @@ const api = {
   vaultChange:(p:string,a:string)=>ipcRenderer.invoke('vault:change',p,a),
   exportFile: (text: string, name: string) => ipcRenderer.invoke('data:export', text, name),
   importFile: () => ipcRenderer.invoke('data:import'),
+  storageBreakdown: () => ipcRenderer.invoke('data:breakdown'),
   listBackups: () => ipcRenderer.invoke('backups:list'),
   history: {
     list: (id: string) => ipcRenderer.invoke('history:list', id),
