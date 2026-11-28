@@ -393,6 +393,9 @@ export interface ValueRule {
 
 export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard' | 'epic'
 export interface CustomRepeat {
+  excludedDates?: string[]
+  afterCompletion?: boolean
+  rotation?: string[]
   remaining?: number
   unit: 'day' | 'week' | 'month' | 'year'
   interval: number
@@ -406,9 +409,14 @@ export type Repeat = RepeatPreset | CustomRepeat
 export type TaskStatus = 'todo' | 'doing' | 'done'
 export type StatKey = 'str' | 'int' | 'wis' | 'cha' | 'vit' | 'cre'
 
-export interface Subtask { id: string; title: string; done: boolean }
+export interface Subtask { id: string; title: string; done: boolean; minutes?: number; startedAt?: number; elapsedMs?: number }
 
 export interface Task {
+  scheduledFor?: string
+  assignee?: string
+  energy?: 1 | 2 | 3
+  deferredUntilProject?: string
+  calendarFollowup?: string
   blockedBy?: string
   textColor?: string
   iconColor?: string

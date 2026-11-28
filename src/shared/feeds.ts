@@ -12,6 +12,8 @@ export interface MailAccount { preset: string; host: string; port: number; user:
 export interface ConnSpec { id: string; kind: ConnKind; url: string; repos: string[]; account?: MailAccount }
 
 export interface FeedEvent {
+  zone?: string
+  notes?: string
   id: string
   title: string
   /** YYYY-MM-DD in local time */
@@ -62,6 +64,7 @@ export interface FeedResult {
   /** the feed's own name, or the GitHub account */
   title?: string
   events?: FeedEvent[]
+  cancelledEvents?: FeedEvent[]
   items?: FeedItem[]
   /** mail: unread messages in the inbox */
   unread?: number
@@ -243,7 +246,7 @@ function* repeats(start: Wall, rule: string, endMs: number): Generator<Wall> {
 }
 
 /** Events of an ICS calendar between two moments, repeating events expanded. */
-export function parseIcs(text: string, fromMs: number, toMs: number): { title?: string; events: FeedEvent[] } {
+export function parseIcs(text: string, fromMs: number, toMs: number): { title?: string; events: FeedEvent[]; cancelledEvents?: FeedEvent[] } {
   const lines = text.replace(/\r\n?/g, '\n').replace(/\n[ \t]/g, '').split('\n')
   let title: string | undefined
   const raw: Prop[][] = []
@@ -269,10 +272,12 @@ export function parseIcs(text: string, fromMs: number, toMs: number): { title?: 
     if (rid && uid) { const w = parseWall(rid.value, rid.params); if (w) { if (!moved.has(uid)) moved.set(uid, new Set()); moved.get(uid)!.add(wallToMs(w)) } }
   }
   const events: FeedEvent[] = []
+  const cancelledEvents: FeedEvent[] = []
   for (const props of raw) {
     const get = (n: string): Prop | undefined => props.find((p) => p.name === n)
-    if ((get('STATUS')?.value ?? '').toUpperCase() === 'CANCELLED') continue
-    const ds = get('DTSTART')
+    const cancelled = (get('STATUS')?.value ?? '').toUpperCase() === 'CANCELLED'
+    const entries = cancelled ? cancelledEvents : events
+    const ds = get('DTSTART') || (cancelled ? get('RECURRENCE-ID') : undefined)
     if (!ds) continue
     const start = parseWall(ds.value, ds.params)
     if (!start) continue
@@ -283,6 +288,8 @@ export function parseIcs(text: string, fromMs: number, toMs: number): { title?: 
     if (length < 0) length = 0
     const uid = get('UID')?.value ?? ''
     const summary = unescapeText(get('SUMMARY')?.value ?? '').trim() || 'Busy'
+    const notes = cancelled ? unescapeText(get('DESCRIPTION')?.value ?? '').trim().slice(0,4000) || undefined : undefined
+    const zone = start.date ? undefined : start.utc ? 'UTC' : start.tz || undefined
     const location = unescapeText(get('LOCATION')?.value ?? '').trim() || undefined
     const url = get('URL')?.value?.trim() || undefined
     const skip = new Set<number>()
@@ -304,17 +311,17 @@ export function parseIcs(text: string, fromMs: number, toMs: number): { title?: 
         const s = new Date(w.y, w.m - 1, w.d)
         const days = Math.max(1, Math.round(length / 86400000))
         const last = new Date(w.y, w.m - 1, w.d + days - 1)
-        events.push({ id: `${uid}@${localDay(s)}`, title: summary, start: localDay(s), ...(days > 1 ? { end: localDay(last) } : {}), allDay: true, location, url, at: s.getTime() })
+        entries.push({ notes, zone, id: `${uid}@${localDay(s)}`, title: summary, start: localDay(s), ...(days > 1 ? { end: localDay(last) } : {}), allDay: true, location, url, at: s.getTime() })
       } else {
         const s = new Date(ms)
         const e = new Date(endMs)
         const endDay = localDay(new Date(endMs - 1))
-        events.push({ id: `${uid}@${ms}`, title: summary, start: localDay(s), time: localTime(s), ...(endDay !== localDay(s) ? { end: endDay } : {}), ...(length ? { endTime: localTime(e) } : {}), allDay: false, location, url, at: ms })
+        entries.push({ notes, zone, id: `${uid}@${ms}`, title: summary, start: localDay(s), time: localTime(s), ...(endDay !== localDay(s) ? { end: endDay } : {}), ...(length ? { endTime: localTime(e) } : {}), allDay: false, location, url, at: ms })
       }
     }
   }
   events.sort((a, b) => a.at - b.at || Number(b.allDay) - Number(a.allDay))
-  return { title, events }
+  return { title, events, ...(cancelledEvents.length ? {cancelledEvents} : {}) }
 }
 
 // ---------- RSS and Atom ----------

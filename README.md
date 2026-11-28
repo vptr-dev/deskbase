@@ -6,7 +6,13 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.24.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.25.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+
+## Planning and schedules
+
+The repeat editor previews up to ten dates and supports excluded dates, rotations and intervals measured from completion. Move a task once to adjust its due date while keeping the series cadence. Task views can filter by energy, and subtasks can run independent timers.
+
+Combine planners and connected calendars in one view. Use **View options** to set planning hours, travel durations and a rotating timetable. **Find shared free time** lists openings and copies selected meeting options. Cancelled feed events can become follow-up reminders with their notes intact.
 
 ## Workspaces, launchers and themes
 

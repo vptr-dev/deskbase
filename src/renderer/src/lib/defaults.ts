@@ -2,11 +2,11 @@ import type { AppData, AssistantChat, AssistantMessage, AssistantPreset, Assista
 import { emojiToIcon } from '../../../shared/emoji-icons'
 import { serviceIds } from '../../../shared/services'
 import { boardKey } from '../../../shared/trello'
-import { normalizeRepeat } from './recurrence'
+import { normalizeRepeat, validDay } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 25
+export const SCHEMA = 26
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -402,8 +402,19 @@ export function normalize(raw: any): AppData {
     if (t.textColor !== undefined && !optionalColor(t.textColor)) delete t.textColor
     if (t.iconColor !== undefined && !optionalColor(t.iconColor)) delete t.iconColor
     t.tags = t.tags ?? []
-    t.subtasks = t.subtasks ?? []
+    t.subtasks = Array.isArray(t.subtasks) ? t.subtasks.filter(step=>step && typeof step.id==='string').map(step=>({
+      ...step, minutes:Number.isFinite(step.minutes) && step.minutes!>0 ? Math.min(720,step.minutes!) : undefined,
+      startedAt:Number.isFinite(step.startedAt) && step.startedAt!>0 && step.startedAt!<=Date.now() ? step.startedAt : undefined,
+      elapsedMs:Number.isFinite(step.elapsedMs) && step.elapsedMs!>=0 ? step.elapsedMs : undefined
+    })) : []
+    if (![1,2,3].includes(t.energy ?? 0)) delete t.energy
+    if (typeof t.assignee!=='string') delete t.assignee
+    if (t.deferredUntilProject && (d.pages[t.deferredUntilProject]?.type!=='project' || d.pages[t.deferredUntilProject].deletedAt)) {
+      delete t.deferredUntilProject
+      t.archived=false
+    }
     t.repeat = normalizeRepeat(t.repeat)
+    if (!validDay(t.scheduledFor) || t.repeat === 'none') delete t.scheduledFor
     const lead = t.reminderBeforeMinutes
     if (lead != null && (!Number.isSafeInteger(lead) || lead < 0 || lead > 525600)) delete t.reminderBeforeMinutes
     t.status = t.status ?? (t.done ? 'done' : 'todo')
@@ -517,7 +528,7 @@ function normalizeSettings(raw: any): Settings {
   const s = { ...DEFAULT_SETTINGS, ...obj(raw) } as Settings & { widget?: unknown }
   delete s.widget
   s.panelViews=Array.isArray(s.panelViews)?s.panelViews.filter(v=>v&&typeof v.name==='string'&&typeof v.type==='string'&&v.config&&typeof v.config==='object'):[]
-  s.repeatPatterns=Array.isArray(s.repeatPatterns)?s.repeatPatterns.filter(v=>v&&typeof v.name==='string'&&typeof normalizeRepeat(v.rule)==='object'):[]
+  s.repeatPatterns=Array.isArray(s.repeatPatterns)?s.repeatPatterns.flatMap(v=>{const rule=normalizeRepeat(v?.rule);return v&&typeof v.name==='string'&&typeof rule==='object'?[{name:v.name,rule}]:[]}):[]
   s.blockSnippets = Array.isArray(s.blockSnippets) ? s.blockSnippets.filter(x => x && typeof x.id === 'string' && typeof x.name === 'string' && typeof x.pageId === 'string' && Array.isArray(x.blocks)).map(x => ({ ...x, blocks: normBlocks(x.blocks) })) : []
   s.savedThemes=Array.isArray(s.savedThemes)?s.savedThemes.filter(t=>t&&typeof t.name==='string'&&typeof t.json==='string'):[]
   s.look = normalizeLook(raw?.look)

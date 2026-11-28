@@ -18,7 +18,9 @@ export function normalizeRepeat(value: unknown): Repeat {
   if (rule.until && !validDay(rule.until)) return 'none'
   const days = Array.isArray(rule.days) ? [...new Set(rule.days.filter(n => Number.isInteger(n) && n >= 0 && n < 7))].sort() : []
   if (!days.length) days.push(parseDay(rule.start).getDay())
-  return { unit: rule.unit, interval: rule.interval, start: rule.start, weekStart: rule.weekStart === 0 ? 0 : 1, days, ...(typeof rule.remaining==="number" && Number.isSafeInteger(rule.remaining) && rule.remaining>0 ? {remaining:rule.remaining}:{}), ...(rule.until ? { until: rule.until } : {}) }
+  const excludedDates = Array.isArray(rule.excludedDates) ? [...new Set(rule.excludedDates.filter(validDay))].sort().slice(0,366) : []
+  const rotation = Array.isArray(rule.rotation) ? [...new Set(rule.rotation.filter(p=>typeof p === 'string').map(p=>p.trim().slice(0,80)).filter(Boolean))].slice(0,30) : []
+  return { excludedDates, ...(rotation.length ? {rotation} : {}), ...(rule.afterCompletion === true ? {afterCompletion:true} : {}), unit: rule.unit, interval: rule.interval, start: rule.start, weekStart: rule.weekStart === 0 ? 0 : 1, days, ...(typeof rule.remaining==="number" && Number.isSafeInteger(rule.remaining) && rule.remaining>0 ? {remaining:rule.remaining}:{}), ...(rule.until ? { until: rule.until } : {}) }
 }
 
 export function repeatLabel(rule: Repeat): string {
@@ -31,6 +33,15 @@ export function repeatLabel(rule: Repeat): string {
 
 /** First scheduled date on or after the requested local calendar day. */
 export function occurrence(rule: CustomRepeat, from: string): string | null {
+  const excluded = rule.excludedDates
+  let date = baseOccurrence(rule, from)
+  if (!excluded?.length) return date
+  const blocked = new Set(excluded)
+  while (date && blocked.has(date)) date = baseOccurrence(rule, addDays(date,1))
+  return date
+}
+
+function baseOccurrence(rule: CustomRepeat, from: string): string | null {
   const lower = from > rule.start ? from : rule.start
   let date: string
   if (rule.unit === 'day') {
@@ -59,7 +70,10 @@ export function nextTaskDate(rule: Repeat, due: string, completed: string): stri
   if (rule === 'none'||(typeof rule==='object'&&rule.remaining===1)) return null
   const start = validDay(due) ? due : completed
   const from = addDays(start > completed ? start : completed, 1)
-  if (typeof rule !== 'string') return occurrence(rule, from)
+  if (typeof rule !== 'string') {
+    if (rule.afterCompletion) return occurrence({...rule,start:completed},addDays(completed,1))
+    return occurrence(rule, from)
+  }
   const unit = rule === 'yearly' ? 'year' : rule === 'monthly' ? 'month' : rule === 'daily' ? 'day' : 'week'
   return occurrence({ unit, interval: 1, start, days: rule === 'weekdays' ? [1, 2, 3, 4, 5] : [parseDay(start).getDay()], weekStart: 1 }, from)
 }

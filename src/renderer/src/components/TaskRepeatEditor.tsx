@@ -10,7 +10,7 @@ export function TaskRepeatEditor({ task }: { task: Task }): JSX.Element {
   const weekStart = useData(d => d.settings.weekStart)
   const [draft, setDraft] = useState<CustomRepeat | null>(null)
   const saved = typeof task.repeat === 'object' ? task.repeat : null
-  const start = task.due || today()
+  const start = task.scheduledFor || task.due || today()
   const edit = (): void => setDraft(saved ?? {
     interval: 1, unit: 'week', start, days: [parseDay(start).getDay()], weekStart
   })
@@ -22,7 +22,7 @@ export function TaskRepeatEditor({ task }: { task: Task }): JSX.Element {
       if (value !== 'none' && !t.due) t.due = today()
     })
   }
-  const from = saved && draft?.start === saved.start && task.due ? task.due : draft?.start
+  const from = saved && draft?.start === saved.start && task.due ? (task.scheduledFor || task.due) : draft?.start
   const first = draft ? firstScheduledDate(draft, from) : null
   return <div className="repeat-editor">
     <select id={`repeat-${task.id}`} className="input input-sm" value={draft || saved ? 'custom' : String(task.repeat)} onChange={e => setPreset(e.target.value)}>
@@ -38,10 +38,11 @@ export function TaskRepeatEditor({ task }: { task: Task }): JSX.Element {
           t.remindAt = shiftTaskReminder(t.remindAt, t.due || first, first)
           if (t.due !== first) t.reminded = false
           t.repeat = draft
+          if (draft.rotation?.length && !draft.rotation.includes(t.assignee || '')) t.assignee = draft.rotation[0]
           t.due = first
         })
         setDraft(null)
-      }}>Save schedule</Button><Button small kind="ghost" onClick={() => setDraft(null)}>Cancel</Button></div>
+      }}>{saved ? 'Save for this and future tasks' : 'Save schedule'}</Button><Button small kind="ghost" onClick={() => setDraft(null)}>Cancel</Button></div>
     </div>}
   </div>
 }

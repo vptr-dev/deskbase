@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.25.0 - 2026-11-28
+
+- Recurring tasks support date exceptions, household rotation, completion-based intervals and one-off moves.
+- Tasks support energy filters, timed subtasks and project deferral.
+- Combined calendars label overlaps, estimate capacity, show travel buffers and find shared free time. Cancelled events can become reminders.
+
 ## 0.24.0 - 2026-11-28
 
 - Workspace stepper with direct selection, landing pages, navigation history, quiet hours and archived workspaces.

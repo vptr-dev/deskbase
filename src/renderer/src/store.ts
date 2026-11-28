@@ -1,5 +1,5 @@
 import { creativeProject } from './lib/creativeProjects'
-import { nextTaskDate, normalizeRepeat, shiftTaskReminder } from './lib/recurrence'
+import { nextTaskDate, normalizeRepeat, shiftTaskReminder, validDay } from './lib/recurrence'
 import { create } from 'zustand'
 import { applyPatches, enablePatches, type Patch, produceWithPatches } from 'immer'
 import type { AppData, Page, PageType, Task } from './types'
@@ -189,6 +189,12 @@ export function openPage(id: string): void {
   reveal()
   useApp.setState({ current: id, overlay: null })
   act((dr) => {
+    const activeProjects = new Set([id,...dr.pages[id].children].filter(key=>dr.pages[key]?.type==='project' && !dr.pages[key]?.deletedAt))
+    if (activeProjects.size) for (const task of Object.values(dr.tasks)) {
+      if (!task.deferredUntilProject || !activeProjects.has(task.deferredUntilProject)) continue
+      delete task.deferredUntilProject
+      task.archived = false
+    }
     dr.settings.lastPage = id
     dr.recent = [id, ...dr.recent.filter((r) => r !== id)].slice(0, 12)
     // Expand ancestors so the page is visible in the sidebar.
@@ -396,13 +402,29 @@ export function addTask(pageId: string, partial: Partial<Task> & { title: string
       order: orders.length ? Math.max(...orders) + 1 : 0,
       ...partial
     }
+    const added = d.tasks[id]
+    if (!added.assignee && typeof added.repeat === 'object') added.assignee = added.repeat.rotation?.[0]
     for (const t of partial.tags ?? []) if (!d.tags[t]) d.tags[t] = '#8e8e93'
   })
   return id
 }
 
 export function updateTask(id: string, fn: (t: Task) => void, key?: string): void {
-  act((d) => { if (d.tasks[id]) fn(d.tasks[id]) }, { key })
+  act(d => {
+    const task = d.tasks[id]
+    if (!task) return
+    const oldDue = task.due
+    const oldRemindAt = task.remindAt
+    const repeat = task.repeat
+    fn(task)
+    if (repeat !== task.repeat) delete task.scheduledFor
+    if (task.due !== oldDue) {
+      if (repeat === task.repeat && task.repeat !== 'none' && validDay(oldDue) && !task.scheduledFor) task.scheduledFor = oldDue
+      if (task.remindAt === oldRemindAt && validDay(oldDue) && validDay(task.due)) task.remindAt = shiftTaskReminder(task.remindAt,oldDue,task.due)
+      task.reminded = false
+      delete task.remindedFor
+    }
+  }, {key})
 }
 
 export function wouldCycle(tasks:AppData['tasks'], id:string, parent:string):boolean {
@@ -417,23 +439,32 @@ export function setTaskDone(id: string, done: boolean): void {
     const t = d.tasks[id]
     if (!t || t.done === done) return
     t.done = done
+    if (done) for (const step of t.subtasks) {
+      if (step.startedAt) {
+        step.elapsedMs = (step.elapsedMs || 0) + Math.max(0,Date.now()-step.startedAt)
+        delete step.startedAt
+      }
+    }
     t.status = done ? 'done' : 'todo'
     t.doneAt = done ? Date.now() : null
     if (done) {
       emit(d, { on: 'task', src: 'task:' + t.id, label: t.title || 'Task', scope: t.pageId, tags: t.tags })
       if (t.repeat !== 'none') {
         const due = t.due ?? today()
-        const next = nextTaskDate(t.repeat, due, today())
+        const next = nextTaskDate(t.repeat, t.scheduledFor || due, today())
         if (next) {
           const nid = uid()
+          const people = typeof t.repeat === 'object' ? t.repeat.rotation : undefined
+          const assignee = people?.length ? people[(people.indexOf(t.assignee || '')+1)%people.length] : t.assignee
           d.tasks[nid] = {
-            ...t, id: nid, done: false, status: 'todo', doneAt: null, due: next, createdAt: Date.now(),
-            remindAt: shiftTaskReminder(t.remindAt, due, next), reminded: false,
+            ...t, assignee, id: nid, done: false, status: 'todo', doneAt: null, due: next, createdAt: Date.now(),
+            remindAt: shiftTaskReminder(t.remindAt, due, next), reminded: false, remindedFor: undefined, scheduledFor: undefined,
             tags: [...t.tags], repeat: normalizeRepeat(typeof t.repeat==='object'&&t.repeat.remaining?{...t.repeat,remaining:t.repeat.remaining-1}:t.repeat),
-            subtasks: t.subtasks.map(s => ({ ...s, done: false }))
+            subtasks: t.subtasks.map(s => ({ ...s, done: false, startedAt: undefined, elapsedMs: undefined }))
           }
         }
         t.repeat = 'none'
+        delete t.scheduledFor
       }
     } else {
       unemit(d, 'task:' + t.id)
@@ -449,6 +480,7 @@ export function moveOverdueToToday(pageId?: string): number {
   act((d) => {
     for (const id of ids) {
       const t = d.tasks[id]
+      if (t.repeat !== 'none' && validDay(t.due) && !t.scheduledFor) t.scheduledFor = t.due
       if (t.remindAt) {
         t.remindAt = shiftTaskReminder(t.remindAt, t.due ?? dayKey(new Date(t.remindAt)), t0)
         t.reminded = false
@@ -461,13 +493,8 @@ export function moveOverdueToToday(pageId?: string): number {
 }
 
 export function snoozeTask(id: string, due: string): void {
-  act((d) => {
-    const t = d.tasks[id]
-    if (!t) return
-    if (t.remindAt) {
-      t.remindAt = shiftTaskReminder(t.remindAt, t.due ?? dayKey(new Date(t.remindAt)), due)
-      t.reminded = false
-    }
+  updateTask(id,t=>{
+    if (t.remindAt && !t.due) t.remindAt = shiftTaskReminder(t.remindAt,dayKey(new Date(t.remindAt)),due)
     t.due = due
   })
   toast(`Snoozed to ${friendlyDay(due).toLowerCase() === 'tomorrow' ? 'tomorrow' : friendlyDay(due)}`, { undo: true })

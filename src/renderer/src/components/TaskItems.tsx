@@ -4,10 +4,10 @@ import { TaskReminder, TaskSnooze } from './TaskTiming'
 import { TaskRepeatEditor } from './TaskRepeatEditor'
 import { parseQuickAdd } from '../lib/quickAdd'
 import { WidgetItemMenu } from './widgetActionContext'
-import { useContext, useId, useMemo, useState } from 'react'
+import { useContext, useEffect, useId, useMemo, useState } from 'react'
 import { wouldCycle, act, addTask, deleteTask, setTaskDone, snoozeTask, updateTask, useApp, useData } from '../store'
 import { ScheduleFields, firstScheduledDate } from './ScheduleFields'
-import type { CustomRepeat, Task } from '../types'
+import type { CustomRepeat, Subtask, Task } from '../types'
 import { formatTime, friendlyDay, snoozeOptions, today, uid } from '../lib/util'
 import { AutoText, Button, Checkbox, OptionalColor, ConfirmButton, Menu, type MenuItem, Popover, Segmented, useDoc } from './ui'
 import { Icon } from './Icon'
@@ -131,6 +131,7 @@ export function TaskRow({ task, showPage, onOpen, draggable, onDragStart, onDrop
           {task.due && <span data-field="date" className={`meta ${overdue ? 'danger' : task.due === today() ? 'accent' : ''}`}><Icon name="calendar" size={12} />{friendlyDay(task.due)}{task.time ? ' ' + formatTime(task.time, use24h) : ''}</span>}
           {task.repeat !== 'none' && <span data-field="repeat" className="meta" title={repeatLabel(task.repeat)}><Icon name="repeat" size={12} />{repeatLabel(task.repeat)}</span>}
           {task.subtasks.length > 0 && <span data-field="details" className="meta"><Icon name="check" size={12} />{subDone}/{task.subtasks.length}</span>}
+          {task.assignee && <span className="meta">{task.assignee}</span>}
           {task.blockedBy && <BlockerLabel id={task.blockedBy}/>}
           {task.notes && <span data-field="details" className="meta"><Icon name="note" size={12} /></span>}
           {task.estimate ? <span data-field="details" className="meta"><Icon name="clock" size={12} />{task.estimate}m</span> : null}
@@ -184,6 +185,17 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
           <label htmlFor={'blocked-'+id}>Blocked by</label>
           <select id={'blocked-'+id} className="input input-sm" value={task.blockedBy??''} onChange={e=>set(t=>{t.blockedBy=e.target.value||undefined})}>
             <option value="">None</option>{Object.values(tasks).filter(t=>!pages[t.pageId]?.deletedAt&&!t.archived&&(!t.done||t.id===task.blockedBy)&&!wouldCycle(tasks,id,t.id)).map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select>
+          <label htmlFor={'energy-'+id}>Energy needed</label>
+          <select id={'energy-'+id} className="input input-sm" value={task.energy || 2} onChange={e=>set(t=>{t.energy=Number(e.target.value) as Task['energy']})}>
+            <option value="1">Low</option><option value="2">Moderate</option><option value="3">High</option>
+          </select>
+          <label htmlFor={'assignee-'+id}>Assigned to</label><input id={'assignee-'+id} className="input input-sm" maxLength={80} value={task.assignee || ''} onChange={e=>set(t=>{t.assignee=e.target.value})}/>
+          {!task.done && Object.values(pages).some(p=>p.type==='project'&&!p.deletedAt) && <>
+            <label htmlFor={'defer-'+id}>Defer until project opens</label>
+            <select id={'defer-'+id} className="input input-sm" value={task.deferredUntilProject || ''} onChange={e=>set(t=>{
+              t.deferredUntilProject=e.target.value||undefined;t.archived=!!e.target.value
+            })}><option value="">None</option>{Object.values(pages).filter(p=>p.type==='project'&&!p.deletedAt).map(p=><option key={p.id} value={p.id}>{p.title||'Untitled project'}</option>)}</select>
+          </>}
           <label>Estimate</label>
           <div className="row gap-sm">
             <input id={`est-${id}`} type="number" min={0} step={5} className="input input-sm w-80" value={task.estimate ?? ''} onChange={(e) => set((t) => { t.estimate = e.target.value ? Number(e.target.value) : null })} />
@@ -221,6 +233,7 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
             <div key={s.id} className="subtask">
               <Checkbox size={16} checked={s.done} onChange={(v) => set((t) => { t.subtasks[i].done = v })} />
               <input className="subtask-input" value={s.title} onChange={(e) => set((t) => { t.subtasks[i].title = e.target.value }, 'sub:' + s.id)} />
+              <SubtaskClock step={s} set={fn=>set(t=>{const step=t.subtasks.find(step=>step.id===s.id);if(step)fn(step)})}/>
               <button className="icon-btn" onClick={() => set((t) => { t.subtasks.splice(i, 1) })} title="Remove"><Icon name="x" size={12} /></button>
             </div>
           ))}
@@ -260,4 +273,30 @@ export function useTaskDrawer(): [string | null, (id: string | null) => void, JS
 
 function BlockerLabel({id}:{id:string}):JSX.Element|null {
  const t=useData(d=>d.tasks[id]);return t&&!t.done&&!t.archived?<span className="meta">Blocked by {t.title}</span>:null
+}
+
+function SubtaskClock({step,set}:{step:Subtask;set:(fn:(step:Subtask)=>void)=>void}) {
+  const [now,setNow]=useState(Date.now)
+  useEffect(()=>{
+    if(!step.startedAt)return
+    const timer=setInterval(()=>setNow(Date.now()),1000)
+    return ()=>clearInterval(timer)
+  },[step.startedAt])
+  const elapsed=(step.elapsedMs || 0)+(step.startedAt ? Math.max(0,now-step.startedAt) : 0)
+  const seconds=Math.ceil(Math.max(0,(step.minutes || 0)*60000-elapsed)/1000)
+  const display=Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0')
+  return <span className="step-timer row gap-xs">
+    <input className="input input-sm" type="number" min="0" max="720" aria-label={'Minutes for '+(step.title||'step')} placeholder="min" value={step.minutes ?? ''} onChange={e=>{
+      const value=Math.min(720,Math.max(0,Number(e.target.value) || 0))
+      set(s=>{s.minutes=value || undefined;s.startedAt=undefined;s.elapsedMs=undefined})
+    }}/>
+    {!!step.minutes && <>
+      <span role="timer" aria-label={step.title||'Step'}>{display}</span>
+      <Button small disabled={seconds===0 || step.done} onClick={()=>{const time=Date.now();setNow(time);set(s=>{
+        if(s.startedAt){s.elapsedMs=(s.elapsedMs || 0)+time-s.startedAt;delete s.startedAt}
+        else s.startedAt=time
+      })}}>{step.startedAt?'Pause':elapsed?'Resume':'Start'}</Button>
+      {!!elapsed && <Button small onClick={()=>set(s=>{delete s.elapsedMs;delete s.startedAt})}>Reset</Button>}
+    </>}
+  </span>
 }

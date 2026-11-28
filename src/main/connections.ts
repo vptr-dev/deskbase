@@ -180,7 +180,7 @@ async function fetchSpec(spec: ConnSpec): Promise<FeedResult> {
       if (!/BEGIN:VCALENDAR/i.test(body)) throw new Error('That address is not a calendar (ICS) feed.')
       const now = Date.now()
       const r = parseIcs(body, now - 62 * 86400000, now + 400 * 86400000)
-      return { ok: true, at: now, title: r.title, events: r.events }
+      return { ok: true, at: now, title: r.title, events: r.events, cancelledEvents: r.cancelledEvents }
     }
     if (spec.kind === 'rss') {
       const body = await text(feedUrl(spec.url), { Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*' })

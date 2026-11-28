@@ -9,7 +9,7 @@
 
 import { emojiToIcon, isEmoji } from '../shared/emoji-icons'
 
-export const CURRENT_SCHEMA = 25
+export const CURRENT_SCHEMA = 26
 
 type Raw = Record<string, any>
 
@@ -253,6 +253,8 @@ migrations[22] = d => d
 migrations[23] = d => d
 // Optional workspace landing pages, quiet hours and arrangements.
 migrations[24] = d => d
+// Task occurrence overrides and repeat exceptions are optional.
+migrations[25] = d => d
 
 export function migrate(input: Raw): { data: Raw; from: number; changed: boolean } {
   let data: Raw = input && typeof input === 'object' ? input : {}

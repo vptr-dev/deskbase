@@ -74,7 +74,7 @@ export function useFeed(id: string | undefined): { conn?: Connection; result?: F
 export type CalEvent = FeedEvent & { color: string; conn: string; connName: string }
 
 /** Events from every calendar connection (or the chosen ones), sorted by time. */
-export function useCalendarEvents(only?: string[]): CalEvent[] {
+export function useCalendarEvents(only?: string[], cancelled=false): CalEvent[] {
   const conns = useData((d) => d.connections)
   const results = useFeeds((s) => s.results)
   const cals = conns.filter((c) => c.kind === 'calendar' && !c.off && (!only?.length || only.includes(c.id)))
@@ -84,9 +84,9 @@ export function useCalendarEvents(only?: string[]): CalEvent[] {
   }, [key])
   return useMemo(() => {
     const out: CalEvent[] = []
-    for (const c of cals) for (const e of results[c.id]?.events ?? []) out.push({ ...e, color: c.color, conn: c.id, connName: c.name || results[c.id]?.title || 'Calendar' })
+    for (const c of cals) for (const e of (cancelled ? results[c.id]?.cancelledEvents : results[c.id]?.events) ?? []) out.push({ ...e, color: c.color, conn: c.id, connName: c.name || results[c.id]?.title || 'Calendar' })
     return out.sort((a, b) => a.at - b.at || Number(b.allDay) - Number(a.allDay))
-  }, [key, results, conns])
+  }, [key, results, conns, cancelled])
 }
 
 /** Events by day (YYYY-MM-DD); events over several days are on each of them. */

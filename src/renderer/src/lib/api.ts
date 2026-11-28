@@ -153,7 +153,7 @@ const webConn: Bridge['conn'] = {
       const r = await fetch(feedUrl(spec.url))
       if (!r.ok) throw new Error(`The server answered ${r.status}.`)
       const body = await r.text()
-      if (spec.kind === 'calendar') { const now = Date.now(); const x = parseIcs(body, now - 62 * 86400000, now + 400 * 86400000); return { ok: true, at: now, title: x.title, events: x.events } }
+      if (spec.kind === 'calendar') { const now = Date.now(); const x = parseIcs(body, now - 62 * 86400000, now + 400 * 86400000); return { ok: true, at: now, title: x.title, events: x.events, cancelledEvents: x.cancelledEvents } }
       const x = parseFeed(body)
       return { ok: true, at: Date.now(), title: x.title, items: x.items.slice(0, 80) }
     } catch (e: any) { return { ok: false, at: Date.now(), error: e?.message ?? 'Could not load it' } }

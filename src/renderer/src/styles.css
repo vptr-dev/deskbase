@@ -2717,3 +2717,13 @@ select option, select optgroup { color: CanvasText; background-color: Canvas; }
 .theme-preview aside,.theme-preview section { padding:var(--preview-padding,14px); }
 .theme-preview[data-surface="frosted"],.theme-preview[data-surface="blur"] { background:var(--backdrop); isolation:isolate; }
 .theme-preview[data-surface="frosted"] .preview-panel,.theme-preview[data-surface="blur"] .preview-panel { background:var(--card); backdrop-filter:blur(var(--preview-blur)); }
+
+.step-timer { flex-shrink:0; font-size:11px; }
+.step-timer input { width:55px; }
+.subtask:has(.step-timer) { flex-wrap:wrap; }
+
+.calendar-meetings { margin-block:8px; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-sm); }
+.meeting-slots { display:grid; gap:6px; margin-block:8px; }
+.calendar-event-source { padding-inline:22px 8px; }
+.cal-cell[data-over-capacity=true] .cal-num { color:var(--danger); }
+.cal-num .danger { padding-inline:4px; }

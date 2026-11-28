@@ -15,11 +15,13 @@ export function ScheduleFields({ id, draft, onChange, from, taskLimit }: {
 }): JSX.Element {
   const patterns=useData(d=>d.settings.repeatPatterns)??[]
   const [name,setName]=useState('')
+  const [excluded,setExcluded]=useState('')
+  const [people,setPeople]=useState(draft.rotation?.join('\n') ?? '')
   const first = firstScheduledDate(draft, from)
   const preview: string[] = []
   if (first) {
     let date: string | null = first
-    while (date && preview.length < Math.min(3,draft.remaining??3)) {
+    while (date && preview.length < Math.min(10,draft.remaining??10)) {
       preview.push(date)
       date = occurrence(draft, addDays(date, 1))
     }
@@ -28,7 +30,8 @@ export function ScheduleFields({ id, draft, onChange, from, taskLimit }: {
       <details><summary>Named schedules</summary><div className="row wrap gap-sm">
         {patterns.map(p=><span key={p.name}><button type="button" className="btn btn-sm" onClick={()=>{
           const rule={...p.rule,start:draft.start,until:p.rule.until?addDays(draft.start,diffDays(p.rule.until,p.rule.start)):undefined}
-          if(!taskLimit)delete rule.remaining
+          if(!taskLimit){delete rule.remaining;delete rule.afterCompletion;delete rule.rotation}
+          setPeople(rule.rotation?.join('\n') || '')
           onChange(rule)
         }}>{p.name}</button><button type="button" className="icon-btn" aria-label={'Remove schedule '+p.name} onClick={()=>setSettings(s=>{s.repeatPatterns=s.repeatPatterns?.filter(x=>x.name!==p.name)})}>×</button></span>)}
         <input className="input input-sm" placeholder="Schedule name" aria-label="Schedule name" value={name} onChange={e=>setName(e.target.value)}/>
@@ -49,6 +52,17 @@ export function ScheduleFields({ id, draft, onChange, from, taskLimit }: {
       <label className="repeat-date">Start date<input className="input input-sm" type="date" value={draft.start} onChange={e => onChange({ ...draft, start: e.target.value })} /></label>
       <label className="repeat-date">End date (optional)<input className="input input-sm" type="date" min={draft.start} value={draft.until ?? ''} onChange={e => onChange({ ...draft, until: e.target.value || undefined })} /></label>
       {taskLimit&&<label className="repeat-date">Occurrences including this task<input aria-label="Occurrence limit" className="input input-sm" type="number" min="1" step="1" placeholder="Unlimited" value={draft.remaining??''} onChange={e=>{const n=e.target.valueAsNumber;if(!e.target.value||Number.isSafeInteger(n)&&n>0)onChange({...draft,remaining:e.target.value?n:undefined})}}/></label>}
-      <span className="muted small" aria-live="polite">{first ? 'Scheduled: ' + preview.map(friendlyDay).join(' · ') : !draft.days.length && draft.unit === 'week' ? 'Choose at least one weekday.' : 'Choose an interval and dates that include an occurrence.'}</span>
+      {taskLimit && <label><input type="checkbox" checked={!!draft.afterCompletion} onChange={e=>onChange({...draft,afterCompletion:e.target.checked})}/> Restart interval from completion</label>}
+      {taskLimit && <label>Rotate among, one name per line<textarea className="input input-sm" aria-label="Household rotation"
+        value={people} onChange={e=>{setPeople(e.target.value);onChange({...draft,rotation:[...new Set(e.target.value.split('\n').map(name=>name.trim().slice(0,80)).filter(Boolean))].slice(0,30)})}}/></label>}
+      <details><summary>Excluded dates and holidays ({draft.excludedDates?.length || 0})</summary>
+        <label>Skip date<input className="input input-sm" type="date" value={excluded} onChange={e=>setExcluded(e.target.value)} /></label>
+        <button className="btn btn-sm" type="button" disabled={!validDay(excluded)||draft.excludedDates?.includes(excluded)||(draft.excludedDates?.length??0)>=366} onClick={()=>{
+          onChange({...draft,excludedDates:[...draft.excludedDates??[],excluded].sort()});setExcluded('')
+        }}>Exclude date</button>
+        {(draft.excludedDates ?? []).map(date=><button key={date} type="button" className="chip-btn" aria-label={'Remove excluded date '+date}
+          onClick={()=>onChange({...draft,excludedDates:draft.excludedDates?.filter(d=>d!==date)})}>{friendlyDay(date)} ×</button>)}
+      </details>
+      <span className="muted small" aria-live="polite">{first ? (draft.afterCompletion?'If completed on each due date: ':'Next dates: ') + preview.map(friendlyDay).join(' · ') : !draft.days.length && draft.unit === 'week' ? 'Choose at least one weekday.' : 'Choose an interval and dates that include an occurrence.'}</span>
   </>
 }

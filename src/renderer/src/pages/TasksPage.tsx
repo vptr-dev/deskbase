@@ -110,6 +110,7 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
   const group: Group = view.group ?? 'none'
   const tag: string | null = view.tag ?? null
   const hideDone = view.hideDone ?? !showCompleted
+  const energy: number = view.energy ?? 3
   const setView = (k: string, v: unknown): void => updatePage(pageId, (p) => { p.view ??= {}
     const current = p.view.taskViews?.find((x: {id: string}) => x.id === tab?.id)
     if (current) current.options[k] = v
@@ -119,10 +120,11 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
   const visible = useMemo(() => {
     let list = filterTasks(mine, filter, q, tag)
     if (hideDone && filter !== 'done') list = list.filter((t) => !t.done)
-    return sortTasks(list, sort)
-  }, [mine, filter, q, tag, hideDone, sort])
+    return sortTasks(list.filter(t=>(t.energy ?? 2)<=energy), sort)
+  }, [mine, filter, q, tag, hideDone, sort, energy])
   const groups = groupTasks(visible, group)
-  const open = mine.filter((t) => !t.done).length
+  const deferred=mine.filter(t=>t.deferredUntilProject)
+  const open = mine.filter((t) => !t.done && !t.archived).length
   const doneToday = mine.filter((t) => t.done && t.doneAt && new Date(t.doneAt).toDateString() === new Date().toDateString()).length
   const tags = [...new Set(mine.flatMap((t) => t.tags))].sort()
   const pct = mine.length ? mine.filter((t) => t.done).length / mine.length : 0
@@ -166,6 +168,9 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
   return (
     <div className="tasks-page" data-hide-fields={(view.hiddenFields ?? []).join(' ')}>
       <div className="planner-nav">
+        <select className="input input-sm" aria-label="Filter by energy" value={energy} onChange={e=>setView('energy',Number(e.target.value))}>
+          <option value={3}>Any energy level</option><option value={2}>Moderate or low energy</option><option value={1}>Low energy only</option>
+        </select>
         {page?.type === 'tasks' && <><select aria-label="Task planner" className="input input-sm planner-select" value={pageId} onChange={e => openPage(e.target.value)}>
           {Object.values(pages).filter(p => p.type === 'tasks' && !p.deletedAt).map(p => <option key={p.id} value={p.id}>{p.title || 'Untitled planner'}</option>)}
         </select><Button small kind="ghost" icon="plus" onClick={() => askName('planner')}>New planner</Button></>}
@@ -220,6 +225,12 @@ export function TasksPage({ pageId }: { pageId: string }): JSX.Element {
       )}
 
       <QuickAdd pageId={pageId} />
+      {deferred.length>0 && <details><summary>Deferred tasks ({deferred.length})</summary>
+        {deferred.map(t=><div key={t.id} className="row wrap gap-sm">
+          <button className="link" onClick={()=>openTask(t.id)}>{t.title}</button><span className="muted small">{pages[t.deferredUntilProject!]?.title || 'Project unavailable'}</span>
+          <Button small onClick={()=>act(d=>{const task=d.tasks[t.id];if(task){delete task.deferredUntilProject;task.archived=false}})}>Bring back now</Button>
+        </div>)}
+      </details>}
 
       {mine.length > 0 && <div className="list-summary">
         <span>{open} open</span><span>·</span><span>{doneToday} done today</span>
