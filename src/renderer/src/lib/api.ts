@@ -1,3 +1,4 @@
+import type { LauncherFile } from '../../../main/launcher-files'
 import { isService } from '../../../shared/services'
 import type { TrelloBoard, TrelloAccess, TrelloEdit } from '../../../shared/trello'
 import { type ConnSpec, type FeedResult, feedUrl, githubItems, parseFeed, parseIcs } from '../../../shared/feeds'
@@ -47,6 +48,10 @@ export interface Bridge {
   displays(): Promise<DisplayInfo[]>
   onOpenPage(cb: (id: string) => void): () => void
   showMain(): Promise<void>
+  launcherFiles: {
+    pick(mode:'file'|'folder'): Promise<string|null>
+    list(directory:string, mode:'browse'|'recent'|'shortcuts', excluded:string[]): Promise<LauncherFile[]>
+  }
   launch(target: string): Promise<boolean>
   /** Title, description, site name and icon of a web page, for bookmarks. */
   linkInfo(url: string): Promise<{ title?: string; desc?: string; site?: string; icon?: string }>
@@ -302,6 +307,7 @@ const browserBridge: Bridge = {
   },
   onOpenPage: () => () => {},
   showMain: async () => {},
+  launcherFiles: {pick:async()=>null,list:async()=>[]},
   launch: async (t) => { if (/^https?:/i.test(t)) window.open(t, '_blank'); return true },
   linkInfo: async (u) => { try { const h = new URL(u).hostname; return { site: h.replace(/^www\./, ''), icon: `https://${h}/favicon.ico` } } catch { return {} } },
   win: { control: async () => {}, isMax: async () => false, onMax: () => () => {} },

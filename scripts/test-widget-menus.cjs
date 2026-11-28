@@ -105,6 +105,17 @@ if (!process.versions.electron) {
       } finally {stream.getTracks().forEach(track=>track.stop())}
     })()`)
     assert.ok(voiceBytes>0,'App recorded a short synthetic voice idea')
+    const shortcutDir = path.join(profile, 'shortcuts')
+    fs.mkdirSync(shortcutDir)
+    fs.writeFileSync(path.join(shortcutDir, 'Project.url'), '[InternetShortcut]\nURL=https://example.com/')
+    fs.writeFileSync(path.join(shortcutDir, 'Private.url'), '[InternetShortcut]\nURL=https://example.com/')
+    fs.mkdirSync(path.join(shortcutDir, 'Documents'))
+    const args = JSON.stringify(shortcutDir)
+    const list = (mode, exclusions = []) => evaluate(main, `__desk.api.launcherFiles.list(${args},${JSON.stringify(mode)},${JSON.stringify(exclusions)})`)
+    assert.deepEqual((await list('shortcuts', ['Private'])).map(file=>file.name), ['Project.url'])
+    assert.equal((await list('browse'))[0].name, 'Documents')
+    assert.deepEqual((await list('recent', ['Private'])).map(file=>file.name), ['Project.url'])
+
     const tasks = await createPanel(main, 'tasks', { filter: 'all', quickAdd: false })
     await rightClick(tasks.win, '.dw')
     await choose(tasks.win, 'Lock panel')

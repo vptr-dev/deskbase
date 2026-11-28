@@ -1,3 +1,4 @@
+import { api, isDesktop } from '../lib/api'
 import { NamedSourceFields } from './NamedSources'
 import { ButtonActionFields, defaultAction } from './ButtonActions'
 import type { PanelButton } from './PersonalWidgets'
@@ -18,7 +19,7 @@ import { chartGroupable } from './DbChart'
 import { pickImageData } from '../lib/image'
 import { FONT_CHOICES } from '../lib/look'
 import { PlaceSearch } from './PanelKit'
-import { ENGINES, allZones, launcherItems, localZone, zoneCity } from './PanelKit2'
+import { ENGINES, LauncherWidget, type LaunchItem, allZones, launcherItems, localZone, zoneCity } from './PanelKit2'
 import { fullStyle, widgetClass, widgetVars } from '../lib/widgetStyle'
 
 export function Field({ label, children, sub }: { label: string; children: ReactNode; sub?: string }): JSX.Element {
@@ -54,6 +55,8 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   selfPageId?: string
 }): JSX.Element {
   const [viewName,setViewName]=useState('')
+  const [shortcutPreview,setShortcutPreview]=useState<LaunchItem[]|null>(null)
+  const [launcherPreview,setLauncherPreview]=useState('row')
   const d = useData((x) => x)
   const c = w.config
   const live = Object.values(d.pages).filter((p) => !p.deletedAt && !p.rowOf)
@@ -123,10 +126,10 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
   </>
   return (
     <div className="form-grid">
-      <details><summary>Named panel views</summary><div className="row wrap gap-sm">{(d.settings.panelViews??[]).filter(v=>v.type===w.type).map(v=><span key={v.name}><button type="button" className="btn btn-sm" onClick={()=>patch(x=>{x.config={...structuredClone(v.config),pinnedEverywhere:x.config.pinnedEverywhere}})}>{v.name}</button>
+      <details><summary>Named panel views</summary><div className="row wrap gap-sm">{(d.settings.panelViews??[]).filter(v=>v.type===w.type).map(v=><span key={v.name}><button type="button" className="btn btn-sm" onClick={()=>patch(x=>{x.config={...structuredClone(v.config),pinnedEverywhere:x.config.pinnedEverywhere,visibleInSpaces:x.config.visibleInSpaces}})}>{v.name}</button>
         <button type="button" className="icon-btn" aria-label={'Remove view '+v.name} onClick={()=>setSettings(s=>{s.panelViews=s.panelViews?.filter(i=>i.type!==w.type||i.name!==v.name)})}>×</button></span>)}
         <input className="input input-sm" value={viewName} placeholder="View name" onChange={e=>setViewName(e.target.value)}/>
-        <button type="button" className="btn btn-sm" disabled={!viewName.trim()} onClick={()=>{const config=structuredClone(c);for(const key of ['endsAt','startedAt','elapsed','pinnedEverywhere'])delete config[key];setSettings(s=>{s.panelViews=[...(s.panelViews??[]).filter(v=>v.type!==w.type||v.name!==viewName.trim()),{name:viewName.trim(),type:w.type,config}]});setViewName('')}}>Save current view</button></div></details>
+        <button type="button" className="btn btn-sm" disabled={!viewName.trim()} onClick={()=>{const config=structuredClone(c);for(const key of ['endsAt','startedAt','elapsed','pinnedEverywhere','visibleInSpaces'])delete config[key];setSettings(s=>{s.panelViews=[...(s.panelViews??[]).filter(v=>v.type!==w.type||v.name!==viewName.trim()),{name:viewName.trim(),type:w.type,config}]});setViewName('')}}>Save current view</button></div></details>
       <NamedSourceFields key={w.id+w.type} w={w} patch={patch} />
       {w.type === 'button' && editButton(c, changes => patch(widget => { Object.assign(widget.config, changes) }))}
       {w.type === 'wishlist' && <Field label="Wishlist"><PagePicker value={c.pageId ?? ''} pages={live.filter(p => p.type === 'wishlist')} empty="First wishlist" onChange={v => set('pageId', v)} /></Field>}
@@ -358,24 +361,64 @@ export function WidgetConfigFields({ w, set, patch, selfPageId }: {
         <Field label="Your lines" sub="One per line; click the panel for the next one"><textarea className="input input-area grow" rows={4} value={c.lines ?? ''} onChange={(e) => set('lines', e.target.value)} placeholder="Leave empty for the built-in lines" /></Field>
         {String(c.lines ?? '').trim() && <Field label="Mix in built-in lines"><Toggle checked={!!c.builtIn} onChange={(v) => set('builtIn', v)} /></Field>}
       </>}
-      {w.type==='workspaces'&&<Field label="Switch with"><Segmented small value={c.look??'tabs'} onChange={v=>set('look',v)} options={[{value:'tabs',label:'Tabs'},{value:'picker',label:'Dropdown'},{value:'cycle',label:'Cycle button'}]}/></Field>}
+      {w.type==='workspaces'&&<Field label="Switch with"><Segmented small value={c.look??'cycle'} onChange={v=>set('look',v)} options={[{value:'tabs',label:'Tabs'},{value:'picker',label:'Dropdown'},{value:'cycle',label:'Stepper'}]}/></Field>}
       {w.type === 'launcher' && <>
         <Field label="Look"><Segmented small value={c.look ?? 'grid'} onChange={(v) => set('look', v)} options={[{ value: 'grid', label: 'Grid' }, { value: 'row', label: 'Row' }, { value: 'list', label: 'List' },{value:'folders',label:'Folders'},{value:'search',label:'Search'}]} /></Field>
         <Field label="Labels"><Toggle checked={c.labels !== false} onChange={(v) => set('labels', v)} /></Field>
+        <Field label="Search scope"><select className="input input-sm" value={c.searchScope || 'all'} onChange={e=>set('searchScope',e.target.value)}>
+          <option value="all">All shortcuts</option><option value="device">On this device</option><option value="workspace">Current workspace</option><option value="project">Project</option>
+        </select>{c.searchScope==='project' && <PagePicker pages={live} value={c.projectPage || ''} empty="Use the open page" onChange={v=>set('projectPage',v)}/>}</Field>
+        <Field label="Recently modified files"><span className="small ellipsis">{c.recentFolder || 'No folder selected'}</span>
+          <Button small disabled={!isDesktop} onClick={async()=>{const folder=await api.launcherFiles.pick('folder');if(folder)set('recentFolder',folder)}}>Choose folder</Button>
+          {c.recentFolder && <Button small onClick={()=>set('recentFolder','')}>Clear</Button>}
+          <textarea className="input" aria-label="Excluded path fragments" placeholder="Exclude paths containing these names, one per line" value={c.excludedPaths || ''} onChange={e=>set('excludedPaths',e.target.value)}/>
+        </Field>
+        <details className="launcher-demo"><summary>Preview launcher layouts</summary><Segmented small value={launcherPreview} onChange={setLauncherPreview} options={[{value:'row',label:'Strip'},{value:'folders',label:'Folders'},{value:'search',label:'Search'}]}/>
+          <LauncherWidget cfg={{...c,look:launcherPreview}} id={w.id} preview/>
+        </details>
         <div className="launch-edit">
           {launcherItems(c).map((it, i) => (
             <div key={i} className="launch-edit-row">
               <input className="input input-sm" placeholder="Name" value={it.label ?? ''} onChange={(e) => patch((x) => { x.config.items[i].label = e.target.value })} />
               <input className="input input-sm" aria-label="Shortcut category" placeholder="Category" value={it.category??''} onChange={e=>patch(x=>{x.config.items[i].category=e.target.value})}/>
-              <input className="input input-sm grow" placeholder="Website, app link or C:\Path\to\file" value={it.target ?? ''} onChange={(e) => patch((x) => { x.config.items[i].target = e.target.value })} />
+              <input className="input input-sm grow" placeholder="Website, app link or C:\Path\to\file" value={it.target ?? ''} onChange={(e) => patch((x) => { x.config.items[i].target = e.target.value; x.config.items[i].folder=false })} />
               <select className="input input-sm" value={it.icon ?? ''} onChange={(e) => patch((x) => { x.config.items[i].icon = e.target.value || undefined })}>
                 <option value="">Letter</option>
                 {LAUNCH_ICONS.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
+              <details className="launcher-options"><summary>Shortcut options</summary>
+                <div className="row gap-xs wrap">{(['file','folder'] as const).map(mode=><Button key={mode} small disabled={!isDesktop} onClick={async()=>{
+                  const path=await api.launcherFiles.pick(mode)
+                  if(!path)return
+                  patch(x=>{const item=x.config.items[i];if(item && item.target===it.target){item.target=path;item.folder=mode==='folder';if(!item.label)item.label=path.split(/[\\/]/).filter(Boolean).at(-1)||path}})
+                }}>Browse {mode}</Button>)}</div>
+                <label><input type="checkbox" checked={!!it.separator} onChange={e=>patch(x=>{x.config.items[i].separator=e.target.checked})}/> Divider above</label>
+                <label>Workspace<select className="input" value={it.workspace || ''} onChange={e=>patch(x=>{x.config.items[i].workspace=e.target.value})}><option value="">None</option>{d.desktop.spaces.filter(s=>!s.archived).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+                <label>Project<PagePicker pages={live} value={it.project||''} empty="None" onChange={v=>patch(x=>{x.config.items[i].project=v})}/></label>
+                <label>Link a Deskbase page<select className="input" value={it.target?.startsWith('page:')?it.target.slice(5):''} onChange={e=>patch(x=>{x.config.items[i].target=e.target.value?'page:'+e.target.value:'';x.config.items[i].folder=false})}>
+                  <option value="">Website, app or file</option>{Object.values(d.pages).filter(p=>!p.deletedAt&&!p.rowOf).map(p=><option key={p.id} value={p.id}>{p.title || 'Untitled'}</option>)}
+                </select></label>
+                <label>Icon colour<input type="color" value={it.color || '#64748b'} onChange={e=>patch(x=>{x.config.items[i].color=e.target.value})}/></label>
+                <label>Search aliases<input className="input input-sm" value={it.aliases || ''} onChange={e=>patch(x=>{x.config.items[i].aliases=e.target.value})}/></label>
+                <label>Additional targets, one per line<textarea className="input" value={it.extraTargets || ''} onChange={e=>patch(x=>{x.config.items[i].extraTargets=e.target.value})}/></label>
+                <label>Alternate target<input className="input" value={it.secondary || ''} onChange={e=>patch(x=>{x.config.items[i].secondary=e.target.value})}/></label>
+                <div className="row gap-xs">{[-1,1].map(dir=><Button key={dir} small disabled={i+dir<0 || i+dir>=launcherItems(c).length} onClick={()=>patch(x=>{const items=x.config.items;items.splice(i+dir,0,items.splice(i,1)[0])})}>{dir<0?'Move earlier':'Move later'}</Button>)}</div>
+              </details>
               <button className="icon-btn" title="Remove" onClick={() => patch((x) => { x.config.items.splice(i, 1) })}><Icon name="x" size={13} /></button>
             </div>
           ))}
           <Button small kind="ghost" icon="plus" onClick={() => patch((x) => { x.config.items = [...launcherItems(x.config), { label: '', target: '' }].slice(0, 24) })}>Add a link</Button>
+          <Button small kind="ghost" disabled={!isDesktop || launcherItems(c).length>=24} onClick={async()=>{
+            const folder=await api.launcherFiles.pick('folder')
+            if(!folder)return
+            const files=await api.launcherFiles.list(folder,'shortcuts',(c.excludedPaths||'').split('\n')).catch(()=>[])
+            setShortcutPreview(files.filter(f=>!launcherItems(c).some(it=>it.target===f.path)).slice(0,24-launcherItems(c).length).map(f=>({label:f.name.replace(/\.(lnk|url)$/i,''),target:f.path})))
+          }}>Import Windows shortcuts</Button>
+          {shortcutPreview && <div className="shortcut-import-preview">
+            {shortcutPreview.length ? <ul>{shortcutPreview.map(it=><li key={it.target}>{it.label}</li>)}</ul> : <p>No new shortcuts found.</p>}
+            <Button small disabled={!shortcutPreview.length} onClick={()=>{patch(x=>{const items=launcherItems(x.config);x.config.items=[...items,...shortcutPreview.filter(it=>!items.some(current=>current.target===it.target))].slice(0,24)});setShortcutPreview(null)}}>Import {shortcutPreview.length} shortcuts</Button>
+            <Button small onClick={()=>setShortcutPreview(null)}>Cancel</Button>
+          </div>}
         </div>
       </>}
       {(w.type === 'sections' || w.type === 'table') && (

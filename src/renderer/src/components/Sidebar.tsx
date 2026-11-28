@@ -274,7 +274,7 @@ function SpaceSwitcher(): JSX.Element {
       {el && (
         <Popover anchor={el} onClose={() => setEl(null)} width={250}>
           <div className="space-menu">
-            {spaces.map((s) => (
+            {spaces.filter(s=>!s.archived).map((s) => (
               <button key={s.id} className={`space-item ${s.id === activeId ? 'active' : ''}`} onClick={() => switchSpace(s.id)}>
                 {s.icon && <span className="space-icon"><Glyph value={s.icon} color={s.iconColor} size={14} /></span>}
                 <span className="grow ellipsis">{s.name}</span>

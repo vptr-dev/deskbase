@@ -6,7 +6,13 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.23.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.24.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+
+## Workspaces, launchers and themes
+
+Open **Desktop → Workspace settings** to choose a landing page, set quiet hours, save panel positions as an arrangement or archive a workspace. In a panel’s **Place** settings, preview its destination before moving it. Use **Also show in** to share one panel across selected workspaces.
+
+Launchers can open shortcuts in sequence, open an alternate target, browse a local folder or show recently modified files with exclusions. Import Windows shortcuts through a preview. In **Appearance → Themes**, choose **Custom theme** to preview and save matching sidebar, page and panel styles.
 
 ## Editable pages and creative projects
 

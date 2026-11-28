@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.24.0 - 2026-11-28
+
+- Workspace stepper with direct selection, landing pages, navigation history, quiet hours and archived workspaces.
+- Save and compare panel arrangements, preview a destination, and show one panel in selected workspaces.
+- Custom theme preview and editable presets. Launchers support bundles, folder browsing, shortcut import, search scopes and recent files.
+
 ## 0.23.0 - 2026-11-28
 
 - Create editable documents with embedded tools. Insert blocks from their context menu, reuse snippets, compare paragraph revisions, move by keyboard and paste table ranges.

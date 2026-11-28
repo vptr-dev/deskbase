@@ -2679,3 +2679,41 @@ select option, select optgroup { color: CanvasText; background-color: Canvas; }
 .reference-sheet button[aria-pressed=true],.mood-canvas button[aria-pressed=true] { outline:2px solid var(--accent); outline-offset:-2px; }
 .studio-entry figure { margin:0; }
 .studio-entry audio { max-width:100%; }
+
+.space-stepper { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; min-width:0; width:100%; background:var(--hover); border-radius:var(--radius-sm); }
+.space-stepper select { text-align:center; text-overflow:ellipsis; font:inherit; background:transparent; color:inherit; border:0; }
+.space-stepper .icon-btn { width:clamp(16px,12cqw,28px); height:clamp(18px,28cqh,30px); }
+@container (max-width:85px) { .space-stepper { grid-template-columns:minmax(0,1fr); } .space-stepper .icon-btn { display:none; } }
+.launcher-tile { display:flex; min-width:0; align-items:center; }
+.launcher-tile .pk-launch-item { flex:1; min-width:0; }
+.launch-edit-row { display:flex; flex-wrap:wrap; border-bottom:1px solid var(--line); padding-block:6px; }
+.launch-edit-row > input { flex:1 1 110px; min-width:0; }
+.launcher-options { flex-basis:100%; }
+.launcher-options label { display:grid; gap:3px; margin:6px 0; }
+
+.custom-theme-editor { display:grid; gap:12px; margin-block:14px; }
+.custom-theme-swatch { display:grid; place-items:center; min-height:48px; color:var(--accent); background:var(--hover); border-radius:var(--radius-sm); }
+.theme-preview { display:grid; grid-template-columns:minmax(74px,30%) 1fr; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; background:var(--card); }
+.theme-preview aside,.theme-preview section { min-width:0; padding:14px; display:grid; gap:8px; align-content:start; }
+.theme-preview aside { border-right:1px solid var(--line); background:var(--hover); }
+.theme-preview b { color:var(--accent); }
+.preview-panel,.preview-menu { display:grid; gap:4px; padding:8px 12px; background:var(--card-strong); border:1px solid var(--line); border-radius:var(--radius-sm); }
+.preview-menu { justify-self:end; font-size:12px; }
+
+.workspace-options,.workspace-destination { padding:10px; border:1px solid var(--line); border-radius:var(--radius-sm); margin-block:8px; }
+.workspace-options .form-grid,.workspace-destination > select { margin-top:10px; }
+.workspace-destination > select { width:100%; }
+.map-widget small { margin-inline-start:3px; }
+
+.launcher-demo,.launcher-folder-view,.launcher-content { min-width:0; min-height:0; overflow:auto; width:100%; }
+.launcher-demo { padding:8px; border:1px solid var(--line); border-radius:var(--radius-sm); }
+.launcher-demo .launcher-content { max-height:150px; }
+.launcher-folder-view > button { width:100%; }
+.launcher-folder-view button { overflow:hidden; text-overflow:ellipsis; }
+.launch-divider { border-top:1px solid var(--line); padding-top:4px; }
+.launch-folders summary kbd { float:right; color:var(--muted); font-size:10px; }
+.shortcut-import-preview ul { max-height:160px; overflow:auto; }
+
+.theme-preview aside,.theme-preview section { padding:var(--preview-padding,14px); }
+.theme-preview[data-surface="frosted"],.theme-preview[data-surface="blur"] { background:var(--backdrop); isolation:isolate; }
+.theme-preview[data-surface="frosted"] .preview-panel,.theme-preview[data-surface="blur"] .preview-panel { background:var(--card); backdrop-filter:blur(var(--preview-blur)); }

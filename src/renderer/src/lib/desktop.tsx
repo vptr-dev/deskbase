@@ -1,3 +1,4 @@
+import { rememberWorkspaceNavigation, showWorkspaceNavigation } from './tabs'
 import { WidgetActionHost } from '../components/WidgetActionHost'
 import { PanelBody } from '../components/PanelBody'
 import { createRoot, type Root } from 'react-dom/client'
@@ -91,39 +92,52 @@ export function setDeskEditing(on: boolean): void {
 export const findDesk = (id: string): DeskWidget | undefined => getData().desktop.widgets.find((w) => w.id === id)
 
 /** Panels of the workspace on screen. */
-export const activePanels = (d = getData().desktop): DeskWidget[] => d.widgets.filter((w) => (w.space === d.active || w.config.pinnedEverywhere))
+export const panelInWorkspace = (w: DeskWidget, id: string): boolean =>
+  w.space === id || !!w.config.pinnedEverywhere || (Array.isArray(w.config.visibleInSpaces) && w.config.visibleInSpaces.includes(id))
+
+export const activePanels = (d = getData().desktop): DeskWidget[] => d.widgets.filter(w => panelInWorkspace(w, d.active))
 
 export function switchSpace(id: string): void {
   const d = getData().desktop
-  if (d.active === id || !d.spaces.some((s) => s.id === id)) return
+  const target = d.spaces.find(s => s.id === id && !s.archived)
+  if (d.active === id || !target) return
+  rememberWorkspaceNavigation(d.active)
   act((x) => { x.desktop.active = id; x.desktop.enabled = true })
   useDesk.setState({ selected: null })
+  showWorkspaceNavigation(id, target.landingPage)
 }
 
-export function addSpace(copyCurrent = false): string {
+export function addSpace(copyCurrent = false, landingPage?: string): string {
   const id = uid()
   act((x) => {
     const n = x.desktop.spaces.length + 1
-    x.desktop.spaces.push({ id, name: `Workspace ${n}`, icon: 'layout' })
+    const page = landingPage ? x.pages[landingPage] : undefined
+    x.desktop.spaces.push({ id, name: page?.title || `Workspace ${n}`, icon: page?.icon || 'layout', landingPage })
     if (copyCurrent) {
       for (const w of x.desktop.widgets.filter((w) => w.space === x.desktop.active && !w.config.pinnedEverywhere)) {
-        x.desktop.widgets.push({ ...JSON.parse(JSON.stringify(w)), id: uid(), space: id, createdAt: Date.now() })
+        x.desktop.widgets.push({ ...JSON.parse(JSON.stringify(w)), id: uid(), space: id, config: { ...JSON.parse(JSON.stringify(w.config)), visibleInSpaces: [] }, createdAt: Date.now() })
       }
     }
-    x.desktop.active = id
   })
+  switchSpace(id)
   return id
 }
 
 export function removeSpace(id: string): void {
   const d = getData().desktop
-  if (d.spaces.length < 2) return
+  if (!d.spaces.some(s => s.id !== id && !s.archived)) return
   const name = d.spaces.find((s) => s.id === id)?.name ?? 'Workspace'
   act((x) => {
     x.desktop.spaces = x.desktop.spaces.filter((s) => s.id !== id)
-    for(const w of x.desktop.widgets)if(w.space===id&&w.config.pinnedEverywhere)w.space=x.desktop.spaces[0].id
-    x.desktop.widgets = x.desktop.widgets.filter((w) => w.space !== id)
-    if (x.desktop.active === id) x.desktop.active = x.desktop.spaces[0].id
+    const fallback = x.desktop.spaces.find(s => !s.archived)!
+    for (const w of x.desktop.widgets) {
+      if (Array.isArray(w.config.visibleInSpaces)) w.config.visibleInSpaces = w.config.visibleInSpaces.filter((key: string) => key !== id)
+      if (w.space !== id) continue
+      if (w.config.pinnedEverywhere) w.space = fallback.id
+      else if (w.config.visibleInSpaces?.length) w.space = w.config.visibleInSpaces[0]
+    }
+    x.desktop.widgets = x.desktop.widgets.filter(w => w.space !== id)
+    if (x.desktop.active === id) x.desktop.active = fallback.id
   })
   toast(`${name} deleted`, { undo: true })
 }
@@ -131,8 +145,9 @@ export function removeSpace(id: string): void {
 /** Next or previous workspace (tray, hotkey). */
 export function cycleSpace(step: number): void {
   const d = getData().desktop
-  const i = d.spaces.findIndex((s) => s.id === d.active)
-  const next = d.spaces[(i + step + d.spaces.length) % d.spaces.length]
+  const spaces = d.spaces.filter(s => !s.archived)
+  const i = spaces.findIndex(s => s.id === d.active)
+  const next = spaces[(i + step + spaces.length) % spaces.length]
   if (next) { switchSpace(next.id); toast(next.name, { icon: 'monitor' }) }
 }
 
@@ -525,7 +540,7 @@ async function reconcile(): Promise<void> {
       }
     }))
     if(d.desktop!==getData().desktop){queued=true;return}
-    await api.desk.active(want.length > 0 || d.desktop.enabled, d.desktop.spaces.map((s) => ({ id: s.id, name: s.name })), d.desktop.active)
+    await api.desk.active(want.length > 0 || d.desktop.enabled, d.desktop.spaces.filter(s => !s.archived).map(s => ({ id: s.id, name: s.name })), d.desktop.active)
   } finally {
     running = false
     if (queued) { queued = false; reconcile() }
@@ -541,7 +556,7 @@ export function startDesktop(): () => void {
     const slot=now.toDateString()+time
     if(slot===lastSlot)return
     lastSlot=slot
-    const dest=getData().desktop.spaces.find(s=>s.switchAt===time)
+    const dest=getData().desktop.spaces.find(s=>!s.archived && s.switchAt===time)
     if(dest)switchSpace(dest.id)
   }
   schedule()

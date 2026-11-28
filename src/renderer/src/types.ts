@@ -275,7 +275,14 @@ export interface DeskWidget {
   createdAt: number
 }
 /** A workspace: its own set of panels on the screen. Pages are shared by all workspaces. */
+export interface PanelPlacement { x: number; y: number; w: number; h: number }
+export interface WorkspaceArrangement { id: string; name: string; positions: Record<string, PanelPlacement> }
 export interface DeskSpace {
+  landingPage?: string
+  arrangements?: WorkspaceArrangement[]
+  archived?: boolean
+  quietFrom?: string
+  quietUntil?: string
   switchAt?: string
   iconColor?: string
   id: string

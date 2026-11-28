@@ -6,7 +6,7 @@ import { normalizeRepeat } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 24
+export const SCHEMA = 25
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -560,13 +560,33 @@ export function normalizeStyle(raw: any, partial = false): Partial<WidgetStyle> 
   return out
 }
 
+const workspaceTime = (value: unknown): string | undefined =>
+  typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : undefined
+
 function normalizeDesktop(raw: any): Desktop {
   const r = obj(raw)
   const spaces: Desktop['spaces'] = (Array.isArray(r.spaces) ? r.spaces : [])
     .filter((s: any) => s && typeof s.id === 'string' && s.id)
-    .map((s: any) => ({ id: s.id, switchAt: /^([01]\d|2[0-3]):[0-5]\d$/.test(s.switchAt)?s.switchAt:undefined, name: typeof s.name === 'string' && s.name.trim() ? s.name : 'Workspace', icon: s.icon === '' ? '' : emojiToIcon(s.icon, 'monitor'), iconColor: typeof s.iconColor === 'string' ? s.iconColor : undefined }))
+    .map((s: any) => ({
+      id: s.id, name: typeof s.name === 'string' && s.name.trim() ? s.name : 'Workspace',
+      icon: s.icon === '' ? '' : emojiToIcon(s.icon, 'monitor'),
+      iconColor: typeof s.iconColor === 'string' ? s.iconColor : undefined,
+      switchAt: workspaceTime(s.switchAt), quietFrom: workspaceTime(s.quietFrom), quietUntil: workspaceTime(s.quietUntil),
+      landingPage: typeof s.landingPage === 'string' ? s.landingPage : undefined,
+      archived: s.archived === true,
+      arrangements: (Array.isArray(s.arrangements) ? s.arrangements : [])
+        .filter((a: any) => a && typeof a.id === 'string' && typeof a.name === 'string')
+        .map((a: any) => ({
+          id: a.id, name: a.name,
+          positions: Object.fromEntries(Object.entries(obj(a.positions)).flatMap(([id, value]) => {
+            const p = obj(value)
+            return [p.x, p.y, p.w, p.h].every(Number.isFinite) && p.w > 0 && p.h > 0 ? [[id, { x:p.x, y:p.y, w:p.w, h:p.h }]] : []
+          }))
+        }))
+    }))
   if (!spaces.length) spaces.push({ ...MAIN_SPACE })
-  const active = spaces.some((s: any) => s.id === r.active) ? r.active : spaces[0].id
+  if (spaces.every(s => s.archived)) spaces[0].archived = false
+  const active = spaces.some(s => s.id === r.active && !s.archived) ? r.active : spaces.find(s => !s.archived)!.id
   const known = new Set(spaces.map((s: any) => s.id))
   return {
     templates: Array.isArray(r.templates) ? r.templates.filter((t: any) => t && typeof t.id === 'string' && typeof t.name === 'string' && Array.isArray(t.panels)).map((t: any) => ({

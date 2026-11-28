@@ -1,5 +1,6 @@
+import type { LauncherFile } from '../../../main/launcher-files'
 import { type CSSProperties, useEffect, useState } from 'react'
-import { getData, toast, useData } from '../store'
+import { getData, openPage, toast, useApp, useData } from '../store'
 import { api } from '../lib/api'
 import { DAYS_SHORT, MONTHS_LONG } from '../lib/util'
 import { Icon } from './Icon'
@@ -576,26 +577,123 @@ export function MoonWidget({ cfg }: { cfg: Cfg }): JSX.Element {
 }
 
 // ---------- launcher ----------
-export interface LaunchItem { category?:string; label: string; target: string; icon?: string }
+export interface LaunchItem {
+  color?: string
+  aliases?: string
+  extraTargets?: string
+  secondary?: string
+  category?: string
+  workspace?: string
+  project?: string
+  folder?: boolean
+  separator?: boolean
+  label: string
+  target: string
+  icon?: string
+}
 const tileHue = (s: string): number => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 360; return h }
-export function LauncherWidget({ cfg }: { cfg: Cfg }): JSX.Element {
-  const [query,setQuery]=useState('')
-  const items: LaunchItem[] = Array.isArray(cfg.items) ? cfg.items.filter((i: LaunchItem) => i && i.target) : []
-  if (!items.length) return <div className="pk pk-empty"><span className="muted small">Add websites, apps or folders in the panel settings.</span></div>
-  const open = (t: string): void => { api.launch(t).then((ok) => { if (!ok) toast('That link or file could not be opened') }).catch(() => {}) }
-  const renderItem=(it:LaunchItem,i:number)=>(<button key={i} data-widget-item={it.label || it.target} data-item-action="Launch shortcut" className="pk-launch-item" title={it.target} onClick={() => open(it.target)}>
-          <span className="pk-launch-icon" style={it.icon ? undefined : { background: `hsl(${tileHue(it.label || it.target)} 55% 55% / 0.85)` }}>
-            {it.icon ? <Icon name={it.icon} size={18} /> : (it.label || it.target).replace(/^https?:\/\/(www\.)?/, '').slice(0, 1).toUpperCase()}
-          </span>
-          {cfg.labels !== false && <span className="pk-launch-label">{it.label || it.target.replace(/^https?:\/\/(www\.)?/, '')}</span>}
-        </button>)
-  const category=(it:LaunchItem)=>it.category?.trim()||'General'
-  if(cfg.look==='folders')return <div className="launch-folders">{[...new Set(items.map(category))].map(name=><details key={name}><summary><Icon name="folder" size={14}/> {name}</summary><div className="pk-launch list">{items.filter(it=>category(it)===name).map(renderItem)}</div></details>)}</div>
-  if(cfg.look==='search'){
-    const matches=items.filter(it=>[it.label,it.target,category(it)].join(' ').toLowerCase().includes(query.trim().toLowerCase()))
-    return <div className="launch-search"><input className="input input-sm" type="search" aria-label="Search shortcuts" placeholder="Search shortcuts" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&matches[0])open(matches[0].target)}}/><div className="pk-launch list">{matches.map(renderItem)}</div></div>
+export function LauncherWidget({ cfg, id, preview = false }: { cfg: Cfg; id: string; preview?: boolean }): JSX.Element {
+  const active = useData(d=>d.desktop.active)
+  const view = useApp(s=>s.current)
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState<string|null>(null)
+  const [folder, setFolder] = useState<{ root: string; path: string }|null>(null)
+  const [files, setFiles] = useState<LauncherFile[]>([])
+  const [recent, setRecent] = useState<LauncherFile[]>([])
+  const [failed, setFailed] = useState('')
+  const scope = cfg.searchScope ?? 'all'
+  const items = launcherItems(cfg).filter(it => it && it.target && (preview || scope==='all' ||
+    (scope==='device' && /^[a-z]:[\\/]/i.test(it.target)) ||
+    (scope==='workspace' && it.workspace===active) ||
+    (scope==='project' && it.project===(cfg.projectPage || view))))
+  const exclusions: string = typeof cfg.excludedPaths==='string'?cfg.excludedPaths:''
+  const recentDirectory: string = typeof cfg.recentFolder==='string'?cfg.recentFolder:''
+  useEffect(()=>{
+    setFiles([])
+    if(!folder || preview)return
+    let keep=true
+    api.launcherFiles.list(folder.path,'browse',exclusions.split('\n')).then(list=>{if(keep)setFiles(list)}).catch(()=>{})
+    return ()=>{keep=false}
+  },[folder,exclusions,preview])
+  useEffect(()=>{
+    setRecent([])
+    if(!recentDirectory || preview)return
+    let keep=true
+    const refresh=()=>api.launcherFiles.list(recentDirectory,'recent',exclusions.split('\n')).then(list=>{if(keep)setRecent(list)}).catch(()=>{})
+    void refresh()
+    const timer=setInterval(refresh,60_000)
+    return ()=>{keep=false;clearInterval(timer)}
+  },[recentDirectory,exclusions,preview])
+  const open = async (target:string):Promise<boolean>=>{
+    if(preview)return true
+    if(target.startsWith('page:')){
+      const page=getData().pages[target.slice(5)]
+      if(!page || page.deletedAt)return false
+      openPage(page.id);void api.showMain()
+      return true
+    }
+    return api.launch(target).catch(()=>false)
   }
-  return <div className={'pk pk-launch '+(cfg.look??'grid')+(cfg.labels===false?' nolabel':'')}>{items.map(renderItem)}</div>
+  const folderKey=(root:string)=>'deskbase:launcher-folder:'+id+':'+root
+  function enterFolder(root:string, path:string): void {
+    setFolder({root,path})
+    try{localStorage.setItem(folderKey(root),path)}catch{ /* storage unavailable */ }
+  }
+  const launch=async(it:LaunchItem)=>{
+    if(preview)return
+    setFailed('')
+    if(it.folder){
+      let last=''
+      try{last=localStorage.getItem(folderKey(it.target)) || ''}catch{ /* storage unavailable */ }
+      const prefix=it.target.replace(/[\\/]+$/,'')+'\\'
+      enterFolder(it.target,last.startsWith(prefix)?last:it.target)
+      return
+    }
+    for(const target of [it.target,...(it.extraTargets || '').split('\n')].map(t=>t.trim()).filter(Boolean)){
+      if(!await open(target)){setFailed(target);break}
+    }
+  }
+  const renderItem=(it:LaunchItem,i:number)=><div className={'launcher-tile'+(it.separator?' launcher-divider':'')} key={i} data-widget-item={it.label || it.target}>
+    <button aria-label={it.label || it.target} data-item-action="Launch shortcut" className="pk-launch-item" title={it.target} onClick={()=>void launch(it)}>
+      <span className="pk-launch-icon" style={{background:it.color || (it.icon?undefined:`hsl(${tileHue(it.label || it.target)} 55% 55% / 0.85)`)}}>
+        {it.icon?<Icon name={it.icon} size={18}/>: (it.label || it.target).replace(/^https?:\/\/(www\.)?/,'').slice(0,1).toUpperCase()}
+      </span>
+      {cfg.labels!==false && <span className="pk-launch-label">{it.label || it.target}</span>}
+    </button>
+    {it.secondary && <button className="icon-btn" aria-label={'Alternate action for '+(it.label||it.target)} data-item-action="Open alternate target" onClick={()=>void open(it.secondary!).then(ok=>{if(!ok)setFailed(it.secondary!)})}><Icon name="external" size={12}/></button>}
+  </div>
+  const category=(it:LaunchItem)=>it.category?.trim()||'General'
+  const names=[...new Set(items.map(category))]
+  const matches=items.filter(it=>[it.label,it.aliases,it.target,category(it)].join(' ').toLowerCase().includes(query.trim().toLowerCase()))
+  if (folder) return <section className="launcher-folder-view">
+    <div className="row gap-xs"><button className="icon-btn" aria-label="Back to shortcuts" onClick={()=>setFolder(null)}><Icon name="left" size={14}/></button>
+      {folder.path!==folder.root && <button className="btn btn-sm" onClick={()=>{
+        const parent=folder.path.replace(/[\\/][^\\/]+$/,'')
+        enterFolder(folder.root,parent.length<=folder.root.length?folder.root:parent)
+      }}>Up</button>}
+      <span className="ellipsis" title={folder.path}>{folder.path.split(/[\\/]/).filter(Boolean).at(-1)}</span></div>
+    {!files.length && <p className="small muted">No items in this folder.</p>}
+    {files.map(file=><button className="menu-item" key={file.path} onClick={()=>file.folder?enterFolder(folder.root,file.path):void open(file.path).then(ok=>{if(!ok)setFailed(file.path)})}><Icon name={file.folder?'folder':'file-text'} size={14}/>{file.name}</button>)}
+    {failed && <div className="small muted">Could not open {failed}</div>}
+  </section>
+  if (!items.length && !recent.length) return <div className="pk pk-empty"><span className="muted small">{scope==='all'?'Add shortcuts in the panel settings.':'No shortcuts match this scope.'}</span></div>
+  return <div className="launcher-content" onKeyDown={e=>{
+    const index=Number(e.key)-1
+    if(!e.altKey || !names[index] || preview)return
+    e.preventDefault()
+    if(cfg.look==='folders')setExpanded(names[index])
+    else if(cfg.look==='search')setQuery(names[index])
+    else void launch(items.find(it=>category(it)===names[index])!)
+  }}>
+    {cfg.look==='folders' ? <div className="launch-folders">{names.map((name,i)=><details key={name} open={expanded===name} onToggle={e=>{if(e.currentTarget.open)setExpanded(name);else setExpanded(now=>now===name?null:now)}}>
+      <summary><Icon name="folder" size={14}/> {name}{i<9 && <kbd>Alt {i+1}</kbd>}</summary><div className="pk-launch list">{items.filter(it=>category(it)===name).map(renderItem)}</div>
+    </details>)}</div> : cfg.look==='search' ? <div className="launch-search">
+      <input className="input input-sm" type="search" aria-label="Search shortcuts" placeholder="Search shortcuts" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&matches[0])void launch(matches[0])}}/>
+      <div className="pk-launch list">{matches.map(renderItem)}</div>
+    </div> : <div className={'pk pk-launch '+(cfg.look??'grid')+(cfg.labels===false?' nolabel':'')}>{items.map(renderItem)}</div>}
+    {recent.length>0 && <details><summary>Recently modified files</summary>{recent.map(file=><button className="menu-item" key={file.path} onClick={()=>void open(file.path).then(ok=>{if(!ok)setFailed(file.path)})}>{file.name}</button>)}</details>}
+    {failed && <div className="small muted" role="status">Could not open {failed}. Use Browse in panel settings to repair the shortcut.</div>}
+  </div>
 }
 
 // ---------- web search ----------

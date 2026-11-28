@@ -1,3 +1,4 @@
+import { registerLauncherFiles } from './launcher-files'
 import { pathToFileURL } from 'node:url'
 import { registerMedia } from './media'
 import { registerConnections } from './connections'
@@ -393,6 +394,7 @@ function registerIpc(): void {
   ipcMain.handle('app:openExternal', (_e, url: string) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url) })
   // Launcher panels: a website, an app link (mailto:, spotify:, steam:…) or a file, folder or program on this PC.
   ipcMain.handle('net:linkInfo', (_e, url: string) => linkInfo(String(url ?? '')))
+  registerLauncherFiles(() => mainWindow)
   ipcMain.handle('app:launch', async (_e, target: string) => {
     const t = String(target ?? '').trim()
     if (!t) return false

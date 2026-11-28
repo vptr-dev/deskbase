@@ -29,7 +29,7 @@ import { ValuesDialog } from './components/Values'
 import { HistoryDialog } from './components/History'
 import { applyImport, refreshFromNotion } from './lib/importer'
 import { loadFeed, startConnections, useFeeds, useMedia } from './lib/connections'
-import { fireReminders } from './lib/reminders'
+import { fireReminders, workspaceQuiet } from './lib/reminders'
 import { ConnectionsPage } from './pages/ConnectionsPage'
 import { isDesktop } from './lib/api'
 import { applyCustomCss, applyLook } from './lib/look'
@@ -347,7 +347,7 @@ function useTicker(): void {
     const id = setInterval(() => {
       focusActions.tick()
       const d = getData()
-      if (!d.settings.notifications) return
+      if (!d.settings.notifications || workspaceQuiet(d)) return
       if (n++ % 15 === 0) fireReminders(d)
       const now = Date.now()
       const due = Object.values(d.tasks).filter(t => {

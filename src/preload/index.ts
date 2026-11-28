@@ -23,6 +23,10 @@ const api = {
   alwaysOnTop: (on: boolean) => ipcRenderer.invoke('app:alwaysOnTop', on),
   loginItem: (on?: boolean) => ipcRenderer.invoke('app:loginItem', on),
   openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+  launcherFiles: {
+    pick: (mode: 'file' | 'folder') => ipcRenderer.invoke('launcher:pick',mode),
+    list: (directory: string, mode: string, excluded: string[]) => ipcRenderer.invoke('launcher:list',directory,mode,excluded)
+  },
   launch: (target: string) => ipcRenderer.invoke('app:launch', target),
   linkInfo: (url: string) => ipcRenderer.invoke('net:linkInfo', url),
   displays: () => ipcRenderer.invoke('app:displays'),

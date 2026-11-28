@@ -50,6 +50,15 @@ function fired(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(FIRED_KEY) ?? '[]')) } catch { return new Set() }
 }
 
+export function workspaceQuiet(d: AppData, at = new Date()): boolean {
+  const workspace = d.desktop.spaces.find(s=>s.id===d.desktop.active)
+  const start = workspace?.quietFrom
+  const end = workspace?.quietUntil
+  if (!start || !end || start === end) return false
+  const time = at.toTimeString().slice(0,5)
+  return start < end ? time >= start && time < end : time >= start || time < end
+}
+
 /** Shows the reminders that are due; called by the app's ticker. */
 export function fireReminders(d: AppData): void {
   const now = Date.now()

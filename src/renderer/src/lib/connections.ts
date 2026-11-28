@@ -1,3 +1,4 @@
+import { workspaceQuiet } from './reminders'
 // Connections in the renderer: what each one fetched (cached in the main process too), calendar
 // events for the calendar and panels, keeping things fresh, and sending Notion checks back.
 import { useEffect, useMemo } from 'react'
@@ -188,6 +189,7 @@ export function startConnections(): () => void {
   const offWatch = watchNotionChecks()
   const tick = (): void => {
     const d = getData()
+    if (workspaceQuiet(d)) return
     for (const c of d.connections) {
       const r = useFeeds.getState().results[c.id]
       if (!c.off && c.kind !== 'notion' && r && Date.now() - r.at >= (MAX_AGE[c.kind] ?? 14 * 60 * 1000)) void loadFeed(c, true)
@@ -200,6 +202,7 @@ export function startConnections(): () => void {
   let notionTicks = 0
   const first = setTimeout(() => {
     const d = getData()
+    if (workspaceQuiet(d)) return
     const ids = Object.values(d.pages).filter((p) => p.source?.via && !p.deletedAt && !p.rowOf && (!p.parentId || !d.pages[p.parentId]?.source)).map((p) => p.id)
     if (ids.length && isDesktop) refreshFromNotion(ids, true).catch(() => {})
   }, 6000)

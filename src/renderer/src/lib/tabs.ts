@@ -106,6 +106,43 @@ export function switchTab(id: string): void {
   show(tab.page)
 }
 
+type WorkspaceNavigation = Pick<Tab, 'page' | 'back' | 'fwd'> & { scroll: number; visitedAt: number }
+const workspaceNavigation = new Map<string, WorkspaceNavigation>()
+let restoreScroll = 0
+
+export function rememberWorkspaceNavigation(space: string): void {
+  const {page, back, fwd} = activeTab()
+  if (!page || isView(page)) return
+  const scroll = document.querySelector('.scroll')?.scrollTop ?? 0
+  workspaceNavigation.set(space, {page, back, fwd, scroll, visitedAt: Date.now()})
+  if (getData().desktop.spaces.find(s=>s.id===space)?.landingPage===page) {
+    try { localStorage.setItem('deskbase:landing:'+space+':'+page,String(scroll)) } catch { /* storage unavailable */ }
+  }
+}
+
+export function showWorkspaceNavigation(space: string, landing?: string): void {
+  cancelAnimationFrame(restoreScroll)
+  const saved = workspaceNavigation.get(space)
+  if (saved && Date.now() - saved.visitedAt < 15 * 60_000 && exists(saved.page)) {
+    patch(activeTab().id, tab => ({ ...tab, back: saved.back, fwd: saved.fwd }))
+    show(saved.page)
+    restoreScroll = requestAnimationFrame(() => {
+      if (getData().desktop.active === space && useApp.getState().current === saved.page) {
+        document.querySelector('.scroll')?.scrollTo({top:saved.scroll, behavior:'instant'})
+      }
+    })
+  } else if (landing && exists(landing)) {
+    show(landing)
+    restoreScroll = requestAnimationFrame(() => {
+      if (getData().desktop.active === space && useApp.getState().current === landing) {
+        let scroll = 0
+        try { scroll = Number(localStorage.getItem('deskbase:landing:'+space+':'+landing)) || 0 } catch { /* storage unavailable */ }
+        document.querySelector('.scroll')?.scrollTo({top:scroll, behavior:'instant'})
+      }
+    })
+  }
+}
+
 /** Opens a page (or nothing, for a start tab) in a new tab next to the active one. */
 export function newTab(page: string | null = null, focus = true): void {
   const s = useTabs.getState()

@@ -15,7 +15,7 @@ import { habitDayTarget, habitDoneOn, habitDueToday } from '../lib/habits'
 import { DAYS_SHORT, addDays, dayKey, diffDays, friendlyDay, longDate, parseDay, today, weekStartOf } from '../lib/util'
 import { countRows, datedRows, rowsOf, setRowDone, type DatedRow } from '../lib/db'
 import { BarChart, Checkbox, Progress, Ring, Sparkline, useDoc } from './ui'
-import { switchSpace } from '../lib/desktop'
+import { cycleSpace, switchSpace } from '../lib/desktop'
 import { Glyph, Icon } from './Icon'
 import { TaskRepeatEditor } from './TaskRepeatEditor'
 import { QuickAdd, TaskRow, useTaskDrawer } from './TaskItems'
@@ -58,7 +58,7 @@ export const WIDGETS: { type: WidgetType; name: string; icon: string; desc: stri
   { type: 'database', name: 'Database', icon: 'database', desc: 'A table, board or gallery you can edit', w: 6, h: 5, group: 'Work', config: {} },
   { type: 'timer', name: 'Timer', icon: 'timer', desc: 'Click to start; put a few side by side', w: 2, h: 2, group: 'Work', config: { minutes: 5 } },
   { type: 'stopwatch', name: 'Stopwatch', icon: 'stopwatch', desc: 'Start, pause, laps', w: 3, h: 3, group: 'Work', config: {} },
-  {type:'workspaces', name:'Workspace switcher', icon:'layout', desc:'Switch desktop workspaces', w:3,h:2,group:'Work',config:{pinnedEverywhere:true,look:'tabs'}},
+  {type:'workspaces', name:'Workspace switcher', icon:'layout', desc:'Switch desktop workspaces', w:3,h:2,group:'Work',config:{pinnedEverywhere:true,look:'cycle'}},
   { type: 'launcher', name: 'Launcher', icon: 'rocket', desc: 'Open websites, apps, files and folders with one click', w: 4, h: 2, group: 'Work', config: { items: [], look: 'grid' } },
   { type: 'search', name: 'Web search', icon: 'search', desc: 'Search the web from the desktop', w: 4, h: 1, group: 'Work', config: { engine: 'google' } },
   { type: 'agenda', name: 'Agenda', icon: 'calendar-days', desc: 'The next days with tasks and times', w: 3, h: 4, group: 'Plan', config: { days: 5 } },
@@ -496,7 +496,7 @@ function WidgetContent({ w, setConfig }: WidgetBodyProps): JSX.Element {
     case 'timeleft': return <TimeLeftWidget cfg={c} />
     case 'moon': return <MoonWidget cfg={c} />
     case 'workspaces': return <WorkspaceSwitcher look={c.look}/>
-    case 'launcher': return <LauncherWidget cfg={c} />
+    case 'launcher': return <LauncherWidget cfg={c} id={w.id} />
     case 'search': return <SearchWidget cfg={c} />
     case 'quote': return <QuoteWidget cfg={c} setConfig={setConfig} />
     case 'battery': return <BatteryWidget cfg={c} />
@@ -911,8 +911,15 @@ function WeekWidget(): JSX.Element {
 
 function WorkspaceSwitcher({look}:{look?:string}):JSX.Element {
  const desk=useData(d=>d.desktop)
- const current=desk.spaces.find(s=>s.id===desk.active)
- if(look==='picker')return <select className="input input-sm space-picker" aria-label="Switch workspace" value={desk.active} onChange={e=>switchSpace(e.target.value)}>{desk.spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
- if(look==='cycle')return <button className="btn space-cycle" title="Next workspace" onClick={()=>{const latest=getData().desktop;const i=latest.spaces.findIndex(s=>s.id===latest.active);const next=latest.spaces[(i+1)%latest.spaces.length];if(next)switchSpace(next.id)}}><Icon name="repeat" size={14}/>{current?.name}</button>
- return <div className="space-switcher">{desk.spaces.map(s=><button key={s.id} aria-pressed={s.id===desk.active} className={'chip-btn '+(s.id===desk.active?'active':'')} onClick={()=>switchSpace(s.id)}>{s.icon&&<Glyph value={s.icon} color={s.iconColor} size={14}/>} {s.name}</button>)}</div>
+ const spaces=desk.spaces.filter(s=>!s.archived)
+ const current=spaces.find(s=>s.id===desk.active)
+ if(look==='picker')return <select className="input input-sm space-picker" aria-label="Switch workspace" value={desk.active} onChange={e=>switchSpace(e.target.value)}>{spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+ if(look==='cycle' || !look)return <div className="space-stepper" aria-label="Workspaces">
+    <button className="icon-btn" disabled={spaces.length<2} aria-label="Previous workspace" onClick={()=>cycleSpace(-1)}><Icon name="left" size={14}/></button>
+    <select className="space-picker" aria-label="Switch workspace" title={current?.name} value={desk.active} onChange={e=>switchSpace(e.target.value)}>
+      {spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+    </select>
+    <button className="icon-btn space-cycle" disabled={spaces.length<2} aria-label="Next workspace" onClick={()=>cycleSpace(1)}><Icon name="right" size={14}/></button>
+  </div>
+ return <div className="space-switcher">{spaces.map(s=><button key={s.id} aria-pressed={s.id===desk.active} className={'chip-btn '+(s.id===desk.active?'active':'')} onClick={()=>switchSpace(s.id)}>{s.icon&&<Glyph value={s.icon} color={s.iconColor} size={14}/>} {s.name}</button>)}</div>
 }

@@ -2,13 +2,14 @@ import { MIN_PANEL_WIDTH, MIN_PANEL_HEIGHT } from '../../../shared/panelBounds'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PanelTemplates } from '../components/PanelTemplates'
 import { act, getData, useData } from '../store'
-import type { DeskWidget, WidgetStyle, WidgetType } from '../types'
+import type { DeskWidget, PanelPlacement, WidgetStyle, WidgetType } from '../types'
 import { api, type DisplayInfo, isDesktop } from '../lib/api'
-import { addDeskSet, addDesktopWidget, addSpace, panelSize, patchDesk, runCommand, setDeskEditing, switchSpace, useDesk } from '../lib/desktop'
+import { activePanels, panelInWorkspace, addDeskSet, addDesktopWidget, addSpace, panelSize, patchDesk, runCommand, setDeskEditing, switchSpace, useDesk } from '../lib/desktop'
 import { fullStyle, surfaceMaterial, widgetClass, widgetVars } from '../lib/widgetStyle'
 import { WidgetBody, WIDGETS, widgetDef, widgetTitle } from '../components/Widgets'
 import { DeskLookPicker, StyleFields, TitleField, WidgetConfigFields, Field } from '../components/WidgetConfig'
 import { Button, Modal, Segmented, Toggle } from '../components/ui'
+import { uid } from '../lib/util'
 import { Glyph, Icon } from '../components/Icon'
 import { initialConfig } from './DashboardPage'
 import { openLook } from './AppearancePage'
@@ -34,7 +35,7 @@ function rectOf(w: DeskWidget, displays: DisplayInfo[]): Rect {
 }
 
 /** Miniature of all screens with every widget; drag to move, drag the corner to resize. */
-function ScreenMap({ widgets, displays, selected, onSelect }: { widgets: DeskWidget[]; displays: DisplayInfo[]; selected: string | null; onSelect: (id: string) => void }): JSX.Element {
+function ScreenMap({ widgets, displays, selected, onSelect, readOnly }: { readOnly?: boolean; widgets: DeskWidget[]; displays: DisplayInfo[]; selected: string | null; onSelect: (id: string) => void }): JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(640)
   useEffect(() => {
@@ -50,10 +51,11 @@ function ScreenMap({ widgets, displays, selected, onSelect }: { widgets: DeskWid
     const ys = displays.flatMap((d) => [d.bounds.y, d.bounds.y + d.bounds.height])
     return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) }
   }, [displays])
-  const k = Math.min((width - 24) / box.width, 340 / box.height)
+  const k = Math.min(Math.max(1,width - 24) / box.width, 340 / box.height)
   const px = (r: Rect): React.CSSProperties => ({ left: (r.x - box.x) * k, top: (r.y - box.y) * k, width: r.width * k, height: r.height * k })
 
   const drag = (e: React.PointerEvent, w: DeskWidget, mode: 'move' | 'resize'): void => {
+    if (readOnly) return
     e.preventDefault()
     e.stopPropagation()
     onSelect(w.id)
@@ -86,9 +88,11 @@ function ScreenMap({ widgets, displays, selected, onSelect }: { widgets: DeskWid
         ))}
         {widgets.map((w) => {
           const r = rectOf(w, displays)
+          const monitor = displays.findIndex(d=>r.x+r.width/2>=d.bounds.x && r.x+r.width/2<d.bounds.x+d.bounds.width && r.y+r.height/2>=d.bounds.y && r.y+r.height/2<d.bounds.y+d.bounds.height)
           return (
-            <div key={w.id} className={`map-widget ${selected === w.id ? 'active' : ''} ${w.hidden ? 'hidden' : ''}`} style={px(r)} onPointerDown={(e) => drag(e, w, 'move')} title={widgetDef(w.type).name}>
+            <div key={w.id} className={`map-widget ${selected === w.id ? 'active' : ''} ${w.hidden ? 'hidden' : ''}`} style={px(r)} onPointerDown={(e) => drag(e, w, 'move')} title={widgetDef(w.type).name + (monitor<0 ? '' : ' · Monitor ' + (monitor+1))}>
               <Icon name={widgetDef(w.type).icon} size={Math.max(10, Math.min(18, r.height * k * 0.4))} />
+              {monitor>=0 && r.width*k>34 && <small>{monitor+1}</small>}
               {selected === w.id && <span className="map-resize" onPointerDown={(e) => drag(e, w, 'resize')} />}
             </div>
           )
@@ -121,9 +125,18 @@ function Preview({ w, st, patch, max = 300 }: { w: DeskWidget; st: WidgetStyle; 
 
 /** Title and the settings of what the panel shows. */
 function ContentFields({ w, patch }: { w: DeskWidget; patch: Patch }): JSX.Element {
+  const spaces = useData(d => d.desktop.spaces)
   return <>
     <TitleField w={w} setTitle={(t) => patch((x) => { x.title = t }, 'dtitle:' + w.id)} />
     <Field label="Show in every workspace"><Toggle checked={!!w.config.pinnedEverywhere} onChange={v=>patch(x=>{x.config.pinnedEverywhere=v})}/></Field>
+    {!w.config.pinnedEverywhere && <Field label="Also show in">
+      <div className="row wrap gap-sm">{spaces.filter(s=>s.id!==w.space && !s.archived).map(s=><label key={s.id}>
+        <input type="checkbox" checked={panelInWorkspace(w,s.id)} onChange={e=>patch(x=>{
+          const ids: string[]=Array.isArray(x.config.visibleInSpaces)?x.config.visibleInSpaces:[]
+          x.config.visibleInSpaces=e.target.checked?[...new Set([...ids,s.id])]:ids.filter(id=>id!==s.id)
+        })}/> {s.name}
+      </label>)}</div>
+    </Field>}
     <WidgetConfigFields w={w} set={(k, v) => patch((x) => { x.config[k] = v }, 'dcfg:' + w.id + k)} patch={(fn) => patch(fn as (x: DeskWidget) => void)} />
   </>
 }
@@ -143,6 +156,85 @@ function LookFields({ w, patch }: { w: DeskWidget; patch: Patch }): JSX.Element 
   </>
 }
 
+function WorkspaceDestination({ w, displays }: { w: DeskWidget; displays: DisplayInfo[] }) {
+  const desk = useData(d=>d.desktop)
+  const [target,setTarget] = useState('')
+  const [follow,setFollow] = useState(false)
+  function movePanel(): void {
+    if (!desk.spaces.some(s=>s.id===target && !s.archived)) return
+    patchDesk(w.id,p=>{p.space=target;p.group=null})
+    if(follow) switchSpace(target)
+    setTarget('')
+  }
+  return <details className="workspace-destination"><summary>Move to another workspace</summary>
+    <select className="input" aria-label="Destination workspace" value={target} onChange={e=>setTarget(e.target.value)}>
+      <option value="">Choose workspace</option>
+      {desk.spaces.filter(s=>s.id!==w.space && !s.archived).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+    </select>
+    {target && <><ScreenMap widgets={desk.widgets.filter(p=>panelInWorkspace(p,target) && !p.hidden)} displays={displays} selected={null} onSelect={()=>{}} readOnly/>
+      <label><input type="checkbox" checked={follow} onChange={e=>setFollow(e.target.checked)}/> Follow panel</label>
+      <Button small onClick={movePanel}>Move panel</Button></>}
+  </details>
+}
+
+function WorkspaceOptions({ displays }: { displays: DisplayInfo[] }) {
+  const desk = useData(d=>d.desktop)
+  const pages = useData(d=>d.pages)
+  const [name,setName] = useState('')
+  const [pick,setPick] = useState('')
+  const space = desk.spaces.find(s=>s.id===desk.active)!
+  const layout = space.arrangements?.find(a=>a.id===pick)
+  const positions = new Map(desk.widgets.filter(w=>w.space===space.id && !w.config.pinnedEverywhere).map(w=>[w.id,w]))
+  const changed = Object.entries(layout?.positions ?? {}).filter(([id,p])=>{
+    const w=positions.get(id)
+    return w && (w.x!==p.x || w.y!==p.y || w.w!==p.w || w.h!==p.h)
+  })
+  function saveArrangement(): void {
+    const label=name.trim()
+    if(!label)return
+    const arrangement={id:space.arrangements?.find(a=>a.name===label)?.id || uid(),name:label,
+      positions:Object.fromEntries([...positions].map(([id,{x,y,w,h}])=>[id,{x,y,w,h}]))}
+    act(d=>{const s=d.desktop.spaces.find(s=>s.id===space.id);if(s)s.arrangements=[...s.arrangements?.filter(a=>a.name!==label) ?? [],arrangement]})
+    setPick(arrangement.id);setName('')
+  }
+  function restore(items: [string,PanelPlacement][]): void {
+    act(d=>{for(const w of d.desktop.widgets){const p=items.find(([id])=>id===w.id)?.[1];if(p && w.space===space.id)Object.assign(w,p)}})
+  }
+  return <details className="workspace-options"><summary>Workspace settings</summary>
+    <div className="form-grid">
+      <Field label="Landing page"><select className="input input-sm" aria-label="Workspace landing page" value={space.landingPage || ''} onChange={e=>act(d=>{d.desktop.spaces.find(s=>s.id===space.id)!.landingPage=e.target.value||undefined})}>
+        <option value="">None</option>{Object.values(pages).filter(p=>!p.deletedAt&&!p.rowOf).map(p=><option key={p.id} value={p.id}>{p.title||'Untitled'}</option>)}
+      </select></Field>
+      <Field label="Quiet hours">
+        <input className="input input-sm" type="time" aria-label="Quiet hours start" value={space.quietFrom || ''} onChange={e=>act(d=>{d.desktop.spaces.find(s=>s.id===space.id)!.quietFrom=e.target.value||undefined})}/>
+        <input className="input input-sm" type="time" aria-label="Quiet hours end" value={space.quietUntil || ''} onChange={e=>act(d=>{d.desktop.spaces.find(s=>s.id===space.id)!.quietUntil=e.target.value||undefined})}/>
+      </Field>
+      <Field label="New workspace from page"><select className="input input-sm" aria-label="New workspace from page" value="" onChange={e=>{if(e.target.value)addSpace(false,e.target.value)}}>
+        <option value="">Choose a page</option>{Object.values(pages).filter(p=>!p.deletedAt&&!p.rowOf).map(p=><option key={p.id} value={p.id}>{p.title||'Untitled'}</option>)}
+      </select></Field>
+      <Field label="Archive workspace"><Button small disabled={!desk.spaces.some(s=>s.id!==space.id&&!s.archived)} onClick={()=>{
+        const fallback=desk.spaces.find(s=>s.id!==space.id&&!s.archived)
+        if(!fallback)return
+        switchSpace(fallback.id)
+        act(d=>{d.desktop.spaces.find(s=>s.id===space.id)!.archived=true})
+      }}>Archive</Button></Field>
+      {desk.spaces.some(s=>s.archived) && <Field label="Archived workspaces">{desk.spaces.filter(s=>s.archived).map(s=><Button key={s.id} small onClick={()=>act(d=>{d.desktop.spaces.find(x=>x.id===s.id)!.archived=false})}>Restore {s.name}</Button>)}</Field>}
+      <Field label="Save panel arrangement"><input className="input input-sm" aria-label="Arrangement name" placeholder="Laptop or External monitor" value={name} onChange={e=>setName(e.target.value)} />
+        <Button small disabled={!name.trim() || !positions.size} onClick={saveArrangement}>Save arrangement</Button>
+      </Field>
+      {!!space.arrangements?.length && <Field label="Compare with current"><select className="input input-sm" aria-label="Saved arrangement" value={layout?.id || ''} onChange={e=>setPick(e.target.value)}>
+        <option value="">Pick an arrangement</option>{space.arrangements.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+      </select></Field>}
+      {layout && <><ScreenMap displays={displays} widgets={[...positions.values()].filter(w=>layout.positions[w.id]).map(w=>({...w,...layout.positions[w.id]}))} selected={null} onSelect={()=>{}} readOnly/>
+        <div className="row wrap gap-sm"><Button small disabled={!changed.length} onClick={()=>restore(changed)}>Restore moved panels ({changed.length})</Button>
+          <Button small onClick={()=>act(d=>{const s=d.desktop.spaces.find(s=>s.id===space.id)!;s.arrangements=s.arrangements?.filter(a=>a.id!==pick)})}>Remove arrangement</Button>
+        </div>
+        {changed.map(([id,p])=><Field key={id} label={widgetTitle(positions.get(id)!,getData())}><Button small onClick={()=>restore([[id,p]])}>Restore panel</Button></Field>)}
+      </>}
+    </div>
+  </details>
+}
+
 function PlaceFields({ w, displays }: { w: DeskWidget; displays: DisplayInfo[] }): JSX.Element {
   const r = rectOf(w, displays)
   const set = (k: string, v: any): void => patchDesk(w.id, (x) => { x.config[k] = v }, 'dcfg:' + w.id + k)
@@ -157,6 +249,7 @@ function PlaceFields({ w, displays }: { w: DeskWidget; displays: DisplayInfo[] }
           <Button small kind="ghost" icon="ungroup" onClick={() => runCommand(w.id, 'ungroup')}>Separate</Button>
         </Field>
       )}
+      <WorkspaceDestination w={w} displays={displays}/>
       <Field label="Lock position"><Toggle checked={!!w.locked} onChange={(v) => patchDesk(w.id, (x) => { x.locked = v })} /></Field>
       <Field label="Click-through" sub="Clicks go to what's behind"><Toggle checked={!!w.config.clickThrough} onChange={(v) => set('clickThrough', v)} /></Field>
       <Field label="Position">
@@ -347,7 +440,7 @@ export function DesktopPage(): JSX.Element {
   const displays = useDisplays()
   const adding = useDesk((s) => !!s.adding)
   const setAdding = (v: boolean): void => useDesk.setState({ adding: v })
-  const panels = desk.widgets.filter((w) => (w.space === desk.active || w.config.pinnedEverywhere))
+  const panels = activePanels(desk)
   useEffect(() => {
     const key = (e: KeyboardEvent): void => {
       const t = e.target as HTMLElement
@@ -365,11 +458,11 @@ export function DesktopPage(): JSX.Element {
         <Button small kind="ghost" icon="palette" onClick={() => openLook('desktop')}>Panel style</Button>
       </div>
       <div className="space-tabs">
-        {desk.spaces.map((s) => (
+        {desk.spaces.filter(s=>!s.archived).map((s) => (
           <button key={s.id} className={`space-tab ${s.id === desk.active ? 'active' : ''}`} onClick={() => switchSpace(s.id)}>
             {s.icon && <Glyph value={s.icon} color={s.iconColor} size={14} />}
             <span>{s.name}</span>
-            <span className="space-tab-count">{desk.widgets.filter((w) => (w.space === s.id || w.config.pinnedEverywhere) && !w.hidden).length}</span>
+            <span className="space-tab-count">{desk.widgets.filter((w) => panelInWorkspace(w,s.id) && !w.hidden).length}</span>
           </button>
         ))}
         <button className="space-tab add" title="New workspace" onClick={() => addSpace(false)}><Icon name="plus" size={14} /></button>
@@ -379,7 +472,7 @@ export function DesktopPage(): JSX.Element {
         <PanelTemplates />
         <label className="row small gap-xs">Switch here daily at <input className="input input-sm" type="time" value={desk.spaces.find(s=>s.id===desk.active)?.switchAt??''} onChange={e=>act(d=>{const s=d.desktop.spaces.find(x=>x.id===d.desktop.active);if(s)s.switchAt=e.target.value||undefined})}/></label>
         {panels.some(w => w.locked) && <Button small icon="unlock" onClick={() => act(d => {
-          for (const panel of d.desktop.widgets) if (panel.space === d.desktop.active || panel.config.pinnedEverywhere) panel.locked = false
+          for (const panel of activePanels(d.desktop)) panel.locked = false
         })}>Unlock panels</Button>}
         {isDesktop && <Button small kind={editing ? 'primary' : 'default'} icon={editing ? 'check' : 'move'} onClick={() => setDeskEditing(!editing)}>{editing ? 'Done arranging' : 'Arrange on desktop'}</Button>}
         <div className="spacer" />
@@ -387,6 +480,7 @@ export function DesktopPage(): JSX.Element {
         <Toggle checked={desk.enabled} onChange={(v) => act((d) => { d.desktop.enabled = v })} />
       </div>
       {!isDesktop && <div className="field-note"><Icon name="info" size={13} /> Panels open on your Windows desktop in the installed app. Here you can set them up and preview them.</div>}
+      <WorkspaceOptions key={desk.active} displays={displays}/>
       <ScreenMap widgets={panels} displays={displays} selected={selected} onSelect={(id) => useDesk.setState({ selected: id })} />
       <div className="desk-list">
         {panels.length === 0 && (
