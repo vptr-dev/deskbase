@@ -7,7 +7,7 @@ import { normalizeRepeat, validDay } from './recurrence'
 import { uid } from './util'
 
 /** Matches CURRENT_SCHEMA in src/main/migrations.ts (saving stamps that value anyway). */
-export const SCHEMA = 27
+export const SCHEMA = 28
 
 export const PAGE_TYPES: { type: PageType; name: string; icon: string; desc: string }[] = [
   { type: 'doc', name: 'Page', icon: 'file-text', desc: 'Notes and documents' },
@@ -347,9 +347,43 @@ export function normalize(raw: any): AppData {
       return { ...e, id: e.id || uid(), name: e.name, category:typeof e.category==='string'?e.category:undefined, target, done: Number.isFinite(e.done) ? Math.max(0,Math.min(target,e.done)) : 0, unit: typeof e.unit === 'string' ? e.unit : '' }
     })
     if (p.type==='list') p.removedEntries=Array.isArray(p.removedEntries)?p.removedEntries.filter(r=>r && typeof r.id==='string' && typeof r.name==='string'):[]
-    if (p.type === 'study') p.cards = (Array.isArray(p.cards) ? p.cards : []).filter(c => c && typeof c.question === 'string' && typeof c.answer === 'string').map(c => ({
-      id: c.id || uid(), question: c.question, answer: c.answer, due: typeof c.due === 'string' ? c.due : '', interval: Math.max(0,Number(c.interval) || 0)
-    }))
+    if (p.type==='project' && p.lab) {
+      const number=(value:unknown)=>typeof value==='number' && Number.isSafeInteger(value) && value>=0?value:0
+      const lab=p.lab
+      p.lab={
+        decisions:typeof lab.decisions==='string'?lab.decisions:'',
+        loans:Array.isArray(lab.loans)?lab.loans.filter(l=>l && typeof l.id==='string' && typeof l.tool==='string' && typeof l.borrower==='string' && validDay(l.returnBy)):[],
+        packing:Array.isArray(lab.packing)?lab.packing.filter(l=>l && typeof l.id==='string' && typeof l.name==='string').map(l=>({...l,quantity:Math.max(1,number(l.quantity))})):[],
+        parts:Array.isArray(lab.parts)?lab.parts.filter(p=>p && typeof p.id==='string' && typeof p.name==='string').map(p=>({
+          id:p.id,name:p.name,number:typeof p.number==='string'?p.number:'',stock:number(p.stock),needed:number(p.needed),
+          reserved:Math.min(number(p.reserved),number(p.stock)),image:typeof p.image==='string' && /^data:image\//.test(p.image)?p.image:undefined
+        })):[],
+        pins:Array.isArray(lab.pins)?lab.pins.filter(p=>p && typeof p.id==='string' && typeof p.pin==='string' && typeof p.use==='string'):[],
+        runs:Array.isArray(lab.runs)?lab.runs.filter(r=>r && typeof r.id==='string' && typeof r.title==='string').map(r=>({
+          id:r.id,title:r.title,firmware:typeof r.firmware==='string'?r.firmware:undefined,wiring:typeof r.wiring==='string'?r.wiring:undefined,
+          result:typeof r.result==='string'?r.result:undefined,prediction:typeof r.prediction==='string'?r.prediction:undefined,open:r.open===true,
+          readings:Array.isArray(r.readings)?r.readings.filter(x=>x && typeof x.label==='string' && Number.isFinite(x.value)).slice(0,2500):[],
+          image:typeof r.image==='string' && /^data:image\//.test(r.image)?r.image:undefined,
+          annotations:Array.isArray(r.annotations)?r.annotations.filter(a=>a && [a.x,a.y].every(v=>Number.isFinite(v)&&v>=0&&v<=100) && typeof a.note==='string'):[]
+        })):[]
+      }
+    }
+    if (p.type === 'study') {
+      p.cards = (Array.isArray(p.cards) ? p.cards : []).filter(c=>c&&typeof c.question==='string'&&typeof c.answer==='string').map(c=>({
+        id:c.id || uid(),question:c.question,answer:c.answer,due:validDay(c.due)?c.due:'',interval:Math.max(0,Number(c.interval)||0),
+        diagram:typeof c.diagram==='string' && /^data:image\//.test(c.diagram) ? c.diagram : undefined,
+        masks:Array.isArray(c.masks) ? c.masks.filter(m=>m && [m.x,m.y,m.width,m.height].every(v=>Number.isFinite(v)&&v>=0&&v<=100) && m.width>0&&m.height>0&&m.x+m.width<=100.01&&m.y+m.height<=100.01) : []
+      }))
+      const study=p.study || {}
+      p.study={
+        ...study,
+        examDate:validDay(study.examDate)?study.examDate:undefined,
+        freeDays:Array.isArray(study.freeDays)?study.freeDays.filter(d=>Number.isInteger(d)&&d>=0&&d<=6):[],
+        queueLimit:Number.isSafeInteger(study.queueLimit)&&study.queueLimit!>0?study.queueLimit:undefined,
+        topics:Array.isArray(study.topics)?study.topics.filter(t=>t&&typeof t.title==='string'&&typeof t.id==='string'):[],
+        reviews:Array.isArray(study.reviews)?study.reviews.filter(r=>r&&typeof r.id==='string'&&typeof r.card==='string'&&typeof r.session==='string'&&validDay(r.date)).slice(-300):[]
+      }
+    }
     if (p.type === 'wishlist') {
       const list = p.wishlist
       const cost = (v:unknown):v is number=>typeof v==='number' && Number.isFinite(v) && v>=0

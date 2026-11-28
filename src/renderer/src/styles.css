@@ -2743,3 +2743,24 @@ select option, select optgroup { color: CanvasText; background-color: Canvas; }
 
 .storage-breakdown > div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:4px; }
 .storage-breakdown dd { margin:0; font-variant-numeric:tabular-nums; }
+
+.study-diagram { position:relative; width:fit-content; max-width:100%; margin-block:8px; }
+.study-diagram img { display:block; max-width:100%; max-height:400px; }
+.study-diagram.editing { cursor:crosshair; touch-action:none; }
+.study-mask { position:absolute; background:var(--accent); border:1px solid var(--line); opacity:.98; pointer-events:none; }
+.study-session.with-formula { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(225px,100%),1fr)); gap:10px; align-items:start; }
+.study-formula { padding:10px; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:auto; max-height:350px; }
+.study-planning { display:grid; gap:10px; }
+.study-plan-dates { max-height:160px; overflow:auto; }
+
+.lab-section { border:1px solid var(--line); border-radius:var(--radius-sm); padding:9px 12px; }
+.lab-section > div { margin-top:10px; }
+.project-lab label:has(input:not([type=checkbox])),.project-lab label:has(textarea),.project-lab label:has(select) { display:grid; gap:4px; }
+.lab-marker { position:absolute; transform:translate(-50%,-50%); background:var(--accent); color:white; border:1px solid white; border-radius:50%; min-width:20px; text-align:center; pointer-events:none; }
+.lab-marker.active { outline:2px solid var(--fg); }
+.lab-photo { cursor:crosshair; }
+.lab-readings { max-height:180px; overflow:auto; padding-inline-start:24px; }
+
+.lab-chart { width:min(260px,100%); position:relative; }
+.lab-chart svg { width:100%; }
+.lab-chart-marker { position:absolute; top:5%; bottom:5%; border-left:1px dashed var(--muted); cursor:help; }

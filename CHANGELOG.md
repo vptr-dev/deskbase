@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.27.0 - 2026-11-28
+
+- Added study planning, diagram masks, missed-card practice, confidence tracking, printable sheets, and timed past papers.
+- Added project labs for component inventory, missing parts, pin assignments, annotated photos, sensor readings, comparisons and design-review exports.
+
 ## 0.26.0 - 2026-11-28
 
 - Named wishlist categories and filters, purchase and variant details, price history, shared savings allocation and printable gift shortlists.

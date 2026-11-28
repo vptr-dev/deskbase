@@ -6,7 +6,13 @@
 
 ## Install
 
-Download `Deskbase-Setup-0.26.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+Download `Deskbase-Setup-0.27.0.exe` from the [latest release](https://github.com/vptr-dev/deskbase/releases/latest), run it and follow the steps. If SmartScreen appears, choose **More info → Run anyway**. Deskbase updates itself.
+
+## Study decks and project labs
+
+In a Study deck, use **Plan** to work backwards from an exam date, track syllabus coverage and set days off. Draw masks on a flashcard diagram, review missed cards, and export separate printable questions and answers. **Past paper** times and scores an exam session.
+
+Open **Project lab** inside a Project to keep parts, pin assignments, test runs, tool loans and a packing list together. Send missing quantities to a wishlist, annotate a breadboard photo and compare measurements. Save selected diagrams, decisions and open test results as a design-review HTML file.
 
 ## Wishlists and collections
 

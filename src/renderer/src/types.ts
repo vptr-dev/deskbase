@@ -130,13 +130,42 @@ export interface ListEntry {
   fields?:Record<string,string>
 }
 export interface WorkoutSet { id:string; date:string; exercise:string; sets:number; reps:number; weight:number; unit:string }
-export interface StudyCard { id: string; question: string; answer: string; due: string; interval: number }
+export interface DiagramMask { x:number; y:number; width:number; height:number }
+export interface StudyCard {
+  id:string; question:string; answer:string; due:string; interval:number
+  diagram?:string
+  masks?:DiagramMask[]
+}
+export interface StudyTopic { id:string; title:string; notePage?:string; exercisePage?:string; examDate?:string; covered?:boolean }
+export interface StudyReview { id:string; card:string; session:string; date:string; confidence?:number; remembered:boolean; mistake?:string; practice?:boolean }
+export interface StudyProfile {
+  examDate?:string
+  freeDays?:number[]
+  queueLimit?:number
+  formulaPage?:string
+  topics?:StudyTopic[]
+  reviews?:StudyReview[]
+  lastPaper?: {date:string; marks:{ question:string; earned:number; total:number; reason:string }[]}
+}
+export interface LabPart { id:string; name:string; number:string; stock:number; needed:number; reserved:number; image?:string }
+export interface LabPin { id:string; pin:string; use:string }
+export interface LabRun {
+  id:string; title:string; image?:string; annotations:{x:number;y:number;note:string}[]
+  firmware?:string; wiring?:string; result?:string; prediction?:string
+  readings?:{label:string;value:number;note?:string}[]
+  open?:boolean
+}
+export interface LabLoan {id:string; tool:string; borrower:string; returnBy:string; returned?:boolean}
+export interface LabPack {id:string; name:string; quantity:number; packed?:boolean}
+export interface ProjectLab { parts:LabPart[]; pins:LabPin[]; runs:LabRun[]; loans?:LabLoan[]; packing?:LabPack[]; decisions?:string }
 export interface Page {
+  lab?:ProjectLab
   accent?: string
   workouts?: WorkoutSet[]
   entries?: ListEntry[]
   removedEntries?: ListEntry[]
   cards?: StudyCard[]
+  study?: StudyProfile
   wishlist?: PurchaseList
   id: string
   title: string

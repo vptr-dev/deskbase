@@ -1,3 +1,4 @@
+import { ProjectLabPage } from '../components/ProjectLab'
 import { useEffect, useRef, useState } from 'react'
 import type { Page } from '../types'
 import { toast, updatePage } from '../store'
@@ -7,11 +8,11 @@ import { Button, ConfirmButton, Modal, Segmented } from '../components/ui'
 import { TasksPage } from './TasksPage'
 
 export function ProjectPage({ page }: { page: Page }): JSX.Element {
-  const tab = page.view?.projectTab === 'trello' ? 'trello' : 'tasks'
+  const tab = page.view?.projectTab === 'trello' ? 'trello' : page.view?.projectTab === 'lab' ? 'lab' : 'tasks'
   return <div className="project-page">
-    <Segmented value={tab} options={[{ value: 'tasks', label: 'Project tasks' }, { value: 'trello', label: 'Trello board' }]}
+    <Segmented value={tab} options={[{ value: 'tasks', label: 'Project tasks' }, { value: 'trello', label: 'Trello board' }, { value: 'lab', label: 'Project lab' }]}
       onChange={projectTab => updatePage(page.id, p => { p.view = { ...p.view, projectTab } })} />
-    {tab === 'tasks' ? <TasksPage pageId={page.id} /> : <TrelloWorkspace page={page} />}
+    {tab === 'tasks' ? <TasksPage pageId={page.id} /> : tab === 'lab' ? <ProjectLabPage page={page}/> : <TrelloWorkspace page={page} />}
   </div>
 }
 

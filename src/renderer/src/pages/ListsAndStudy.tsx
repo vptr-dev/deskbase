@@ -1,7 +1,10 @@
+import { pickImageData } from '../lib/image'
+import { StudyDiagram, StudyPlan, saveStudySheet } from '../components/StudyTools'
+import { StudyPaper, mistakeReasons } from '../components/StudyPaper'
 import { Collection } from '../components/Collection'
 import { useState } from 'react'
-import type { ListEntry, Page, StudyCard } from '../types'
-import { updatePage } from '../store'
+import type { DiagramMask, ListEntry, Page, StudyCard } from '../types'
+import { toast, updatePage, useData } from '../store'
 import { addDays, today, uid } from '../lib/util'
 import { Button, Checkbox, Progress, Segmented } from '../components/ui'
 
@@ -45,7 +48,15 @@ function ReadingProgress({page}:{page:Page}):JSX.Element {
 }
 
 export function StudyDeck({page}: {page:Page}): JSX.Element {
-  const [tab,setTab]=useState<'review'|'cards'>('review')
+  const [tab,setTab]=useState<'review'|'cards'|'plan'|'paper'>('review')
+  const [session]=useState(uid)
+  const [exam,setExam]=useState(false)
+  const [confidence,setConfidence]=useState(0)
+  const [mistake,setMistake]=useState('')
+  const [practice,setPractice]=useState<string[]|null>(null)
+  const [diagram,setDiagram]=useState<string>()
+  const [masks,setMasks]=useState<DiagramMask[]>([])
+  const pages=useData(d=>d.pages)
   const [shown,setShown]=useState<string|null>(null)
   const [front,setFront]=useState('')
   const [back,setBack]=useState('')
@@ -54,27 +65,68 @@ export function StudyDeck({page}: {page:Page}): JSX.Element {
   const date=today()
   const cards=page.cards??[]
   const due=cards.filter(c=>!c.due||c.due<=date).sort((a,b)=>a.due.localeCompare(b.due))
-  const card=due[0]
-  const clear=():void=>{setFront('');setBack('');setEdit(null)}
+  const study=page.study || {}
+  const reviews=study.reviews || []
+  const last=reviews.filter(r=>!r.practice).at(-1)?.session
+  const missed=[...new Set(reviews.filter(r=>!r.practice && !r.remembered && r.session===last).map(r=>r.card))].filter(id=>cards.some(c=>c.id===id))
+  const paused=!!study.queueLimit && due.filter(c=>c.interval>0).length>=study.queueLimit
+  const card=practice ? cards.find(c=>c.id===practice[0]) : due.find(c=>!paused || c.interval>0)
+  const formula=study.formulaPage ? pages[study.formulaPage] : undefined
+  const clear=():void=>{setFront('');setBack('');setEdit(null);setDiagram(undefined);setMasks([])}
+  const reset=()=>{setShown(null);setConfidence(0);setMistake('')}
   const grade=(current:StudyCard,remembered:boolean):void=>{
-    updatePage(page.id,p=>{const c=p.cards?.find(x=>x.id===current.id);if(!c)return
-      c.interval=remembered?Math.min(365,Math.max(2,2*c.interval)):1
-      c.due=addDays(date,c.interval)
-    });setShown(null)
+    updatePage(page.id,p=>{
+      const c=p.cards?.find(x=>x.id===current.id)
+      if(!c)return
+      if(!practice){c.interval=remembered?Math.min(365,Math.max(2,2*c.interval)):1;c.due=addDays(date,c.interval)}
+      const profile=(p.study??={})
+      profile.reviews=[...profile.reviews??[],{id:uid(),card:c.id,session,date,confidence:confidence || undefined,remembered,mistake:remembered?undefined:mistake||undefined,practice:!!practice}].slice(-300)
+    })
+    if(practice)setPractice(practice.slice(1))
+    reset()
   }
-  return <section className="study-deck"><div className="row between wrap gap-sm"><Segmented small value={tab} onChange={setTab} options={[{value:'review',label:'Review'},{value:'cards',label:'Cards'}]}/>
+  return <section className="study-deck"><div className="row between wrap gap-sm">{!exam && <Segmented small value={tab}
+    onChange={setTab} options={[{value:'review',label:'Review'},{value:'cards',label:'Cards'},{value:'plan',label:'Plan'},{value:'paper',label:'Past paper'}]}/>}
     <span className="small muted">{due.length} due · {cards.length} cards</span></div>
-    {tab==='review' ? card ? <article className="study-prompt"><h3>{card.question}</h3>
-      {shown===card.id ? <><p>{card.answer}</p><div className="row wrap gap-xs"><Button small onClick={()=>grade(card,false)}>Again tomorrow</Button><Button small kind="primary" onClick={()=>grade(card,true)}>Remembered</Button></div></>:
-        <Button small kind="primary" onClick={()=>setShown(card.id)}>Reveal answer</Button>}</article> :
-      <div className="row wrap gap-sm">{cards.length>0 && <span>Next review {cards.map(c=>c.due).sort()[0]}</span>}<Button small onClick={()=>setTab('cards')}>Add cards</Button></div> :
+    {tab==='plan'?<StudyPlan page={page}/>:tab==='paper'?<StudyPaper page={page} onActive={setExam}/>:tab==='review' ? <>
+      <div className="row wrap gap-sm">{practice ? <Button small onClick={()=>{setPractice(null);reset()}}>Return to due cards</Button> :
+        <Button small disabled={!missed.length} onClick={()=>{setPractice(missed);reset()}}>Practise missed cards ({missed.length})</Button>}
+      {paused && <span className="small muted">New cards paused while the review queue is full.</span>}</div>
+      {card ? <div className={'study-session'+(formula && !formula.deletedAt?' with-formula':'')}><article className="study-prompt"><h3>{card.question}</h3>
+        <StudyDiagram card={card} revealed={shown===card.id}/>
+        {shown===card.id ? <><p>{card.answer}</p><label>Mistake reason <select className="input input-sm" value={mistake} onChange={e=>setMistake(e.target.value)}>
+          <option value="">Optional</option>{mistakeReasons.map(reason=><option key={reason}>{reason}</option>)}
+        </select></label><div className="row wrap gap-xs"><Button small onClick={()=>grade(card,false)}>{practice?'Still missed':'Again tomorrow'}</Button>
+          <Button small kind="primary" onClick={()=>grade(card,true)}>Remembered</Button></div></> :
+          <div className="row gap-xs wrap"><label>Confidence <select className="input input-sm" value={confidence} onChange={e=>setConfidence(Number(e.target.value))}>
+            <option value={0}>Optional</option><option value={1}>Low</option><option value={2}>Unsure</option><option value={3}>High</option>
+          </select></label><Button small kind="primary" onClick={()=>setShown(card.id)}>Reveal answer</Button></div>}
+        </article>
+        {formula && !formula.deletedAt && <aside className="study-formula"><strong>{formula.title || 'Formula sheet'}</strong>
+          {formula.blocks.filter(b=>b.text).slice(0,40).map(b=><p key={b.id}>{b.text}</p>)}</aside>}
+      </div> : <div className="row wrap gap-sm">{practice ? <span>Practice set complete.</span> :
+        <>{cards.length>0 && <span>Next review {cards.map(c=>c.due).sort()[0]}</span>}<Button small onClick={()=>setTab('cards')}>Add cards</Button></>}
+      </div>}
+      {!!reviews.length && <details><summary>Confidence and recall</summary>
+        {reviews.slice(-12).reverse().map(r=><div key={r.id} className="row gap-xs wrap">
+          <span>{cards.find(c=>c.id===r.card)?.question || 'Removed card'}</span><span>· {r.confidence ? ['','Low','Unsure','High'][r.confidence] : 'Unrated'}</span>
+          <strong>· {r.remembered?'Remembered':'Missed'}</strong>{r.mistake && <span>· {r.mistake}</span>}
+        </div>)}
+      </details>}
+    </> :
       <><form className="form study-form" onSubmit={e=>{e.preventDefault();if(!front.trim()||!back.trim())return
         updatePage(page.id,p=>{p.cards??=[];const card=p.cards.find(c=>c.id===edit)
-          if(card){card.question=front.trim();card.answer=back.trim()}else p.cards.push({id:uid(),question:front.trim(),answer:back.trim(),due:date,interval:0})
+          if(card){Object.assign(card,{question:front.trim(),answer:back.trim(),diagram,masks})}
+          else p.cards.push({id:uid(),question:front.trim(),answer:back.trim(),due:date,interval:0,diagram,masks})
         });clear()
       }}><label>Question<input required className="input input-sm" value={front} onChange={e=>setFront(e.target.value)}/></label>
         <label>Answer<textarea required className="input input-sm" value={back} onChange={e=>setBack(e.target.value)}/></label>
+        <div className="row gap-sm wrap"><Button small onClick={async()=>{const image=await pickImageData(1200,1000);if(image){setDiagram(image);setMasks([])}}}>Choose diagram</Button>
+          {diagram && <Button small onClick={()=>setMasks([])}>Clear masks</Button>}</div>
+        {diagram && <><span className="small muted">Drag across the parts to hide.</span><StudyDiagram card={{diagram,masks}} draw={mask=>setMasks(current=>[...current,mask])}/></>}
         <div className="row gap-sm"><button className="btn btn-primary btn-sm" disabled={!front.trim()||!back.trim()}>{edit?'Save card':'Add card'}</button>{edit&&<button type="button" className="btn btn-sm" onClick={clear}>Cancel</button>}</div></form>
+      {cards.length>0 && <div className="row gap-sm wrap"><Button small onClick={()=>void saveStudySheet(page,false).catch(()=>toast('Could not save the question sheet.'))}>Printable questions</Button>
+        <Button small onClick={()=>void saveStudySheet(page,true).catch(()=>toast('Could not save the answer key.'))}>Separate answer key</Button></div>}
       <details><summary>Import flashcards</summary><form className="form" onSubmit={e=>{e.preventDefault()
         const lines=paste.trim().split(/\r?\n/).map(s=>s.split('\t').map(v=>v.trim()))
         if(lines.some(line=>line.length!==2||line.some(v=>!v)))return
@@ -83,7 +135,7 @@ export function StudyDeck({page}: {page:Page}): JSX.Element {
       }}><label>Paste two spreadsheet columns, question and answer<textarea className="input" value={paste} onChange={e=>setPaste(e.target.value)}/></label>
         <button className="btn btn-sm" disabled={!paste.trim()||paste.trim().split(/\r?\n/).some(s=>s.split('\t').length!==2||s.split('\t').some(v=>!v.trim()))}>Import cards</button></form></details>
       {cards.map(c=><div className="list-entry" key={c.id}><span className="grow">{c.question}</span>
-        <Button small kind="ghost" icon="edit" title="Edit card" onClick={()=>{setEdit(c.id);setFront(c.question);setBack(c.answer)}}/>
+        <Button small kind="ghost" icon="edit" title="Edit card" onClick={()=>{setEdit(c.id);setFront(c.question);setBack(c.answer);setDiagram(c.diagram);setMasks(c.masks || [])}}/>
         <Button small kind="ghost" icon="trash" title="Remove card" onClick={()=>{updatePage(page.id,p=>{p.cards=p.cards?.filter(x=>x.id!==c.id)});if(edit===c.id)clear()}}/></div>)}</>}
   </section>
 }
